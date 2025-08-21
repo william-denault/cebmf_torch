@@ -1,11 +1,12 @@
 # torch_convolved_loglik.py
 import torch
 import math
-from cebmf_torch.torch_distribution_operation import get_data_loglik_normal_torch, get_data_loglik_exp_torch
-from cebmf_torch.torch_utils_mix import autoselect_scales_mix_exp, autoselect_scales_mix_norm
-from cebmf_torch.torch_mix_opt import optimize_pi_logL
-from cebmf_torch.torch_utils import _LOG_SQRT_2PI 
-from cebmf_torch.torch_posterior import  posterior_mean_norm,  posterior_mean_exp
+from .torch_utils_mix import autoselect_scales_mix_exp, autoselect_scales_mix_norm
+from .torch_mix_opt import optimize_pi_logL
+from .torch_utils import _LOG_SQRT_2PI 
+from .torch_posterior import  posterior_mean_norm,  posterior_mean_exp
+
+from .torch_distribution_operation import get_data_loglik_normal_torch, get_data_loglik_exp_torch
 
 import math
 import torch 
@@ -37,8 +38,8 @@ class ash_object:
 # ---- ASH (Torch) ----
 @torch.no_grad()
 def ash(
-    betahat,
-    sebetahat,
+    x ,
+    s,
     prior: str = "norm",
     mult: float = math.sqrt(2.0),
     penalty: float = 10.0,
@@ -55,9 +56,8 @@ def ash(
     Uses EM for π (mini-batch capable via batch_size).
     Returns ash_object with Torch tensors.
     """
-    x = torch.as_tensor(betahat)
-    s = torch.as_tensor(sebetahat, dtype=x.dtype, device=x.device)
 
+  
     # choose optimizer mode (EM by default here)
  
 
@@ -71,7 +71,7 @@ def ash(
             batch_size=batch_size, shuffle=shuffle, seed=seed
         )
         log_pi = torch.log(torch.clamp(pi, min=1e-32))
-        pm, pm2, psd = posterior_mean_norm (x, s, log_pi=log_pi, location=loc, scale=scale)
+        pm, pm2, psd = posterior_mean_norm (x, s, log_pi=log_pi,data_loglik=L, location=loc, scale=scale)
 
     elif prior == "exp":
         scale = autoselect_scales_mix_exp (x, s, mult=mult)   # (K,) with scale[0]=0 (spike)

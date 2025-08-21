@@ -3,7 +3,7 @@ import torch
 import math
 from torch import Tensor
 from .torch_utils import logsumexp,  my_etruncnorm,  my_e2truncnorm
-from .torch_distribution_operation import get_data_loglik_normal
+from .torch_distribution_operation import get_data_loglik_normal_torch , get_data_loglik_exp_torch
 _LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 
 def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
@@ -178,7 +178,7 @@ def posterior_mean_norm(
             raise ValueError("location must be (K,) or (J,K)")
 
     # data log-likelihood and posterior assignment in log-space
-    data_loglik = get_data_loglik_normal(betahat, sebetahat, location, scale)  # (J,K)
+    data_loglik = get_data_loglik_normal_torch(betahat, sebetahat, location, scale)  # (J,K)
     log_post_assignment = apply_log_sum_exp(data_loglik, log_pi)               # (J,K)
     resp = torch.exp(log_post_assignment)                                      # (J,K)
 
