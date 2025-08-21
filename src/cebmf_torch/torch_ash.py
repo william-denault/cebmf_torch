@@ -1,69 +1,98 @@
-
+# torch_convolved_loglik.py
 import torch
-from torch import Tensor
-from dataclasses import dataclass
-from .torch_utils_mix import autoselect_scales_mix_norm, autoselect_scales_mix_exp
-from .torch_distribution_operation import get_data_loglik_normal, get_data_loglik_exp
-from .torch_posterior import posterior_mean_norm, posterior_mean_exp, PosteriorResult
-from .torch_mix_opt import optimize_pi_logL_torch
-from .torch_utils import logsumexp
+import math
+from cebmf_torch.torch_distribution_operation import get_data_loglik_normal_torch, get_data_loglik_exp_torch
+from cebmf_torch.torch_utils_mix import autoselect_scales_mix_exp, autoselect_scales_mix_norm
+from cebmf_torch.torch_mix_opt import optimize_pi_logL
+from cebmf_torch.torch_utils import _LOG_SQRT_2PI 
+from cebmf_torch.torch_posterior import  posterior_mean_norm,  posterior_mean_exp
 
-@dataclass
-class AshResult:
-    post_mean: Tensor
-    post_mean2: Tensor
-    post_sd: Tensor
-    scale: Tensor
-    pi: Tensor
-    prior: str
-    log_lik: float
-    mode: float = 0.0
+import math
+import torch 
+from typing import Optional
+ 
+ 
 
+class ash_object:
+    def __init__(
+        self,
+        post_mean,
+        post_mean2,
+        post_sd,
+        scale,
+        pi,
+        prior,
+        log_lik: float = 0.0,
+        mode: float = 0.0, 
+    ):
+        self.post_mean = post_mean
+        self.post_mean2 = post_mean2
+        self.post_sd = post_sd
+        self.scale = scale
+        self.pi = pi
+        self.prior = prior
+        self.log_lik = log_lik
+        self.mode = mode 
+
+# ---- ASH (Torch) ----
+@torch.no_grad()
 def ash(
-    betahat: Tensor,
-    sebetahat: Tensor,
+    betahat,
+    sebetahat,
     prior: str = "norm",
-    mult: float = 2.0,
+    mult: float = math.sqrt(2.0),
     penalty: float = 10.0,
-    verbose: bool = False,
+    verbose: bool = True,
     threshold_loglikelihood: float = -300.0,
     mode: float = 0.0,
-    method: str = "adam",  # optimizer for pi
-    steps: int = 200,
-    batch_size: int = 65536,
-    lr: float = 0.05,
-) -> AshResult:
+    *, 
+    batch_size: Optional[int] = None,
+    shuffle: bool = False,
+    seed: Optional[int] = None,
+):
     """
-    Pure-PyTorch adaptive shrinkage with mixture priors ('norm' or 'exp').
+    Adaptive shrinkage with mixture priors ("norm" or "exp") in pure PyTorch.
+    Uses EM for π (mini-batch capable via batch_size).
+    Returns ash_object with Torch tensors.
     """
-    device = betahat.device
+    x = torch.as_tensor(betahat)
+    s = torch.as_tensor(sebetahat, dtype=x.dtype, device=x.device)
+
+    # choose optimizer mode (EM by default here)
+ 
+
     if prior == "norm":
-        scale = autoselect_scales_mix_norm(betahat, sebetahat, mult=mult)
-        location = torch.zeros_like(scale) + mode
-        L = get_data_loglik_normal(betahat, sebetahat, location, scale)
-        pi = optimize_pi_logL_torch(L, penalty=penalty, method=method, steps=steps, batch_size=batch_size, lr=lr)
-        res: PosteriorResult = posterior_mean_norm(betahat, sebetahat, torch.log(pi + 1e-32), scale, location)
+        scale = autoselect_scales_mix_norm(x, s, mult=mult)  # (K,)
+        loc = torch.full((scale.shape[0],), float(mode), dtype=x.dtype, device=x.device)
+
+        L = get_data_loglik_normal_torch(x, s, location=loc, scale=scale)  # (J,K)
+        pi = optimize_pi_logL (
+            L, penalty=penalty, verbose=verbose,
+            batch_size=batch_size, shuffle=shuffle, seed=seed
+        )
+        log_pi = torch.log(torch.clamp(pi, min=1e-32))
+        pm, pm2, psd = posterior_mean_norm (x, s, log_pi=log_pi, location=loc, scale=scale)
+
     elif prior == "exp":
-        scale = autoselect_scales_mix_exp(betahat, sebetahat, mult=mult)
-        L = get_data_loglik_exp(betahat, sebetahat, scale)
-        pi = optimize_pi_logL_torch(L, penalty=penalty, method=method, steps=steps, batch_size=batch_size, lr=lr)
-        res: PosteriorResult = posterior_mean_exp(betahat, sebetahat, torch.log(pi + 1e-32), scale)
+        scale = autoselect_scales_mix_exp (x, s, mult=mult)   # (K,) with scale[0]=0 (spike)
+        L = get_data_loglik_exp_torch(x, s, scale=scale)           # (J,K)
+        pi = optimize_pi_logL (
+            L, penalty=penalty, verbose=verbose,
+            batch_size=batch_size, shuffle=shuffle, seed=seed
+        )
+        log_pi = torch.log(torch.clamp(pi, min=1e-32))
+        pm, pm2, psd = posterior_mean_exp (x, s, log_pi=log_pi, scale=scale, mode=mode)
+
     else:
-        raise ValueError("prior must be 'norm' or 'exp'")
+        raise ValueError("prior must be either 'norm' or 'exp'.")
 
-    # Total log-likelihood at optimum pi
-    L = torch.clamp(L, min=threshold_loglikelihood)
-    L_max = L.max(dim=1, keepdim=True).values
-    exp_term = torch.exp(L - L_max) * pi.view(1, -1)
-    log_lik = (L_max + torch.log(exp_term.sum(dim=1, keepdim=True)+1e-32)).sum().item()
+    # total data log-likelihood: sum_j log sum_k pi_k * exp(L_{jk})
+    Lc = torch.maximum(L, torch.tensor(threshold_loglikelihood, dtype=L.dtype, device=L.device))
+    log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi, min=1e-300)).unsqueeze(0), dim=1)
+    log_lik = float(log_lik_rows.sum().item())
 
-    return AshResult(
-        post_mean=res.post_mean,
-        post_mean2=res.post_mean2,
-        post_sd=res.post_sd,
-        scale=scale,
-        pi=pi,
-        prior=prior,
-        log_lik=float(log_lik),
-        mode=mode,
+    return ash_object(
+        post_mean=pm, post_mean2=pm2, post_sd=psd,
+        scale=scale, pi=pi, prior=prior,
+        log_lik=log_lik, mode=float(mode) 
     )
