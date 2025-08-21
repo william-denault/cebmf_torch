@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cebmf_torch"
+version = "0.1.0"
+description = "Pure-PyTorch Empirical Bayes Matrix Factorization with mini-batch EM"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "William R.P. Denault", email = "wdenault@uchicago.edu" }
+]
+dependencies = [
+  "torch>=2.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "black>=24.0",
+  "ruff>=0.4"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cebmf_torch*"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q"
+testpaths = ["tests_torch"]

@@ -1,0 +1,32 @@
+
+import numpy as np
+import torch
+from cebmf_torch import ash
+from cebmf_torch.torch_utils_mix import autoselect_scales_mix_norm
+from cebmf_torch.torch_distribution_operation import get_data_loglik_normal
+from cebmf_torch.torch_mix_opt import optimize_pi_logL_torch
+from cebmf_torch.torch_posterior import posterior_mean_norm
+
+def test_ash_loglik_and_scale():
+    betahat = torch.tensor([1.,2.,3.,4.,5.])
+    sebetahat = torch.tensor([1.,0.4,5.,1.,1.])
+    res = ash(betahat, sebetahat, mult=torch.sqrt(torch.tensor(2.0)).item(), prior="norm", method="em", steps=3000, batch_size=5)
+    expected_log_lik = -16.91767637608251
+    expected_scale = np.array([0., 0.03827328, 0.05412659, 0.07654655, 0.10825318, 0.15309311,
+                              0.21650635, 0.30618622, 0.4330127, 0.61237244, 0.8660254,
+                              1.22474487, 1.73205081, 2.44948974, 3.46410162, 4.89897949,
+                              6.92820323, 9.79795897])
+    np.testing.assert_allclose(res.scale.cpu().numpy(), expected_scale, rtol=1e-5)
+    np.testing.assert_allclose(res.post_mean.cpu().numpy(), np.array([0.11126873, 1.97346787, 0.20802628, 3.6663574 , 4.61542534]) , rtol=2e-3, atol=2e-3)
+    np.testing.assert_allclose(res.post_mean2.cpu().numpy(), np.array([ 0.21398654,  4.05293203,  1.93632865, 14.45535405, 22.22774277]) , rtol=2e-3, atol=2e-3)
+    np.testing.assert_allclose(res.log_lik, expected_log_lik, atol=1e-3)
+
+def test_optimize_pi_and_posterior_mean_norm_shape():
+    betahat = torch.tensor([1.,2.,3.,4.,5.])
+    sebetahat = torch.tensor([1.,0.4,5.,1.,1.]) 
+    scale = autoselect_scales_mix_norm(betahat, sebetahat, mult=2.0)
+    L = get_data_loglik_normal(betahat, sebetahat, torch.zeros_like(scale), scale)
+    pi = optimize_pi_logL_torch(L, penalty=10, method="em", steps=5000, batch_size=5)
+    out = posterior_mean_norm(betahat, sebetahat, torch.log(pi+1e-32), scale, location=torch.zeros_like(scale))
+    result = torch.exp(L) * torch.exp(pi)
+    assert result.shape == (5, scale.numel())
