@@ -3,7 +3,7 @@ import torch
 import math
 from torch import Tensor
 from .torch_utils import logsumexp,  my_etruncnorm,  my_e2truncnorm
-from .torch_distribution_operation import get_data_loglik_normal_torch , get_data_loglik_exp_torch
+
 _LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 
 def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
@@ -151,6 +151,7 @@ def posterior_mean_norm(
     betahat: torch.Tensor,
     sebetahat: torch.Tensor,
     log_pi: torch.Tensor,
+    data_loglik : torch.Tensor,
     scale: torch.Tensor,
     location: torch.Tensor | None = None
 ) -> PosteriorMeanNorm:
@@ -178,7 +179,7 @@ def posterior_mean_norm(
             raise ValueError("location must be (K,) or (J,K)")
 
     # data log-likelihood and posterior assignment in log-space
-    data_loglik = get_data_loglik_normal_torch(betahat, sebetahat, location, scale)  # (J,K)
+    #data_loglik = get_data_loglik_normal_torch(betahat, sebetahat, location, scale)  # (J,K)
     log_post_assignment = apply_log_sum_exp(data_loglik, log_pi)               # (J,K)
     resp = torch.exp(log_post_assignment)                                      # (J,K)
 
@@ -198,13 +199,12 @@ def posterior_mean_norm(
     else:
         loc = location
 
-    m_comp = torch.empty_like(t_ind_Var)
-    mask_spike = (t2 == 0.0)
-    m_comp[~mask_spike] = t_ind_Var[~mask_spike] * (
-        betahat.unsqueeze(1)[~mask_spike] / s2[~mask_spike] + loc[~mask_spike] / t2[~mask_spike]
-    )
-    m_comp[mask_spike] = loc[mask_spike]
+    rhs = t_ind_Var * (
+        betahat.unsqueeze(1) / s2 + loc / t2
+    )  # [J, K]
 
+    mask_spike = (t2 == 0.0).expand(J, K)
+    m_comp = torch.where(mask_spike, loc, rhs)
     post_mean  = torch.sum(resp * m_comp, dim=1)
     post_mean2 = torch.sum(resp * (t_ind_Var + m_comp.pow(2)), dim=1)
     post_sd    = torch.sqrt(torch.clamp(post_mean2 - post_mean.pow(2), min=0.0))

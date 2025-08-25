@@ -2,26 +2,15 @@
 import math
 import torch
 from torch import Tensor
-
+from cebmf_torch.torch_utils import my_etruncnorm, my_e2truncnorm, logphi, logPhi, logscale_add , _TWOPI, _LOG_SQRT_2PI
 # =========================
 # Utilities (Torch only)
 # =========================
 
-_TWOPI = 2.0 * math.pi
-_LOG_SQRT_2PI = 0.5 * math.log(_TWOPI)
 
-def logphi(z: Tensor) -> Tensor:
-    """log pdf of standard normal φ(z) = exp(-z^2/2)/sqrt(2π)."""
-    return -0.5 * z.pow(2) - _LOG_SQRT_2PI
 
-def logPhi(z: Tensor) -> Tensor:
-    """log CDF of standard normal using a stable implementation."""
-    # torch.special.log_ndtr is numerically stable for wide ranges
-    return torch.special.log_ndtr(z)
+  
 
-def logscale_add(logx: Tensor, logy: Tensor) -> Tensor:
-    """Stable log(exp(logx) + exp(logy))."""
-    return torch.logaddexp(logx, logy)
 
  
 
@@ -97,8 +86,8 @@ def posterior_mean_pe(x: Tensor, s: Tensor, w: Tensor, a: Tensor, mu: Tensor = N
     zero = torch.zeros_like(xc)
     inf = torch.full_like(xc, float("inf"))
 
-    laplace_component_mean = etruncnorm(zero, inf, m_tilt, s_tilt)
-    laplace_component_mean2 = e2truncnorm(zero, inf, m_tilt, s_tilt)
+    laplace_component_mean = my_etruncnorm(zero, inf, m_tilt, s_tilt)
+    laplace_component_mean2 = my_e2truncnorm(zero, inf, m_tilt, s_tilt)
 
     # Combine with posterior mixing weight
     post_mean_c = wpost * laplace_component_mean

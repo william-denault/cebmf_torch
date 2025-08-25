@@ -6,7 +6,7 @@ from typing import Optional, Callable, Dict
 from .torch_ash import ash
 from .torch_utils_mix import autoselect_scales_mix_norm, autoselect_scales_mix_exp
 from .torch_device import get_device
-from .torch_mix_opt import optimize_pi_logL_torch
+from .torch_mix_opt import optimize_pi_logL
 
 @dataclass
 class CEBMFResult:
@@ -92,9 +92,9 @@ class cEBMF:
             se_l = torch.sqrt(1.0 / (self.tau * denom_l))
 
             if self.prior_L == "norm":
-                resL = ash(lhat, se_l, prior="norm", method="adam")
+                resL = ash(lhat, se_l, prior="norm" )
             elif self.prior_L == "exp":
-                resL = ash(lhat, se_l, prior="exp", method="adam")
+                resL = ash(lhat, se_l, prior="exp" )
             else:
                 raise ValueError("prior_L must be 'norm' or 'exp'")
             self.L[:, k] = resL.post_mean
@@ -110,9 +110,9 @@ class cEBMF:
             se_f = torch.sqrt(1.0 / (self.tau * denom_f))
 
             if self.prior_F == "norm":
-                resF = ash(fhat, se_f, prior="norm", method="adam")
+                resF = ash(fhat, se_f, prior="norm" )
             elif self.prior_F == "exp":
-                resF = ash(fhat, se_f, prior="exp", method="adam")
+                resF = ash(fhat, se_f, prior="exp")
             else:
                 raise ValueError("prior_F must be 'norm' or 'exp'")
             self.F[:, k] = resF.post_mean
@@ -133,3 +133,6 @@ class cEBMF:
         for _ in range(maxit):
             self.iter_once()
         return CEBMFResult(self.L, self.F, self.tau, self.obj)
+    
+    def get_fitted_value(self):
+        self.Y_fit = self.L @ self.F.T

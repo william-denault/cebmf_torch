@@ -1,7 +1,7 @@
 
 import numpy as np
 import torch
-from cebmf_torch import ash
+from cebmf_torch.torch_ash   import ash
 from cebmf_torch.torch_utils_mix import autoselect_scales_mix_exp
 from cebmf_torch.torch_distribution_operation import get_data_loglik_exp
 from cebmf_torch.torch_mix_opt import optimize_pi_logL_torch

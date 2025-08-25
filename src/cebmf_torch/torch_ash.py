@@ -5,8 +5,7 @@ from .torch_utils_mix import autoselect_scales_mix_exp, autoselect_scales_mix_no
 from .torch_mix_opt import optimize_pi_logL
 from .torch_utils import _LOG_SQRT_2PI 
 from .torch_posterior import  posterior_mean_norm,  posterior_mean_exp
-
-from .torch_distribution_operation import get_data_loglik_normal_torch, get_data_loglik_exp_torch
+from cebmf_torch.torch_distribution_operation import get_data_loglik_normal_torch, get_data_loglik_exp_torch
 
 import math
 import torch 
@@ -47,7 +46,7 @@ def ash(
     threshold_loglikelihood: float = -300.0,
     mode: float = 0.0,
     *, 
-    batch_size: Optional[int] = None,
+    batch_size: Optional[int] = 128,
     shuffle: bool = False,
     seed: Optional[int] = None,
 ):
@@ -60,7 +59,7 @@ def ash(
   
     # choose optimizer mode (EM by default here)
  
-
+    s.clamp_(min=1e-12)
     if prior == "norm":
         scale = autoselect_scales_mix_norm(x, s, mult=mult)  # (K,)
         loc = torch.full((scale.shape[0],), float(mode), dtype=x.dtype, device=x.device)
@@ -71,7 +70,10 @@ def ash(
             batch_size=batch_size, shuffle=shuffle, seed=seed
         )
         log_pi = torch.log(torch.clamp(pi, min=1e-32))
-        pm, pm2, psd = posterior_mean_norm (x, s, log_pi=log_pi,data_loglik=L, location=loc, scale=scale)
+        pm_obj = posterior_mean_norm (x, s, log_pi=log_pi,data_loglik=L, location=loc, scale=scale)
+        pm = pm_obj.post_mean
+        pm2 = pm_obj.post_mean2
+        psd = pm_obj.post_sd
 
     elif prior == "exp":
         scale = autoselect_scales_mix_exp (x, s, mult=mult)   # (K,) with scale[0]=0 (spike)
@@ -81,7 +83,11 @@ def ash(
             batch_size=batch_size, shuffle=shuffle, seed=seed
         )
         log_pi = torch.log(torch.clamp(pi, min=1e-32))
-        pm, pm2, psd = posterior_mean_exp (x, s, log_pi=log_pi, scale=scale, mode=mode)
+        pm_obj = posterior_mean_exp (x, s, log_pi=log_pi, scale=scale ) 
+        pm = pm_obj.post_mean
+        pm2 = pm_obj.post_mean2
+        psd = pm_obj.post_sd
+
 
     else:
         raise ValueError("prior must be either 'norm' or 'exp'.")

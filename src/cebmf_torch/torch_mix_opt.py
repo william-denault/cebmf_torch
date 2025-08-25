@@ -49,9 +49,9 @@ def optimize_pi_logL(
         assert vec_pen.shape == (K,), "penalty tensor must have shape (K,)"
     else:
         vec_pen = torch.ones(K, device=device, dtype=dtype)
-        vec_pen[0] = dtype.type(penalty)
+        vec_pen[0] =  penalty 
 
-    eps = dtype.type(1e-12)
+    eps = 1e-12
 
     # batching helper
     if batch_size is None or batch_size >= n:
