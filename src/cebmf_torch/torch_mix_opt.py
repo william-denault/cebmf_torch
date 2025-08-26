@@ -5,7 +5,7 @@ from .torch_utils import logsumexp, safe_log, softmax
 
 import torch
 from typing import Optional
-
+@torch.no_grad()
 def optimize_pi_logL(
     logL: torch.Tensor,
     penalty: float | torch.Tensor,
@@ -37,7 +37,8 @@ def optimize_pi_logL(
     n, K = logL.shape
     device = logL.device
     dtype = logL.dtype
-
+    if logL.device.type == "cpu" and torch.cuda.is_available():
+        logL = logL.cuda()
     # Initialize pi ∝ exp(-k)
     k = torch.arange(K, device=device, dtype=dtype)
     pi = torch.exp(-k)
