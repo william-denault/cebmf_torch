@@ -205,8 +205,8 @@ def ebnm_point_laplace(
         # Optional early-exit guard; if keeping, ensure tensor ops
         if float(pi0) < tresh_pi0:
             post_mean = torch.zeros_like(x)
-            post_mean2 = torch.zeros_like(x) + 1
-            post_sd = torch.zeros_like(x) + 1
+            post_mean2 = torch.zeros_like(x)  +0.0001
+            post_sd =   torch.sqrt(post_mean2)
             # consistent spike-only log-lik:
             log_lik = (torch.log1p(-pi0) + lf).sum().item()
 
