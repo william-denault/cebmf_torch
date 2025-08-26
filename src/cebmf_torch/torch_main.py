@@ -172,7 +172,7 @@ class cEBMF:
             se_l    = torch.sqrt(1.0 / denom_l)
 
         lhat = num_l / denom_l
-
+       # print(denom_l)
         resL = self.prior_L_fn(
             X=getattr(self, "X_l", None),
             betahat=lhat,
@@ -199,7 +199,7 @@ class cEBMF:
             se_f    = torch.sqrt(1.0 / denom_f)
 
         fhat = num_f / denom_f
-
+        print(denom_f[1])
         resF = self.prior_F_fn(
             X=getattr(self, "X_f", None),
             betahat=fhat,

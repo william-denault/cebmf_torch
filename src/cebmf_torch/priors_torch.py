@@ -28,7 +28,7 @@ def prior_exp_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor, model_par
 
 def prior_point_laplace_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor, model_param=None) -> PriorResultTorch:
     # Uses the stable EBNM point-Laplace we wrote in PyTorch earlier
-    obj = ebnm_point_laplace(betahat, sebetahat)
+    obj = ebnm_point_laplace(betahat, sebetahat, par_init=[0.0, 2.0, 0.0] )
     return PriorResultTorch(post_mean=obj.post_mean, post_mean2=obj.post_mean2,
                             loss=-float(obj.log_lik), model_param=model_param)
 
