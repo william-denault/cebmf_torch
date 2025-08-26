@@ -221,7 +221,7 @@ class EBNMPointExp:
         self.log_lik = log_lik
         self.mode = mode
 
-def ebnm_point_exp_solver(
+def ebnm_point_exp (
     x: Tensor,
     s: Tensor,
     opt_mu: bool = False,
