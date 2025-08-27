@@ -20,7 +20,7 @@ class ash_object:
         post_mean2,
         post_sd,
         scale,
-        pi,
+        pi0,
         prior,
         log_lik: float = 0.0,
         mode: float = 0.0, 
@@ -29,7 +29,7 @@ class ash_object:
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
         self.scale = scale
-        self.pi = pi
+        self.pi0 = pi0
         self.prior = prior
         self.log_lik = log_lik
         self.mode = mode 
@@ -65,12 +65,12 @@ def ash(
         loc = torch.full((scale.shape[0],), float(mode), dtype=x.dtype, device=x.device)
 
         L = get_data_loglik_normal_torch(x, s, location=loc, scale=scale)  # (J,K)
-        pi = optimize_pi_logL (
+        pi0 = optimize_pi_logL (
             L, penalty=penalty, verbose=verbose,
             batch_size=batch_size, shuffle=shuffle, seed=seed
         )
-        log_pi = torch.log(torch.clamp(pi, min=1e-32))
-        pm_obj = posterior_mean_norm (x, s, log_pi=log_pi,data_loglik=L, location=loc, scale=scale)
+        log_pi = torch.log(torch.clamp(pi0, min=1e-32))
+        pm_obj = posterior_mean_norm (x, s, log_pi=log_pi0,data_loglik=L, location=loc, scale=scale)
         pm = pm_obj.post_mean
         pm2 = pm_obj.post_mean2
         psd = pm_obj.post_sd
@@ -78,12 +78,12 @@ def ash(
     elif prior == "exp":
         scale = autoselect_scales_mix_exp (x, s, mult=mult)   # (K,) with scale[0]=0 (spike)
         L = get_data_loglik_exp_torch(x, s, scale=scale)           # (J,K)
-        pi = optimize_pi_logL (
+        pi0 = optimize_pi_logL (
             L, penalty=penalty, verbose=verbose,
             batch_size=batch_size, shuffle=shuffle, seed=seed
         )
-        log_pi = torch.log(torch.clamp(pi, min=1e-32))
-        pm_obj = posterior_mean_exp (x, s, log_pi=log_pi, scale=scale ) 
+        log_pi0 = torch.log(torch.clamp(pi0, min=1e-32))
+        pm_obj = posterior_mean_exp (x, s, log_pi=log_pi0, scale=scale ) 
         pm = pm_obj.post_mean
         pm2 = pm_obj.post_mean2
         psd = pm_obj.post_sd
@@ -94,11 +94,11 @@ def ash(
 
     # total data log-likelihood: sum_j log sum_k pi_k * exp(L_{jk})
     Lc = torch.maximum(L, torch.tensor(threshold_loglikelihood, dtype=L.dtype, device=L.device))
-    log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi, min=1e-300)).unsqueeze(0), dim=1)
+    log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
     log_lik = float(log_lik_rows.sum().item())
 
     return ash_object(
         post_mean=pm, post_mean2=pm2, post_sd=psd,
-        scale=scale, pi=pi, prior=prior,
+        scale=scale, pi0=pi0, prior=prior,
         log_lik=log_lik, mode=float(mode) 
     )

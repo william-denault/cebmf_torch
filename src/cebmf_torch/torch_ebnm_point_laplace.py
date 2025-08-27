@@ -41,7 +41,7 @@ class EBNMLaplaceResult:
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    w: float
+    pi0: float
     a: float
     mu: float
     log_lik: float
@@ -214,7 +214,7 @@ def ebnm_point_laplace(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        w=float(pi0),
+        pi0=float(1-pi0),
         a=float(a),
         mu=mu_v,
         log_lik=float(log_lik),

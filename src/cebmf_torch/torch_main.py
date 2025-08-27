@@ -199,41 +199,46 @@ class cEBMF:
             se_f    = torch.sqrt(1.0 / denom_f)
 
         fhat = num_f / denom_f
-        print(denom_f[1])
+
         resF = self.prior_F_fn(
-            X=getattr(self, "X_f", None),
-            betahat=fhat,
-            sebetahat=se_f,
-            model_param=self.model_state_F[k]
-        )
+                    X=getattr(self, "X_f", None),
+                    betahat=fhat,
+                    sebetahat=se_f,
+                    model_param=self.model_state_F[k]
+                    )
         self.model_state_F[k] = resF.model_param
         self.F[:, k]  = resF.post_mean
         self.F2[:, k] = resF.post_mean2
+# store as scalar on device; PriorResult.loss already = -log_lik
         self.kl_f[k]  = torch.as_tensor(resF.loss, device=self.device)
 
     def cal_obj(self):
-        R = self.Y0 - self.L @ self.F.T                 # (N,P)
+    # Data term
+        R = self.Y0 - self.L @ self.F.T
         R2 = (R * R) * self.mask
 
         if self.type_noise == "constant":
             m = self.mask.sum().clamp_min(1.0)
-            ll = -0.5 * ( m * (torch.log(torch.tensor(2*torch.pi, device=self.device)) - torch.log(self.tau))
-                      + self.tau * R2.sum() )
+            ll = -0.5 * (
+                m * (torch.log(torch.tensor(2*torch.pi, device=self.device)) - torch.log(self.tau))
+                + self.tau * R2.sum()
+                )
         else:
-            tau_map = self.tau_map                      # (N,P)
+            tau_map = self.tau_map
             obs = self.mask.bool()
-            ll = -0.5 * ( torch.log(torch.tensor(2*torch.pi, device=self.device)) * obs.sum()
-                      - torch.log(tau_map[obs]).sum()
-                      + (tau_map * R2)[obs].sum() )
+            ll = -0.5 * (
+                torch.log(torch.tensor(2*torch.pi, device=self.device)) * obs.sum()
+                - torch.log(tau_map[obs]).sum()
+                + (tau_map * R2)[obs].sum()
+                )
 
-        # add KL from priors (optional)
-        if hasattr(self, "kl_l_scalar") and hasattr(self, "kl_f_scalar"):
-            kl = sum(self.kl_l_scalar) + sum(self.kl_f_scalar)
-            obj = (ll - kl).item()
-        else:
-            obj = ll.item()
+        # KL term from priors; PriorResult.loss = -log_lik (positive KL-like)
+        KL = self.kl_l.sum() + self.kl_f.sum()
 
+    # Final objective matches NumPy convention: obj = ll - KL
+        obj = (ll - KL).item()
         self.obj.append(obj)
+
 
         
     @torch.no_grad()

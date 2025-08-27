@@ -53,14 +53,14 @@ class EBNMPointExp:
                  post_mean2: Tensor,
                  post_sd: Tensor,
                  scale: float,
-                 pi: float,
+                 pi0: float,
                  log_lik: float,
                  mode: float):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
         self.scale = scale
-        self.pi = pi
+        self.pi0 = pi0
         self.log_lik = log_lik
         self.mode = mode
 
@@ -206,7 +206,7 @@ def ebnm_point_exp(
         post_mean2=post_mean2,
         post_sd=post_sd,
         scale=float(a),
-        pi=float(pi0),
+        pi0=float(1-pi0),
         log_lik=float(log_lik),
         mode=mu_v,
     )
