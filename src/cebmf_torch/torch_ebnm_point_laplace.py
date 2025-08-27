@@ -60,7 +60,7 @@ def ebnm_point_laplace(
     a_bounds=(1e-2, 1e2),               # slightly tighter; adjust if needed
     loga_l2: float = 1e-2,
     tresh_pi0: float =  1e-3,
-    eps: float = 1e-12,
+    eps: float = 1e-12, 
 ) -> EBNMLaplaceResult:
 
     device, dtype = x.device, x.dtype
@@ -69,7 +69,7 @@ def ebnm_point_laplace(
 
     # ---- choose robust defaults if None ----
     if par_init is None:
-        par_init = (0.9, 2.0, 0.0)  # heuristic init (logit(w), log(a), mu)
+        par_init = (2, 2.0, 0.0)  # heuristic init (logit(w), log(a), mu)
 
     w_logit = torch.nn.Parameter(
         torch.tensor(par_init[0], dtype=dtype, device=device),
@@ -96,8 +96,12 @@ def ebnm_point_laplace(
 
     def closure():
         opt.zero_grad(set_to_none=True)
-        w = torch.sigmoid(w_logit)
-
+        w = torch.sigmoid(w_logit) 
+        log_w     = torch.log (w )      # log w
+       
+         
+        pen =  0.01*log_w 
+        print(pen)
         # bounded a
         log_a_eff = log_a.clamp(
             min=math.log(a_bounds[0]),
@@ -116,11 +120,10 @@ def ebnm_point_laplace(
         lg1 = -a * xc + logPhi(z1)
         lg2 = a * xc + logPhi(z2)
         lsum = torch.logaddexp(lg1, lg2)
-        lg = torch.log(a / 2) + 0.5 * (s * a) ** 2 + lsum
-
+        lg = torch.log(a / 2) + 0.5 * (s * a) ** 2 + lsum 
         llik_i = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg)
 
-        loss = -llik_i.sum() + loga_l2 * (log_a ** 2)
+        loss = -llik_i.sum() + loga_l2 * (log_a ** 2) + pen
 
         # graph-preserving guard
         loss = torch.nan_to_num(loss, nan=1e30, posinf=1e30, neginf=1e30)

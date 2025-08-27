@@ -69,7 +69,7 @@ def ash(
             L, penalty=penalty, verbose=verbose,
             batch_size=batch_size, shuffle=shuffle, seed=seed
         )
-        log_pi = torch.log(torch.clamp(pi0, min=1e-32))
+        log_pi0 = torch.log(torch.clamp(pi0, min=1e-32))
         pm_obj = posterior_mean_norm (x, s, log_pi=log_pi0,data_loglik=L, location=loc, scale=scale)
         pm = pm_obj.post_mean
         pm2 = pm_obj.post_mean2
@@ -99,6 +99,6 @@ def ash(
 
     return ash_object(
         post_mean=pm, post_mean2=pm2, post_sd=psd,
-        scale=scale, pi0=pi0, prior=prior,
+        scale=scale, pi0=pi0[0], prior=prior,
         log_lik=log_lik, mode=float(mode) 
     )
