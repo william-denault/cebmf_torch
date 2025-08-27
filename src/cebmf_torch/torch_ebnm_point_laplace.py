@@ -61,6 +61,7 @@ def ebnm_point_laplace(
     loga_l2: float = 1e-2,
     tresh_pi0: float =  1e-3,
     eps: float = 1e-12, 
+    pen_pi0=1,
 ) -> EBNMLaplaceResult:
 
     device, dtype = x.device, x.dtype
@@ -99,8 +100,11 @@ def ebnm_point_laplace(
         w = torch.sigmoid(w_logit) 
         log_w     = torch.log (w )      # log w
        
-         
-        pen =  0.01*log_w 
+        pen= -pen_pi0*(torch.log((1-w).clamp(
+            min=eps,
+            max=1-eps,
+            )))
+          
         print(pen)
         # bounded a
         log_a_eff = log_a.clamp(
@@ -126,7 +130,7 @@ def ebnm_point_laplace(
         loss = -llik_i.sum() + loga_l2 * (log_a ** 2) + pen
 
         # graph-preserving guard
-        loss = torch.nan_to_num(loss, nan=1e30, posinf=1e30, neginf=1e30)
+        loss = torch.nan_to_num(loss, nan=1e30, posinf=1e30, neginf=1e30)+pen
         loss.backward()
         return loss
 
@@ -157,9 +161,11 @@ def ebnm_point_laplace(
         )
         a = log_a_eff.exp()
         mu_v = float(mu)
-
+        
         xc = x - mu
 
+
+       
         # spike loglik
         lf = -0.5 * ((xc / s) ** 2) - torch.log(s) - 0.5 * _LOG_2PI
 
@@ -203,7 +209,7 @@ def ebnm_point_laplace(
         log_lik = torch.logaddexp(
             torch.log1p(-pi0) + lf,
             torch.log(pi0.clamp_min(eps)) + lg,
-        ).sum().item()
+        ).sum().item()  
 
         # Optional early-exit guard; if keeping, ensure tensor ops
         if float(pi0) < tresh_pi0:
@@ -211,7 +217,7 @@ def ebnm_point_laplace(
             post_mean2 = torch.zeros_like(x)  +0.0001
             post_sd =   torch.sqrt(post_mean2)
             # consistent spike-only log-lik:
-            log_lik = (torch.log1p(-pi0) + lf).sum().item()
+            log_lik = (torch.log1p(-pi0) + lf).sum().item() 
 
     return EBNMLaplaceResult(
         post_mean=post_mean,
