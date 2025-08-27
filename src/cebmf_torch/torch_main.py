@@ -29,7 +29,9 @@ class cEBMF:
                     prior_L: str | Callable = "norm",
                     prior_F: str | Callable = "norm",
                     type_noise: str ='constant',
-                          device: Optional[torch.device] = None):
+                          device: Optional[torch.device] = None,
+                    allow_backfitting: bool = True,
+                    prune_pi0 : float= 1- 1e-3):
         self.device = device or get_device()
         self.Y = data.to(self.device).float()
         self.mask = (~torch.isnan(self.Y)).float()   # 1 where observed, 0 where NaN
@@ -41,16 +43,18 @@ class cEBMF:
         self.model_state_L = [None] * K
         self.model_state_F = [None] * K
         self.type_noise =type_noise
-        self.L = torch.zeros(self.N, K, device=self.device)
-        self.L2 = torch.zeros(self.N, K, device=self.device)
-        self.F = torch.zeros(self.P, K, device=self.device)
-        self.F2 = torch.zeros(self.P, K, device=self.device)
-        self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var) 
+        self.L    = torch.zeros(self.N, K, device=self.device)
+        self.L2   = torch.zeros(self.N, K, device=self.device)
+        self.F    = torch.zeros(self.P, K, device=self.device)
+        self.F2   = torch.zeros(self.P, K, device=self.device)
+        self.tau  = torch.tensor(1.0, device=self.device)  # precision (1/var) 
         self.kl_l = torch.zeros(self.K, device=self.device)
         self.kl_f = torch.zeros(self. K, device=self.device)
- 
-
+        self.prune_thresh = prune_pi0
+        self.pi0_L = [None] * K  # store latest pi0 for L[:,k]; scalar or Tensor or None
+        self.pi0_F = [None] * K 
         self.obj = []
+        self.allow_backfitting= allow_backfitting
 
     def _impute_nan(self, Y: Tensor) -> Tensor:
         # Column-mean imputation in pure torch (for SVD init only)
@@ -78,7 +82,7 @@ class cEBMF:
         self.L2 = self.L*self.L
         self.F2 = self.F*self.F
         self.update_tau()
-    @torch.no_grad()
+     
     @torch.no_grad()
     def update_tau(self):
         """
@@ -125,7 +129,7 @@ class cEBMF:
         k_contrib = torch.outer(self.L[:, k], self.F[:, k])
         Rk = (self.Y0 - (recon - k_contrib)) * self.mask
         return Rk
-
+    @torch.no_grad()
     def iter_once(self):
         eps = 1e-12
         # ensure 1-D KL holders (length K)
@@ -147,11 +151,17 @@ class cEBMF:
         for k in range(self.K):
             self.update_factor(k, tau_map=tau_map, eps=eps)
 
+        if self.allow_backfitting and self.K > 1:
+            to_drop = [k for k in range(self.K) if self._should_prune_factor(k, self.prune_thresh)]
+            if to_drop:
+        # drop highest indices first to avoid reindex churn
+                to_drop_sorted = sorted(to_drop, reverse=True)
+                self._prune_indices(to_drop_sorted)
         self.update_tau()
         self.cal_obj()
 
 
-
+    @torch.no_grad
     def update_factor(self, k: int, tau_map: Optional[Tensor] = None, eps: float = 1e-12) -> None:
         """
         Update L[:,k], F[:,k] and their second moments using the current priors.
@@ -183,6 +193,8 @@ class cEBMF:
         self.L[:, k]  = resL.post_mean
         self.L2[:, k] = resL.post_mean2
         self.kl_l[k]  = torch.as_tensor(resL.loss, device=self.device)
+        self.pi0_L[k] = resL.pi0_null if hasattr(resL, "pi0_null") else None
+
 
     # ---------- Update F[:, k] ----------
         Rk = self._partial_residual_masked(k)            # recompute with updated L
@@ -211,6 +223,7 @@ class cEBMF:
         self.F2[:, k] = resF.post_mean2
 # store as scalar on device; PriorResult.loss already = -log_lik
         self.kl_f[k]  = torch.as_tensor(resF.loss, device=self.device)
+        self.pi0_F[k] = resF.pi0_null  if hasattr(resF, "pi0_null") else None
 
     def cal_obj(self):
     # Data term
@@ -266,6 +279,47 @@ class cEBMF:
         R2 = resid_mean_sq - first_moment_sq + second_moment
         R2 = (R2 * self.mask).clamp_min(0.0)                      # zero where missing; no negatives
         return R2
+    
+
+    def _pi0_min_value(self, pi0_val) -> float:
+        if pi0_val is None:
+            return float("-inf")
+        if isinstance(pi0_val, torch.Tensor):
+            if pi0_val.numel() == 0:
+                return float("-inf")
+            return float(pi0_val.min().item())
+        return float(pi0_val)
+
+    def _should_prune_factor(self, k: int, thresh: float) -> bool:
+        """
+        Remove factor k if we have π₀ info and the smallest π₀ across coordinates
+        (for any side that provided it) is ≥ thresh. (Your spec: use the *lowest* π₀.)
+        """
+        pi0_min_L = self._pi0_min_value(self.pi0_L[k])
+        pi0_min_F = self._pi0_min_value(self.pi0_F[k])
+        # if neither side provided π0, don't prune
+        if pi0_min_L == float("-inf") and pi0_min_F == float("-inf"):
+            return False
+        # If either side indicates "all near spike", prune.
+        return (pi0_min_L >= thresh) or (pi0_min_F >= thresh)
+
+    def _prune_indices(self, idxs: list[int]) -> None:
+        """In-place prune of K and all factor-aligned structures."""
+        if not idxs:
+            return
+        keep = [i for i in range(self.K) if i not in idxs]
+        self.L  = self.L[:, keep]
+        self.L2 = self.L2[:, keep]
+        self.F  = self.F[:, keep]
+        self.F2 = self.F2[:, keep]
+        self.kl_l = self.kl_l[keep]
+        self.kl_f = self.kl_f[keep]
+        self.model_state_L = [self.model_state_L[i] for i in keep]
+        self.model_state_F = [self.model_state_F[i] for i in keep]
+        self.pi0_L = [self.pi0_L[i] for i in keep]
+        self.pi0_F = [self.pi0_F[i] for i in keep]
+        self.K = len(keep)
+
 
 
  
@@ -301,3 +355,6 @@ def normal_means_loglik(x: torch.Tensor,
     term = Et2 - 2 * x * Et + x**2
     loglik = -0.5 * torch.sum(torch.log(2 * torch.pi * s**2 + eps) + term / (s**2 + eps))
     return loglik
+
+
+ 

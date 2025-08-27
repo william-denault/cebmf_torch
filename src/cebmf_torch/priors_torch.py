@@ -39,8 +39,7 @@ def prior_point_laplace_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor,
                             pi0_null=float(obj.pi0))
 
 def prior_point_exp_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor, model_param=None) -> PriorResultTorch:
-    obj = ebnm_point_exp(betahat, sebetahat)
-    pi_slab = float(obj.pi)  # from your point-exp wrapper
+    obj = ebnm_point_exp(betahat, sebetahat) 
     return PriorResultTorch(post_mean=obj.post_mean, post_mean2=obj.post_mean2,
                             loss=-float(obj.log_lik), model_param=model_param,
                             pi0_null=float(obj.pi0))
