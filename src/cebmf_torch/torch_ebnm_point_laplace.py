@@ -55,11 +55,11 @@ def ebnm_point_laplace(
     s: Tensor,
     par_init=None,                       # None by default; choose safely inside
     fix_par=(False, False, True),        # [w_logit, log_a, mu]; mu fixed at 0
-    max_iter: int = 20,
-    tol: float = 1e-6,
-    a_bounds=(1e-1, 1e1),               # slightly tighter; adjust if needed
+    max_iter: int = 50,
+    tol: float = 1e-3,
+    a_bounds=(1e-2, 1e2),               # slightly tighter; adjust if needed
     loga_l2: float = 1e-2,
-    tresh_pi0: float = 1e-4,
+    tresh_pi0: float =  1e-3,
     eps: float = 1e-12,
 ) -> EBNMLaplaceResult:
 
@@ -69,7 +69,7 @@ def ebnm_point_laplace(
 
     # ---- choose robust defaults if None ----
     if par_init is None:
-        par_init = (0.0, 2.0, 0.0)  # heuristic init (logit(w), log(a), mu)
+        par_init = (0.9, 2.0, 0.0)  # heuristic init (logit(w), log(a), mu)
 
     w_logit = torch.nn.Parameter(
         torch.tensor(par_init[0], dtype=dtype, device=device),
