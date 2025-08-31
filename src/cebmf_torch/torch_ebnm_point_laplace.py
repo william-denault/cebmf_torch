@@ -104,8 +104,7 @@ def ebnm_point_laplace(
             min=eps,
             max=1-eps,
             )))
-          
-        print(pen)
+           
         # bounded a
         log_a_eff = log_a.clamp(
             min=math.log(a_bounds[0]),

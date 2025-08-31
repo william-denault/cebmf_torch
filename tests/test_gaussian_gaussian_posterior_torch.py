@@ -2,7 +2,7 @@
 import numpy as np
 import torch
 from cebmf_torch.torch_utils_mix import autoselect_scales_mix_norm
-from cebmf_torch.torch_distribution_operation import get_data_loglik_normal
+from cebmf_torch.torch_distribution_operation import get_data_loglik_normal_torch 
 from cebmf_torch.torch_utils import logsumexp
 
 def test_convolved_loglik_postmean():
@@ -14,7 +14,7 @@ def test_convolved_loglik_postmean():
     p= scale.shape[0]
 
     # Single x=betahat[1]
-    L_single = get_data_loglik_normal(torch.tensor([betahat[1]], dtype=torch.float64),
+    L_single = get_data_loglik_normal_torch (torch.tensor([betahat[1]], dtype=torch.float64),
                                       torch.tensor([sebetahat[1]], dtype=torch.float64),
                                       torch.tensor(location, dtype=torch.float64),
                                       torch.tensor(scale, dtype=torch.float64)).cpu().numpy()[0]
@@ -26,7 +26,7 @@ def test_convolved_loglik_postmean():
         -2.59406918,  -3.22274394])
 
     # Full loglik matrix
-    data_loglik = get_data_loglik_normal ( torch.tensor(betahat, dtype=torch.float64),
+    data_loglik = get_data_loglik_normal_torch  ( torch.tensor(betahat, dtype=torch.float64),
                                            torch.tensor(sebetahat, dtype=torch.float64),
                                            torch.zeros_like(torch.tensor(scale, dtype=torch.float64)),
                                            torch.tensor(scale, dtype=torch.float64)).cpu().numpy()

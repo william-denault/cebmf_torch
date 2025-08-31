@@ -16,8 +16,9 @@ def test_rank1_iter_and_obj():
     m = cEBMF(Y, K=5, prior_L="norm", prior_F="norm")
     m.initialize("svd")
     base = rmse((m.L@m.F.T).cpu().numpy(), np.outer(u,v))
-    for _ in range(20):
+    for _ in range(100):
         m.iter_once()
     improved = rmse((m.L@m.F.T).cpu().numpy(), np.outer(u,v))
-    assert improved <= base + 1e-8
+    assert improved <= 0.025
+    assert m.K <=2
     assert len(m.obj) >= 1

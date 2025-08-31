@@ -206,7 +206,7 @@ def ebnm_point_exp(
         post_mean2=post_mean2,
         post_sd=post_sd,
         scale=float(a),
-        pi0=float(1-pi0),
+        pi0=float(pi0),
         log_lik=float(log_lik),
         mode=mu_v,
     )
