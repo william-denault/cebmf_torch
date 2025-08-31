@@ -1,16 +1,16 @@
 
 import numpy as np
 import torch
-from cebmf_torch import ash
+from cebmf_torch.torch_ash import ash
 from cebmf_torch.torch_utils_mix import autoselect_scales_mix_norm
-from cebmf_torch.torch_distribution_operation import get_data_loglik_normal
-from cebmf_torch.torch_mix_opt import optimize_pi_logL_torch
+from cebmf_torch.torch_distribution_operation import  get_data_loglik_normal_torch
+from cebmf_torch.torch_mix_opt import optimize_pi_logL
 from cebmf_torch.torch_posterior import posterior_mean_norm
 
 def test_ash_loglik_and_scale():
     betahat = torch.tensor([1.,2.,3.,4.,5.])
     sebetahat = torch.tensor([1.,0.4,5.,1.,1.])
-    res = ash(betahat, sebetahat, mult=torch.sqrt(torch.tensor(2.0)).item(), prior="norm", method="em", steps=3000, batch_size=5)
+    res = ash(betahat, sebetahat, mult=torch.sqrt(torch.tensor(2.0)).item(), prior="norm" )
     expected_log_lik = -16.91767637608251
     expected_scale = np.array([0., 0.03827328, 0.05412659, 0.07654655, 0.10825318, 0.15309311,
                               0.21650635, 0.30618622, 0.4330127, 0.61237244, 0.8660254,
@@ -25,8 +25,16 @@ def test_optimize_pi_and_posterior_mean_norm_shape():
     betahat = torch.tensor([1.,2.,3.,4.,5.])
     sebetahat = torch.tensor([1.,0.4,5.,1.,1.]) 
     scale = autoselect_scales_mix_norm(betahat, sebetahat, mult=2.0)
-    L = get_data_loglik_normal(betahat, sebetahat, torch.zeros_like(scale), scale)
-    pi = optimize_pi_logL_torch(L, penalty=10, method="em", steps=5000, batch_size=5)
-    out = posterior_mean_norm(betahat, sebetahat, torch.log(pi+1e-32), scale, location=torch.zeros_like(scale))
+    L =  get_data_loglik_normal_torch(betahat, sebetahat, torch.zeros_like(scale), scale)
+    pi = optimize_pi_logL(L, penalty=10  )
+    out = posterior_mean_norm(betahat, sebetahat, torch.log(pi+1e-32),L, scale, location=torch.zeros_like(scale))
     result = torch.exp(L) * torch.exp(pi)
+
+    excepted_postmean= np. array([0.0902, 1.9818, 0.2705, 3.7831, 4.7769])
+
+    excepted_postmean2= np.array([ 0.1756,  4.0868,  2.6417, 15.3774, 23.7875])
+    np.testing.assert_allclose(out.post_mean.cpu().numpy(),excepted_postmean, atol=1e-3)
+
+    np.testing.assert_allclose(out.post_mean2.cpu().numpy(),excepted_postmean2, atol=1e-3)
+
     assert result.shape == (5, scale.numel())
