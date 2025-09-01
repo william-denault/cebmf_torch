@@ -32,7 +32,11 @@ class cEBMF:
                     type_noise: str ='constant',
                           device: Optional[torch.device] = None,
                     allow_backfitting: bool = True,
-                    prune_pi0 : float= 1- 1e-3):
+                    prune_pi0 : float= 1- 1e-3,
+                    X_l : Tensor=None, 
+                    X_f : Tensor=None, 
+                    self_row_cov=False,
+                    self_col_cov=False):
         self.device = device or get_device()
         self.Y = data.to(self.device).float()
         self.mask = (~torch.isnan(self.Y)).float()   # 1 where observed, 0 where NaN
@@ -55,6 +59,11 @@ class cEBMF:
         self.pi0_L = [None] * K  # store latest pi0 for L[:,k]; scalar or Tensor or None
         self.pi0_F = [None] * K 
         self.obj = []
+        self.X_l= X_l
+        self.X_f= X_f
+        
+        self.self_row_cov=self_row_cov
+        self.self_col_cov=self_col_cov
         self.allow_backfitting= allow_backfitting
 
     def _impute_nan(self, Y: Tensor) -> Tensor:
@@ -166,8 +175,7 @@ class cEBMF:
         self.update_tau()
         self.cal_obj()
 
-
-    @torch.no_grad()
+ 
     def update_factor(self, k: int, tau_map: Optional[Tensor] = None, eps: float = 1e-12) -> None:
         """
         Update L[:,k], F[:,k] and their second moments using the current priors.
@@ -189,9 +197,13 @@ class cEBMF:
 
             lhat = num_l / denom_l
        # print(denom_l)
+        if (self.self_row_cov):
+            X_model =   torch.vstack( self.X_l , self.L[:, -k])
+        else :
+                X_model=  self.X_l
         with torch.enable_grad():
             resL = self.prior_L_fn(
-                X=getattr(self, "X_l", None),
+                X=X_model,
                 betahat=lhat,
                 sebetahat=se_l,
                 model_param=self.model_state_L[k]
@@ -220,9 +232,14 @@ class cEBMF:
                 se_f    = torch.sqrt(1.0 / denom_f)
 
             fhat = num_f / denom_f
+
+            if (self.self_col_cov):
+                X_model =  torch.vstack( self.X_f , self.F[:, -k])
+            else :
+                X_model=  self.X_f
         with torch.enable_grad():
             resF = self.prior_F_fn(
-                        X=getattr(self, "X_f", None),
+                        X=X_model,
                         betahat=fhat,
                         sebetahat=se_f,
                         model_param=self.model_state_F[k]
