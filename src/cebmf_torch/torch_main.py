@@ -3,6 +3,7 @@ from torch import Tensor
 from dataclasses import dataclass
 from typing import Optional, Callable, Dict
 
+import math 
 from .torch_ash import ash
 from .torch_utils_mix import autoselect_scales_mix_norm, autoselect_scales_mix_exp
 from .torch_device import get_device
@@ -91,14 +92,14 @@ class cEBMF:
         - 'row_wise'   -> tau_row (N,), tau_map broadcast to (N,P)
         - 'column_wise'-> tau_col (P,), tau_map broadcast to (N,P)
         """
-        eps = 1e-12
+        #eps = 1e-12
         R2 = self.expected_residuals_squared()        # (N,P), zeros at missing
         N, P = self.N, self.P
 
         if self.type_noise == 'constant':
             m = self.mask.sum().clamp_min(1.0)
             mean_R2 = (R2.sum() / m)
-            tau = 1.0 / (mean_R2 + eps)
+            tau = 1.0 / (mean_R2  )
             self.tau = tau                             # scalar (back-compat)
         # If you need a full map like NumPy's np.full(...):
             self.tau_map = torch.full((N, P), tau.item(), device=self.device, dtype=R2.dtype)
@@ -106,7 +107,7 @@ class cEBMF:
         elif self.type_noise == 'row_wise':
             m_row = self.mask.sum(dim=1).clamp_min(1.0)            # (N,)
             mean_R2_row = (R2.sum(dim=1) / m_row)                  # (N,)
-            tau_row = 1.0 / (mean_R2_row + eps)                    # (N,)
+            tau_row = 1.0 / (mean_R2_row  )                    # (N,)
             self.tau_row = tau_row
             self.tau_map = tau_row.view(-1, 1).expand(N, P)        # (N,P)
             self.tau = self.tau_map                                # if downstream expects elementwise
@@ -114,13 +115,14 @@ class cEBMF:
         elif self.type_noise == 'column_wise':
             m_col = self.mask.sum(dim=0).clamp_min(1.0)            # (P,)
             mean_R2_col = (R2.sum(dim=0) / m_col)                  # (P,)
-            tau_col = 1.0 / (mean_R2_col + eps)                    # (P,)
+            tau_col = 1.0 / (mean_R2_col )                    # (P,)
             self.tau_col = tau_col
             self.tau_map = tau_col.view(1, -1).expand(N, P)        # (N,P)
             self.tau = self.tau_map                                # if downstream expects elementwise
 
         else:
             raise ValueError("type_noise must be 'constant', 'row_wise', or 'column_wise'")
+       # self.tau=torch.tensor(1)
 
     @torch.no_grad()
     def _partial_residual_masked(self, k: int) -> Tensor:
@@ -152,105 +154,103 @@ class cEBMF:
             self.update_factor(k, tau_map=tau_map, eps=eps)
 
         if self.allow_backfitting and self.K > 1:
+            print(self.K )
             to_drop = [k for k in range(self.K) if self._should_prune_factor(k, self.prune_thresh)]
-            if to_drop:
+            if len(to_drop) >= self.K:
+             
+                keep_one = min (to_drop)
+                to_drop = [k for k in range(self.K) if k != keep_one]
         # drop highest indices first to avoid reindex churn
-                to_drop_sorted = sorted(to_drop, reverse=True)
-                self._prune_indices(to_drop_sorted)
+            to_drop_sorted = sorted(to_drop, reverse=True)
+            self._prune_indices(to_drop_sorted)
         self.update_tau()
         self.cal_obj()
 
 
-    @torch.no_grad
+    @torch.no_grad()
     def update_factor(self, k: int, tau_map: Optional[Tensor] = None, eps: float = 1e-12) -> None:
         """
         Update L[:,k], F[:,k] and their second moments using the current priors.
         Handles scalar tau (tau_map=None) or elementwise tau (tau_map is (N,P)).
         """
-        # ---------- Update L[:, k] ----------
-        Rk = self._partial_residual_masked(k)            # (N,P), zeros where missing
-        fk  = self.F[:, k]                                # (P,)
-        fk2 = self.F2[:, k]                               # (P,)
+        with torch.no_grad():# ---------- Update L[:, k] ----------
+            Rk = self._partial_residual_masked(k)            # (N,P), zeros where missing
+            fk  = self.F[:, k]                                # (P,)
+            fk2 = self.F2[:, k]                               # (P,)
 
-        if tau_map is None:
-            denom_l = (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)     # (N,)
-            num_l   = (Rk @ fk)                                                   # (N,)
-            se_l    = torch.sqrt(1.0 / (self.tau * denom_l))
-        else:
-            denom_l = (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)  # (N,)
-            num_l   = (tau_map * Rk) @ fk                                                 # (N,)
-            se_l    = torch.sqrt(1.0 / denom_l)
+            if tau_map is None:
+                denom_l = (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)     # (N,)
+                num_l   = (Rk @ fk)                                                   # (N,)
+                se_l    = torch.sqrt(1.0 / (self.tau * denom_l))
+            else:
+                denom_l = (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)  # (N,)
+                num_l   = (tau_map * Rk) @ fk                                                 # (N,)
+                se_l    = torch.sqrt(1.0 / denom_l)
 
-        lhat = num_l / denom_l
+            lhat = num_l / denom_l
        # print(denom_l)
-        resL = self.prior_L_fn(
-            X=getattr(self, "X_l", None),
-            betahat=lhat,
-            sebetahat=se_l,
-            model_param=self.model_state_L[k]
-        )
-        self.model_state_L[k] = resL.model_param
-        self.L[:, k]  = resL.post_mean
-        self.L2[:, k] = resL.post_mean2
-        self.kl_l[k]  = torch.as_tensor(resL.loss, device=self.device)
-        self.pi0_L[k] = resL.pi0_null if hasattr(resL, "pi0_null") else None
+        with torch.enable_grad():
+            resL = self.prior_L_fn(
+                X=getattr(self, "X_l", None),
+                betahat=lhat,
+                sebetahat=se_l,
+                model_param=self.model_state_L[k]
+            )
+        with torch.no_grad():
+            self.model_state_L[k] = resL.model_param
+            self.L[:, k]  = resL.post_mean
+            self.L2[:, k] = resL.post_mean2
+            nm_ll_L = normal_means_loglik( x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
+            self.kl_l[k]  = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
+            self.pi0_L[k] = resL.pi0_null if hasattr(resL, "pi0_null") else None
 
 
     # ---------- Update F[:, k] ----------
-        Rk = self._partial_residual_masked(k)            # recompute with updated L
-        lk  = self.L[:, k]                               # (N,)
-        lk2 = self.L2[:, k]                              # (N,)
+            Rk = self._partial_residual_masked(k)            # recompute with updated L
+            lk  = self.L[:, k]                               # (N,)
+            lk2 = self.L2[:, k]                              # (N,)
 
-        if tau_map is None:
-            denom_f = (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)      # (P,)
-            num_f   = (Rk.T @ lk)                                                  # (P,)
-            se_f    = torch.sqrt(1.0 / (self.tau * denom_f))
-        else:
-            denom_f = (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)  # (P,)
-            num_f   = (tau_map * Rk).T @ lk                                                # (P,)
-            se_f    = torch.sqrt(1.0 / denom_f)
+            if tau_map is None:
+                denom_f = (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)      # (P,)
+                num_f   = (Rk.T @ lk)                                                  # (P,)
+                se_f    = torch.sqrt(1.0 / (self.tau * denom_f))
+            else:
+                denom_f = (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)  # (P,)
+                num_f   = (tau_map * Rk).T @ lk                                                # (P,)
+                se_f    = torch.sqrt(1.0 / denom_f)
 
-        fhat = num_f / denom_f
-
-        resF = self.prior_F_fn(
-                    X=getattr(self, "X_f", None),
-                    betahat=fhat,
-                    sebetahat=se_f,
-                    model_param=self.model_state_F[k]
-                    )
-        self.model_state_F[k] = resF.model_param
-        self.F[:, k]  = resF.post_mean
-        self.F2[:, k] = resF.post_mean2
+            fhat = num_f / denom_f
+        with torch.enable_grad():
+            resF = self.prior_F_fn(
+                        X=getattr(self, "X_f", None),
+                        betahat=fhat,
+                        sebetahat=se_f,
+                        model_param=self.model_state_F[k]
+                        )
+        with torch.no_grad():
+            self.model_state_F[k] = resF.model_param
+            self.F[:, k]  = resF.post_mean
+            self.F2[:, k] = resF.post_mean2
 # store as scalar on device; PriorResult.loss already = -log_lik
-        self.kl_f[k]  = torch.as_tensor(resF.loss, device=self.device)
-        self.pi0_F[k] = resF.pi0_null  if hasattr(resF, "pi0_null") else None
+            nm_ll_F = normal_means_loglik( x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
+            self.kl_f[k]  =  torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
+            self.pi0_F[k] = resF.pi0_null  if hasattr(resF, "pi0_null") else None
 
     def cal_obj(self):
     # Data term
-        R = self.Y0 - self.L @ self.F.T
-        R2 = (R * R) * self.mask
-
+        ER2 = self.expected_residuals_squared()
         if self.type_noise == "constant":
-            m = self.mask.sum().clamp_min(1.0)
-            ll = -0.5 * (
-                m * (torch.log(torch.tensor(2*torch.pi, device=self.device)) - torch.log(self.tau))
-                + self.tau * R2.sum()
-                )
+            m  = self.mask.sum().clamp_min(1.0)
+            ll = -0.5 * ( m * (torch.log(torch.tensor(2*torch.pi, device=self.device)) - torch.log(self.tau))
+                  + self.tau * ER2.sum() )
         else:
-            tau_map = self.tau_map
             obs = self.mask.bool()
-            ll = -0.5 * (
-                torch.log(torch.tensor(2*torch.pi, device=self.device)) * obs.sum()
-                - torch.log(tau_map[obs]).sum()
-                + (tau_map * R2)[obs].sum()
-                )
-
-        # KL term from priors; PriorResult.loss = -log_lik (positive KL-like)
+            ll = -0.5 * ( torch.log(torch.tensor(2*torch.pi, device=self.device)) * obs.sum()
+                  - torch.log(self.tau_map[obs]).sum()
+                  + (self.tau_map * ER2)[obs].sum() )
         KL = self.kl_l.sum() + self.kl_f.sum()
-
-    # Final objective matches NumPy convention: obj = ll - KL
-        obj = (ll - KL).item()
-        self.obj.append(obj)
+        loss = (-ll + KL).item()      # minimize this (negative ELBO)
+        self.obj.append(loss)
 
 
         
@@ -319,42 +319,70 @@ class cEBMF:
         self.pi0_L = [self.pi0_L[i] for i in keep]
         self.pi0_F = [self.pi0_F[i] for i in keep]
         self.K = len(keep)
+        self.obj = []
 
 
 
  
 
-def normal_means_loglik(x: torch.Tensor,
-                        s: torch.Tensor,
-                        Et: torch.Tensor,
-                        Et2: torch.Tensor) -> torch.Tensor:
+
+def normal_means_loglik(
+    x: torch.Tensor,
+    s: torch.Tensor,
+    Et: torch.Tensor,
+    Et2: torch.Tensor,
+    mask: torch.Tensor | None = None,
+    reduce: str = "sum",
+    eps: float = 1e-12,
+) -> torch.Tensor:
     """
-    Normal means log-likelihood in PyTorch.
+    Expected normal-means log-likelihood:
+      E_q[ log N(x | theta, s^2) ] with q giving Et, Et2.
 
     Args:
-        x   : observed data (Tensor)
-        s   : standard errors (Tensor, must be >0 and finite)
-        Et  : posterior means (Tensor)
-        Et2 : posterior second moments (Tensor)
+      x, s, Et, Et2 : broadcastable tensors (same shape after broadcast).
+      mask          : optional bool mask; True = include entry.
+      reduce        : 'sum' (default), 'mean', or 'none' (per-element with NaNs for excluded).
+      eps           : numerical floor for variance.
 
     Returns:
-        torch scalar (log-likelihood)
+      Scalar if reduce in {'sum','mean'}, else elementwise tensor.
     """
-    eps = 1e-12
-    # mask valid entries: finite and positive s
-    mask = torch.isfinite(s) & (s > 0)
+    # Ensure common dtype/device via broadcasting
+    x, s, Et, Et2 = torch.broadcast_tensors(x, s, Et, Et2)
 
-    if not mask.any():
-        return torch.tensor(float("nan"), device=x.device)
+    # Validity mask: finite & s > 0
+    valid = (
+        torch.isfinite(x) & torch.isfinite(s) &
+        torch.isfinite(Et) & torch.isfinite(Et2) &
+        (s > 0)
+    )
+    if mask is not None:
+        valid = valid & mask.to(dtype=torch.bool, device=x.device)
 
-    x = x[mask]
-    s = s[mask]
-    Et = Et[mask]
-    Et2 = Et2[mask]
+    if not valid.any():
+        if reduce == "none":
+            return torch.full_like(x, float("nan"))
+        return x.new_tensor(float("nan"))
 
-    term = Et2 - 2 * x * Et + x**2
-    loglik = -0.5 * torch.sum(torch.log(2 * torch.pi * s**2 + eps) + term / (s**2 + eps))
-    return loglik
+    # Stable variance and constant term
+    var   = (s * s).clamp_min(eps)                   # s^2 ≥ eps
+    c2pi  = x.new_tensor(math.log(2.0 * math.pi))    # stays on same device/dtype
+
+    # E[(x - theta)^2] = Et2 - 2*x*Et + x^2
+    quad  = Et2 - 2.0 * x * Et + x * x
+    ll_el = -0.5 * (c2pi + torch.log(var) + quad / var)
+
+    if reduce == "sum":
+        return ll_el[valid].sum()
+    elif reduce == "mean":
+        return ll_el[valid].mean()
+    elif reduce == "none":
+        out = torch.full_like(x, float("nan"))
+        out[valid] = ll_el[valid]
+        return out
+    else:
+        raise ValueError("reduce must be 'sum', 'mean', or 'none'")
 
 
  

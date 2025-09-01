@@ -27,8 +27,10 @@ def prior_norm_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor, model_pa
 def prior_exp_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor, model_param=None) -> PriorResultTorch:
     obj = ash(betahat, sebetahat, prior="exp")
     return PriorResultTorch(post_mean=obj.post_mean, post_mean2=obj.post_mean2,
-                            loss=-float(obj.log_lik), model_param=model_param,
+                            loss= -float(obj.log_lik), model_param=model_param,
                             pi0_null=obj.pi0)
+
+ 
 
 def prior_point_laplace_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor, model_param=None) -> PriorResultTorch:
     obj = ebnm_point_laplace(betahat, sebetahat)
@@ -41,7 +43,7 @@ def prior_point_laplace_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor,
 def prior_point_exp_torch(X, betahat: torch.Tensor, sebetahat: torch.Tensor, model_param=None) -> PriorResultTorch:
     obj = ebnm_point_exp(betahat, sebetahat) 
     return PriorResultTorch(post_mean=obj.post_mean, post_mean2=obj.post_mean2,
-                            loss=-float(obj.log_lik), model_param=model_param,
+                            loss= -float(obj.log_lik), model_param=model_param,
                             pi0_null=float(obj.pi0))
 
 PRIOR_REGISTRY: Dict[str, Callable] = {

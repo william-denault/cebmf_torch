@@ -192,8 +192,8 @@ def ebnm_point_exp(
         post_sd = (post_mean2 - post_mean ** 2).clamp_min(0).sqrt()
 
         # mixture log-likelihood
-        log_lik = torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg).sum().item()
-
+        log_lik = torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg).sum().item()- (loga_l2 * (log_a_eff**2)).item()
+ 
         # Threshold to spike-only if pi0 tiny (match Laplace behavior)
         if float(pi0) < tresh_pi0:
             post_mean = torch.zeros_like(x)
