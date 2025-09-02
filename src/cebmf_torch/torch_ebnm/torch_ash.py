@@ -1,11 +1,11 @@
 # torch_convolved_loglik.py
 import torch
 import math
-from .torch_utils_mix import autoselect_scales_mix_exp, autoselect_scales_mix_norm
-from .torch_mix_opt import optimize_pi_logL
-from .torch_utils import _LOG_SQRT_2PI 
-from .torch_posterior import  posterior_mean_norm,  posterior_mean_exp
-from cebmf_torch.torch_distribution_operation import get_data_loglik_normal_torch, get_data_loglik_exp_torch
+from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_exp, autoselect_scales_mix_norm
+from cebmf_torch.utils.torch_mix_opt import optimize_pi_logL
+from cebmf_torch.utils.torch_utils import _LOG_SQRT_2PI 
+from cebmf_torch.utils.torch_posterior import  posterior_mean_norm,  posterior_mean_exp
+from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch, get_data_loglik_exp_torch
 
 import math
 import torch 

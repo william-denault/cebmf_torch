@@ -3,7 +3,7 @@ import torch
 from dataclasses import dataclass
 from torch import Tensor
 
-from cebmf_torch.torch_utils import (
+from cebmf_torch.utils.torch_utils import (
     my_etruncnorm,
     my_e2truncnorm,
     log_norm_pdf,   # kept for API parity (unused here)

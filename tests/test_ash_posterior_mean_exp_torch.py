@@ -1,17 +1,15 @@
-
 import numpy as np
 import torch
-from cebmf_torch import *
-from cebmf_torch.torch_utils import (
+import matplotlib.pyplot as plt
+
+from cebmf_torch.utils.torch_utils import (
     my_etruncnorm,
     my_e2truncnorm,
     logPhi,
     _LOG_SQRT_2PI,
 )
-from cebmf_torch.torch_utils_mix import autoselect_scales_mix_exp
-import matplotlib.pyplot as plt
-from cebmf_torch.torch_ash import ash 
-
+from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_exp
+from cebmf_torch.torch_ebnm.torch_ash import ash
 
 
 def truncated_moment():

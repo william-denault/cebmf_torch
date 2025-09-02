@@ -3,7 +3,7 @@ import math
 import torch
 from torch import Tensor
 
-from cebmf_torch.torch_utils import (
+from cebmf_torch.utils.torch_utils import (
     my_etruncnorm,
     my_e2truncnorm,
     logPhi,

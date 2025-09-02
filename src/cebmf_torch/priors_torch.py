@@ -3,9 +3,9 @@ import torch
 from dataclasses import dataclass
 from typing import Optional, Callable, Dict, Any
 
-from cebmf_torch.torch_ash import ash
-from cebmf_torch.torch_ebnm_point_laplace import ebnm_point_laplace
-from cebmf_torch.torch_ebnm_point_exp import ebnm_point_exp
+from .torch_ebnm.torch_ash import ash
+from .torch_ebnm.torch_ebnm_point_laplace import ebnm_point_laplace
+from .torch_ebnm.torch_ebnm_point_exp import ebnm_point_exp
 
 @dataclass
 class PriorResultTorch:

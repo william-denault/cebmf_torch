@@ -1,9 +1,9 @@
 
 import numpy as np
 import torch
-from cebmf_torch.torch_utils_mix import autoselect_scales_mix_norm
-from cebmf_torch.torch_distribution_operation import get_data_loglik_normal_torch 
-from cebmf_torch.torch_utils import logsumexp
+from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_norm
+from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch 
+from cebmf_torch.utils.torch_utils import logsumexp
 
 def test_convolved_loglik_postmean():
     betahat=  np.array([1,2,3,4,5], dtype=float)
