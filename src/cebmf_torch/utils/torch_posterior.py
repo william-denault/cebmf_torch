@@ -211,6 +211,48 @@ def posterior_mean_norm(
 
     return PosteriorMeanNorm(post_mean, post_mean2, post_sd)
 
+
+def posterior_mean_norm_batch(betahat, sebetahat, log_pi_matrix, data_loglik, scale, location=None):
+    """
+    Vectorized version: handles J observations at once.
+    betahat: (J,)
+    sebetahat: (J,)
+    log_pi_matrix: (J,K)
+    data_loglik: (J,K)
+    scale: (K,)
+    """
+    J, K = data_loglik.shape
+    betahat   = torch.as_tensor(betahat)
+    sebetahat = torch.as_tensor(sebetahat, dtype=betahat.dtype, device=betahat.device)
+    log_pi    = torch.as_tensor(log_pi_matrix, dtype=betahat.dtype, device=betahat.device)
+    scale     = torch.as_tensor(scale, dtype=betahat.dtype, device=betahat.device)
+
+    # posterior assignment (J,K)
+    log_post = data_loglik + log_pi
+    log_post = log_post - torch.logsumexp(log_post, dim=1, keepdim=True)
+    resp = torch.exp(log_post)
+
+    s2 = sebetahat.pow(2).unsqueeze(1)  # (J,1)
+    t2 = scale.pow(2).unsqueeze(0)      # (1,K)
+    denom = (1.0 / s2) + torch.where(t2 > 0, 1.0/t2, torch.zeros_like(t2))
+    t_ind_Var = torch.where(t2 > 0, 1.0/denom, torch.zeros_like(denom))
+
+    if location is None:
+        loc = torch.zeros(K, dtype=betahat.dtype, device=betahat.device).unsqueeze(0).expand(J,K)
+    else:
+        loc = torch.as_tensor(location, dtype=betahat.dtype, device=betahat.device)
+        if loc.ndim == 1:
+            loc = loc.unsqueeze(0).expand(J,K)
+
+    rhs = t_ind_Var * (betahat.unsqueeze(1)/s2 + loc/t2)
+    mask_spike = (t2==0).expand(J,K)
+    m_comp = torch.where(mask_spike, loc, rhs)
+
+    post_mean  = torch.sum(resp * m_comp, dim=1)
+    post_mean2 = torch.sum(resp * (t_ind_Var + m_comp.pow(2)), dim=1)
+    post_sd    = torch.sqrt(torch.clamp(post_mean2 - post_mean.pow(2), min=0.0))
+    return post_mean, post_mean2, post_sd
+
 # --- point-mass + normal prior posterior (Torch) ---
 @torch.no_grad()
 def posterior_point_mass_normal(
