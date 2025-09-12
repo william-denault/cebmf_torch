@@ -4,12 +4,12 @@ from typing import Any, Callable, Optional
 
 import torch
 
-from .torch_cebnm.cash_solver import cash_posterior_means
-from .torch_cebnm.cov_gb_prior import cgb_posterior_means
-from .torch_cebnm.emdn import emdn_posterior_means
-from .torch_ebnm.torch_ash import ash
-from .torch_ebnm.torch_ebnm_point_exp import ebnm_point_exp
-from .torch_ebnm.torch_ebnm_point_laplace import ebnm_point_laplace
+from .cebnm.cash_solver import cash_posterior_means
+from .cebnm.cov_gb_prior import cgb_posterior_means
+from .cebnm.emdn import emdn_posterior_means
+from .ebnm.ash import ash
+from .ebnm.point_exp import ebnm_point_exp
+from .ebnm.point_laplace import ebnm_point_laplace
 
 
 @dataclass

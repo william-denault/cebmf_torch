@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from cebmf_torch.torch_ebnm.torch_ash import ash
+from cebmf_torch.ebnm.ash import ash
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 from cebmf_torch.utils.mixture import autoselect_scales_mix_norm, optimize_pi_logL
 from cebmf_torch.utils.posterior import posterior_mean_norm

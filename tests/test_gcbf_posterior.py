@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from cebmf_torch.torch_cebnm.cov_gb_prior import cgb_posterior_means
+from cebmf_torch.cebnm.cov_gb_prior import cgb_posterior_means
 
 
 @pytest.mark.parametrize("n_epochs, lr", [(500, 1e-2)])
