@@ -5,7 +5,7 @@ from typing import Callable, Optional
 import torch
 from torch import Tensor
 
-from cebmf_torch.priors_torch import get_prior_function_torch
+from cebmf_torch.priors import PRIOR_REGISTRY
 from cebmf_torch.utils.device import get_device
 
 
@@ -46,10 +46,8 @@ class cEBMF:
         self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
         self.K = K
         self.N, self.P = self.Y.shape
-        self.prior_L_fn = get_prior_function_torch(
-            prior_L
-        )  # string or callable -> callable
-        self.prior_F_fn = get_prior_function_torch(prior_F)
+        self.prior_L_fn = PRIOR_REGISTRY.get_builder(prior_L)
+        self.prior_F_fn = PRIOR_REGISTRY.get_builder(prior_F)
         self.model_state_L = [None] * K
         self.model_state_F = [None] * K
         self.type_noise = type_noise
@@ -222,7 +220,7 @@ class cEBMF:
         else:
             X_model = self.X_l
         with torch.enable_grad():
-            resL = self.prior_L_fn(
+            resL = self.prior_L_fn.fit(
                 X=X_model,
                 betahat=lhat,
                 sebetahat=se_l,
@@ -263,7 +261,7 @@ class cEBMF:
             else:
                 X_model = self.X_f
         with torch.enable_grad():
-            resF = self.prior_F_fn(
+            resF = self.prior_F_fn.fit(
                 X=X_model,
                 betahat=fhat,
                 sebetahat=se_f,
