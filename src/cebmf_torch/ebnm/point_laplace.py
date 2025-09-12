@@ -5,6 +5,7 @@ import torch
 from torch import Tensor
 
 from cebmf_torch.utils.maths import (
+    _LOG_SQRT_2PI,
     log_norm_pdf,  # kept for API parity (unused here)
     logPhi,
     my_e2truncnorm,
@@ -44,9 +45,6 @@ class EBNMLaplaceResult:
     a: float
     mu: float
     log_lik: float
-
-
-_LOG_2PI = math.log(2 * math.pi)
 
 
 def ebnm_point_laplace(
@@ -117,7 +115,7 @@ def ebnm_point_laplace(
         xc = x - mu
 
         # spike likelihood
-        lf = -0.5 * ((xc / s) ** 2) - torch.log(s) - 0.5 * _LOG_2PI
+        lf = -0.5 * ((xc / s) ** 2) - torch.log(s) - _LOG_SQRT_2PI
 
         # slab log-likelihood (Laplace convolved with Normal)
         z1 = (xc - (s * s) * a) / s
@@ -166,7 +164,7 @@ def ebnm_point_laplace(
         xc = x - mu
 
         # spike loglik
-        lf = -0.5 * ((xc / s) ** 2) - torch.log(s) - 0.5 * _LOG_2PI
+        lf = -0.5 * ((xc / s) ** 2) - torch.log(s) - _LOG_SQRT_2PI
 
         # slab loglik
         z1 = (xc - (s * s) * a) / s
