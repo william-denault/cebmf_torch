@@ -5,18 +5,19 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader, Dataset
 
 from cebmf_torch.utils.torch_posterior import posterior_point_mass_normal
+
 
 # -------------------------
 # Dataset
 # -------------------------
 class DensityRegressionDataset(Dataset):
     def __init__(self, X, betahat, sebetahat):
-        self.X         = torch.as_tensor(X, dtype=torch.float32)
-        self.betahat   = torch.as_tensor(betahat, dtype=torch.float32)
+        self.X = torch.as_tensor(X, dtype=torch.float32)
+        self.betahat = torch.as_tensor(betahat, dtype=torch.float32)
         self.sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32)
 
     def __len__(self):
@@ -33,9 +34,9 @@ class CgbNet(nn.Module):
     def __init__(self, input_dim, hidden_dim=32, n_layers=2):
         super().__init__()
         self.input_layer = nn.Linear(input_dim, hidden_dim)
-        self.hidden_layers = nn.ModuleList([
-            nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)
-        ])
+        self.hidden_layers = nn.ModuleList(
+            [nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)]
+        )
         self.output_layer = nn.Linear(hidden_dim, 1)  # logit for π₂(x)
         self.mu_2 = nn.Parameter(torch.tensor(0.0))  # global mean of slab
 
@@ -54,19 +55,20 @@ class CgbNet(nn.Module):
 # -------------------------
 # Loss (mixture NLL, stable)
 # -------------------------
-def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se,penalty=float(1.1), eps=1e-8):
+def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=float(1.1), eps=1e-8):
     var1 = se**2
     var2 = sigma2_sq + se**2
 
-    logp1 = -0.5 * ((targets - 0.0)**2 / var1 + torch.log(2 * torch.pi * var1))
-    logp2 = -0.5 * ((targets - mu_2)**2 / var2 + torch.log(2 * torch.pi * var2))
+    logp1 = -0.5 * ((targets - 0.0) ** 2 / var1 + torch.log(2 * torch.pi * var1))
+    logp2 = -0.5 * ((targets - mu_2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
 
-    log_mix = torch.logaddexp(torch.log(pi_1.clamp_min(eps)) + logp1,
-                              torch.log(pi_2.clamp_min(eps)) + logp2)
+    log_mix = torch.logaddexp(
+        torch.log(pi_1.clamp_min(eps)) + logp1, torch.log(pi_2.clamp_min(eps)) + logp2
+    )
     if penalty > 1.0:
         # take mean spike prob for stability
         pi0_clamped = pi_1.mean().clamp_min(eps)
-        penalty_term =  (penalty - 1.0) * torch.log(pi0_clamped)
+        penalty_term = (penalty - 1.0) * torch.log(pi0_clamped)
         log_mix = log_mix + penalty_term
     return -(log_mix.mean())
 
@@ -78,8 +80,8 @@ def compute_responsibilities(pi_1, pi_2, mu_2, sigma2_sq, targets, se):
     var1 = se**2
     var2 = sigma2_sq + se**2
 
-    logp1 = -0.5 * ((targets - 0.0)**2 / var1 + torch.log(2 * torch.pi * var1))
-    logp2 = -0.5 * ((targets - mu_2)**2 / var2 + torch.log(2 * torch.pi * var2))
+    logp1 = -0.5 * ((targets - 0.0) ** 2 / var1 + torch.log(2 * torch.pi * var1))
+    logp2 = -0.5 * ((targets - mu_2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
 
     log_num = torch.log(pi_2.clamp_min(1e-12)) + logp2
     log_den = torch.logaddexp(torch.log(pi_1.clamp_min(1e-12)) + logp1, log_num)
@@ -90,7 +92,7 @@ def compute_responsibilities(pi_1, pi_2, mu_2, sigma2_sq, targets, se):
 # M-step for σ₂²
 # -------------------------
 def m_step_sigma2(gamma2, mu2, targets, se):
-    resid2 = (targets - mu2)**2
+    resid2 = (targets - mu2) ** 2
     sigma0_sq = se**2
     num = torch.sum(gamma2 * (resid2 - sigma0_sq))
     den = torch.sum(gamma2).clamp_min(1e-8)
@@ -101,24 +103,33 @@ def m_step_sigma2(gamma2, mu2, targets, se):
 # Result container
 # -------------------------
 class CgbPosteriorResult:
-    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param):
-        self.post_mean  = post_mean
+    def __init__(
+        self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param
+    ):
+        self.post_mean = post_mean
         self.post_mean2 = post_mean2
-        self.post_sd    = post_sd
-        self.pi         = pi           # π₀(x): spike weight
-        self.mu_2       = mu_2
-        self.sigma_2    = sigma_2
-        self.loss       = loss
-        self.model_param= model_param
+        self.post_sd = post_sd
+        self.pi = pi  # π₀(x): spike weight
+        self.mu_2 = mu_2
+        self.sigma_2 = sigma_2
+        self.loss = loss
+        self.model_param = model_param
 
 
 # -------------------------
 # Main solver
 # -------------------------
 def cgb_posterior_means(
-    X, betahat, sebetahat,
-    n_epochs=50, n_layers=2, hidden_dim=32,
-    batch_size=128, lr=1e-3, penalty: float = 1.1 ,model_param=None
+    X,
+    betahat,
+    sebetahat,
+    n_epochs=50,
+    n_layers=2,
+    hidden_dim=32,
+    batch_size=128,
+    lr=1e-3,
+    penalty: float = 1.1,
+    model_param=None,
 ):
     # Standardize X
     if X.ndim == 1:
@@ -130,7 +141,9 @@ def cgb_posterior_means(
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Init model
-    model = CgbNet(input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers)
+    model = CgbNet(
+        input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers
+    )
     if model_param is not None:
         model.load_state_dict(model_param)
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -151,15 +164,17 @@ def cgb_posterior_means(
                 sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se)
 
             # Loss + update
-            loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty= penalty)
+            loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
 
         if (epoch + 1) % 10 == 0:
-            print(f"[CGB] Epoch {epoch+1}/{n_epochs}, Loss={total_loss/len(dataloader):.4f}, "
-                  f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}")
+            print(
+                f"[CGB] Epoch {epoch + 1}/{n_epochs}, Loss={total_loss / len(dataloader):.4f}, "
+                f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}"
+            )
 
     # Posterior inference
     model.eval()
@@ -168,13 +183,13 @@ def cgb_posterior_means(
         post_mean, post_var = posterior_point_mass_normal(
             betahat=dataset.betahat,
             sebetahat=dataset.sebetahat,
-            pi=pi1,                   # spike prob
+            pi=pi1,  # spike prob
             mu0=0.0,
             mu1=mu2.item(),
-            sigma_0=sigma2_sq.sqrt().item()
+            sigma_0=sigma2_sq.sqrt().item(),
         )
         post_mean2 = post_var + post_mean**2
-        post_sd    = torch.sqrt(torch.clamp(post_var, min=0.0))
+        post_sd = torch.sqrt(torch.clamp(post_var, min=0.0))
 
     return CgbPosteriorResult(
         post_mean=post_mean,
@@ -183,6 +198,6 @@ def cgb_posterior_means(
         pi=pi1,
         mu_2=mu2.item(),
         sigma_2=sigma2_sq.sqrt().item(),
-        loss=total_loss ,
-        model_param=model.state_dict()
+        loss=total_loss,
+        model_param=model.state_dict(),
     )
