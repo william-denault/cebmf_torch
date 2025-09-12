@@ -1,42 +1,51 @@
+import math
 
 import torch
 from torch import Tensor
-import math
 
 _TWOPI = 2.0 * math.pi
 _SQRT_2PI = math.sqrt(2.0 * math.pi)
-_EPS = 1e-12 
+_EPS = 1e-12
 _LOG_SQRT_2PI = 0.5 * math.log(_TWOPI)
 
 
 def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
     # log N(x | loc, scale)
     z = (x - loc) / (scale + 1e-32)
-    return -0.5 * torch.log(torch.tensor(_TWOPI, device=x.device)) - torch.log(scale + 1e-32) - 0.5 * z * z
+    return (
+        -0.5 * torch.log(torch.tensor(_TWOPI, device=x.device))
+        - torch.log(scale + 1e-32)
+        - 0.5 * z * z
+    )
+
 
 def norm_cdf(x: Tensor) -> Tensor:
     # standard normal CDF using torch.distributions
     return torch.distributions.Normal(0.0, 1.0).cdf(x)
 
+
 def norm_pdf(x: Tensor) -> Tensor:
     return torch.exp(-0.5 * x * x) / _SQRT_2PI
 
-def logsumexp(x: Tensor, dim: int=-1, keepdim: bool=False) -> Tensor:
+
+def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
     return torch.logsumexp(x, dim=dim, keepdim=keepdim)
+
 
 def safe_log(x: Tensor, eps: float = _EPS) -> Tensor:
     return torch.log(torch.clamp(x, min=eps))
 
-def softmax(x: Tensor, dim: int=-1) -> Tensor:
+
+def softmax(x: Tensor, dim: int = -1) -> Tensor:
     return torch.softmax(x, dim=dim)
 
- 
 
-
-import torch
 import math
 
+import torch
+
 _LOG_SQRT_2PI = 0.5 * math.log(2 * math.pi)
+
 
 # ------------------------
 # helpers
@@ -45,9 +54,11 @@ def logphi(z: torch.Tensor) -> torch.Tensor:
     """log pdf φ(z) = exp(-z^2/2)/√(2π)."""
     return -0.5 * z.pow(2) - _LOG_SQRT_2PI
 
+
 def logPhi(z: torch.Tensor) -> torch.Tensor:
     """Stable log Φ(z)."""
     return torch.special.log_ndtr(z)
+
 
 def logscale_sub(logx: torch.Tensor, logy: torch.Tensor) -> torch.Tensor:
     """
@@ -62,27 +73,30 @@ def logscale_add(logx: Tensor, logy: Tensor) -> Tensor:
     """Stable log(exp(logx) + exp(logy))."""
     return torch.logaddexp(logx, logy)
 
+
 def do_truncnorm_argchecks(a: torch.Tensor, b: torch.Tensor):
     """Clamp and sanity check bounds."""
     # If a >= b, invalid; we just return as-is
     return a, b
 
+
 # ------------------------
 # E[Z | a<Z<b]  and E[Z^2 | a<Z<b] for Z~N(mean, sd^2)
 # ------------------------
 
+
 def my_etruncnorm(a, b, mean=0.0, sd=1.0):
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
     mean = torch.as_tensor(mean, dtype=torch.float64)
-    sd   = torch.as_tensor(sd, dtype=torch.float64)
+    sd = torch.as_tensor(sd, dtype=torch.float64)
 
     alpha = (a - mean) / sd
-    beta  = (b - mean) / sd
+    beta = (b - mean) / sd
 
     flip = ((alpha > 0) & (beta > 0)) | (beta > alpha.abs())
     orig_alpha = alpha.clone()
     alpha = torch.where(flip, -beta, alpha)
-    beta  = torch.where(flip, -orig_alpha, beta)
+    beta = torch.where(flip, -orig_alpha, beta)
 
     dnorm_diff = logscale_sub(logphi(beta), logphi(alpha))
     pnorm_diff = logscale_sub(logPhi(beta), logPhi(alpha))
@@ -94,8 +108,10 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
     scaled_res = torch.where(endpts_equal, (alpha + beta) / 2, scaled_res)
 
     lower_bd = torch.maximum(beta + 1.0 / beta, (alpha + beta) / 2)
-    bad_idx = (~torch.isnan(beta)) & (beta < 0) & (
-        (scaled_res < lower_bd) | (scaled_res > beta)
+    bad_idx = (
+        (~torch.isnan(beta))
+        & (beta < 0)
+        & ((scaled_res < lower_bd) | (scaled_res > beta))
     )
     scaled_res = torch.where(bad_idx, lower_bd, scaled_res)
 
@@ -123,15 +139,15 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
 def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
     mean = torch.as_tensor(mean, dtype=torch.float64)
-    sd   = torch.as_tensor(sd, dtype=torch.float64)
+    sd = torch.as_tensor(sd, dtype=torch.float64)
 
     alpha = (a - mean) / sd
-    beta  = (b - mean) / sd
+    beta = (b - mean) / sd
 
     flip = (alpha > 0) & (beta > 0)
     orig_alpha = alpha.clone()
     alpha = torch.where(flip, -beta, alpha)
-    beta  = torch.where(flip, -orig_alpha, beta)
+    beta = torch.where(flip, -orig_alpha, beta)
 
     # absolute mean handling
     if not torch.all(mean == 0):
@@ -140,11 +156,15 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     pnorm_diff = logscale_sub(logPhi(beta), logPhi(alpha))
 
     alpha_frac = alpha * torch.exp(torch.clamp(logphi(alpha) - pnorm_diff, max=300.0))
-    beta_frac  = beta  * torch.exp(torch.clamp(logphi(beta)  - pnorm_diff, max=300.0))
+    beta_frac = beta * torch.exp(torch.clamp(logphi(beta) - pnorm_diff, max=300.0))
 
     # handle nan/inf
-    alpha_frac = torch.where(~torch.isfinite(alpha_frac), torch.zeros_like(alpha_frac), alpha_frac)
-    beta_frac  = torch.where(~torch.isfinite(beta_frac), torch.zeros_like(beta_frac),  beta_frac)
+    alpha_frac = torch.where(
+        ~torch.isfinite(alpha_frac), torch.zeros_like(alpha_frac), alpha_frac
+    )
+    beta_frac = torch.where(
+        ~torch.isfinite(beta_frac), torch.zeros_like(beta_frac), beta_frac
+    )
 
     scaled_res = torch.ones_like(alpha)
 
@@ -160,8 +180,10 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     upper_bd2 = (alpha**2 + alpha * beta + beta**2) / 3
     upper_bd = torch.minimum(upper_bd1, upper_bd2)
 
-    bad_idx = (~torch.isnan(beta)) & (beta < 0) & (
-        (scaled_res < beta**2) | (scaled_res > upper_bd)
+    bad_idx = (
+        (~torch.isnan(beta))
+        & (beta < 0)
+        & ((scaled_res < beta**2) | (scaled_res > upper_bd))
     )
     scaled_res = torch.where(bad_idx, upper_bd, scaled_res)
 
