@@ -16,6 +16,22 @@ A pure-PyTorch rewrite of EBMF/EBNM components:
 - `torch_ebnm_point_laplace.py`: point-mass + Laplace prior solver (autograd).
 - `torch_main.py`: minimal EBMF class using ash() for L and F updates.
 
+## Installation
+
+Installation is managed with [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
+
+```bash
+# Clone the repository
+git clone https://github.com/william-denault/cebmf_torch.git
+cd cebmf_torch
+
+# Install the package and dependencies
+uv sync
+
+# Run tests
+uv run pytest
+```
+
 ## Quick start
 
 ```python
@@ -37,6 +53,7 @@ print(fit.L.shape, fit.F.shape, fit.tau.item())
 ```
 
 ## Notes
+
 - Everything runs on whichever device your input tensors are on.
 - Mini-batch EM for `pi` is implemented via Adam on logits (recommended) or online EM.
 - Truncated normal moments are computed analytically in torch without SciPy.
