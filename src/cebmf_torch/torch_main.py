@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 
 from cebmf_torch.priors_torch import get_prior_function_torch
-from cebmf_torch.utils.torch_device import get_device
+from cebmf_torch.utils.device import get_device
 
 
 @dataclass

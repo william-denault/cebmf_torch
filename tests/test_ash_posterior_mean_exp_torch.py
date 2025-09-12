@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from cebmf_torch.torch_ebnm.torch_ash import ash
-from cebmf_torch.utils.torch_utils import my_etruncnorm
+from cebmf_torch.utils.maths import my_etruncnorm
 
 
 def truncated_moment():

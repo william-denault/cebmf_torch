@@ -8,7 +8,7 @@ import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 
-from cebmf_torch.utils.torch_posterior import posterior_point_mass_normal
+from cebmf_torch.utils.posterior import posterior_point_mass_normal
 
 
 # -------------------------
