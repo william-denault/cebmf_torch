@@ -1,13 +1,13 @@
 # torch_only_point_exponential_stable.py
 import math
+
 import torch
 from torch import Tensor
 
 from cebmf_torch.utils.torch_utils import (
-    my_etruncnorm,
-    my_e2truncnorm,
     logPhi,
-    _LOG_SQRT_2PI,
+    my_e2truncnorm,
+    my_etruncnorm,
 )
 
 _LOG_2PI = math.log(2 * math.pi)
@@ -16,6 +16,7 @@ _LOG_2PI = math.log(2 * math.pi)
 # =========================
 # Core pieces
 # =========================
+
 
 def _loglik_spike(xc: Tensor, s: Tensor) -> Tensor:
     # log N(xc | 0, s^2)
@@ -28,7 +29,9 @@ def _loglik_exp_convolved(xc: Tensor, s: Tensor, a: Tensor) -> Tensor:
     return torch.log(a / 1.0) + 0.5 * (s * a) ** 2 - a * xc + logPhi(z)
 
 
-def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Tensor, Tensor]:
+def _posterior_moments_exp_branch(
+    xc: Tensor, s: Tensor, a: Tensor
+) -> tuple[Tensor, Tensor]:
     """
     Moments for the Exp branch using the tilted Normal:
     Z ~ N(m_tilt, s^2) truncated to [0, +inf),
@@ -38,7 +41,7 @@ def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Ten
     m_tilt = xc - (s * s) * a
     zero = torch.zeros_like(xc)
     inf = torch.full_like(xc, float("inf"))
-    EZ  = my_etruncnorm(zero, inf, m_tilt, s)
+    EZ = my_etruncnorm(zero, inf, m_tilt, s)
     EZ2 = my_e2truncnorm(zero, inf, m_tilt, s)
     return EZ, EZ2
 
@@ -47,15 +50,18 @@ def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Ten
 # Public EBNM interface
 # =========================
 
+
 class EBNMPointExp:
-    def __init__(self,
-                 post_mean: Tensor,
-                 post_mean2: Tensor,
-                 post_sd: Tensor,
-                 scale: float,
-                 pi0: float,
-                 log_lik: float,
-                 mode: float):
+    def __init__(
+        self,
+        post_mean: Tensor,
+        post_mean2: Tensor,
+        post_sd: Tensor,
+        scale: float,
+        pi0: float,
+        log_lik: float,
+        mode: float,
+    ):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -68,13 +74,17 @@ class EBNMPointExp:
 def ebnm_point_exp(
     x: Tensor,
     s: Tensor,
-    par_init=None,                    # (alpha, log_a, mu). If None, choose safely inside.
-    fix_par=(False, False, True),     # [w_logit, log_a, mu]; default keeps mu fixed like your Laplace
+    par_init=None,  # (alpha, log_a, mu). If None, choose safely inside.
+    fix_par=(
+        False,
+        False,
+        True,
+    ),  # [w_logit, log_a, mu]; default keeps mu fixed like your Laplace
     max_iter: int = 20,
     tol: float = 1e-6,
-    a_bounds=(1e-2, 1e2),             # bounded scale (like Laplace)
-    loga_l2: float = 1e-4,            # ridge on log a
-    tresh_pi0: float = 1e-3,          # zero-out when pi0 tiny
+    a_bounds=(1e-2, 1e2),  # bounded scale (like Laplace)
+    loga_l2: float = 1e-4,  # ridge on log a
+    tresh_pi0: float = 1e-3,  # zero-out when pi0 tiny
     eps: float = 1e-12,
 ) -> EBNMPointExp:
     """
@@ -93,12 +103,18 @@ def ebnm_point_exp(
         # alpha ~ logit(pi0), log_a ~ log(a), mu
         par_init = (0.9, 1.0, 0.0)  # pi0≈0.71, a≈1.0, mu=0.0
 
-    alpha = torch.nn.Parameter(torch.tensor(par_init[0], dtype=dtype, device=device),
-                               requires_grad=not fix_par[0])
-    log_a = torch.nn.Parameter(torch.tensor(par_init[1], dtype=dtype, device=device),
-                               requires_grad=not fix_par[1])
-    mu    = torch.nn.Parameter(torch.tensor(par_init[2], dtype=dtype, device=device),
-                               requires_grad=not fix_par[2])
+    alpha = torch.nn.Parameter(
+        torch.tensor(par_init[0], dtype=dtype, device=device),
+        requires_grad=not fix_par[0],
+    )
+    log_a = torch.nn.Parameter(
+        torch.tensor(par_init[1], dtype=dtype, device=device),
+        requires_grad=not fix_par[1],
+    )
+    mu = torch.nn.Parameter(
+        torch.tensor(par_init[2], dtype=dtype, device=device),
+        requires_grad=not fix_par[2],
+    )
 
     params = [p for p in (alpha, log_a, mu) if p.requires_grad]
     opt = torch.optim.LBFGS(
@@ -118,7 +134,7 @@ def ebnm_point_exp(
         opt.zero_grad(set_to_none=True)
 
         # parameters with transforms
-        pi0 = torch.sigmoid(alpha)                        # in (0,1)
+        pi0 = torch.sigmoid(alpha)  # in (0,1)
         log_a_eff = log_a.clamp(min=log_a_lo, max=log_a_hi)
         a = log_a_eff.exp()
         xc = x - mu
@@ -131,7 +147,7 @@ def ebnm_point_exp(
         llik_i = torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg)
 
         # ridge on log a (like Laplace)
-        penalty = loga_l2 * (log_a ** 2)
+        penalty = loga_l2 * (log_a**2)
 
         nll = -(llik_i.sum() - penalty)
 
@@ -184,16 +200,19 @@ def ebnm_point_exp(
         post_mean2_c = gamma * EZ2
 
         # numerical monotonicity: E[X^2] >= (E[X])^2
-        post_mean2_c = torch.maximum(post_mean2_c, post_mean_c ** 2)
+        post_mean2_c = torch.maximum(post_mean2_c, post_mean_c**2)
 
         # back to θ
         post_mean = post_mean_c + mu
         post_mean2 = post_mean2_c + 2.0 * mu * post_mean_c + mu * mu
-        post_sd = (post_mean2 - post_mean ** 2).clamp_min(0).sqrt()
+        post_sd = (post_mean2 - post_mean**2).clamp_min(0).sqrt()
 
         # mixture log-likelihood
-        log_lik = torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg).sum().item()- (loga_l2 * (log_a_eff**2)).item()
- 
+        log_lik = (
+            torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg).sum().item()
+            - (loga_l2 * (log_a_eff**2)).item()
+        )
+
         # Threshold to spike-only if pi0 tiny (match Laplace behavior)
         if float(pi0) < tresh_pi0:
             post_mean = torch.zeros_like(x)
