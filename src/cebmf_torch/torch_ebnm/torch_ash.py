@@ -10,7 +10,6 @@ from cebmf_torch.utils.torch_distribution_operation import (
 )
 from cebmf_torch.utils.torch_mix_opt import optimize_pi_logL
 from cebmf_torch.utils.torch_posterior import posterior_mean_exp, posterior_mean_norm
-from cebmf_torch.utils.torch_utils import _LOG_SQRT_2PI
 from cebmf_torch.utils.torch_utils_mix import (
     autoselect_scales_mix_exp,
     autoselect_scales_mix_norm,

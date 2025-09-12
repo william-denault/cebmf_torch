@@ -40,13 +40,6 @@ def softmax(x: Tensor, dim: int = -1) -> Tensor:
     return torch.softmax(x, dim=dim)
 
 
-import math
-
-import torch
-
-_LOG_SQRT_2PI = 0.5 * math.log(2 * math.pi)
-
-
 # ------------------------
 # helpers
 # ------------------------

@@ -1,7 +1,6 @@
 # Define dataset class that includes observation noise
 
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim

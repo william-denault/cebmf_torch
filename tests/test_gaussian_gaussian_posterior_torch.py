@@ -2,7 +2,6 @@ import numpy as np
 import torch
 
 from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch
-from cebmf_torch.utils.torch_utils import logsumexp
 from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_norm
 
 

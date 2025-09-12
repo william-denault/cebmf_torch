@@ -1,6 +1,6 @@
 # priors_torch.py
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 import torch
 
@@ -118,7 +118,7 @@ def prior_cgb_torch(X, betahat, sebetahat, model_param=None) -> PriorResultTorch
 # ----------------------------
 # Registry
 # ----------------------------
-PRIOR_REGISTRY: Dict[str, Callable] = {
+PRIOR_REGISTRY: dict[str, Callable] = {
     # classical
     "norm": prior_norm_torch,
     "exp": prior_exp_torch,

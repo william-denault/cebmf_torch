@@ -5,8 +5,6 @@ import torch
 from torch import Tensor
 
 from cebmf_torch.utils.torch_utils import (
-    _LOG_SQRT_2PI,
-    _TWOPI,
     log_norm_pdf,  # kept for API parity (unused here)
     logPhi,
     my_e2truncnorm,

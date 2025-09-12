@@ -1,11 +1,11 @@
 import math
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+from typing import Callable, Optional
 
 import torch
 from torch import Tensor
 
-from cebmf_torch.priors_torch import PriorResultTorch, get_prior_function_torch
+from cebmf_torch.priors_torch import get_prior_function_torch
 from cebmf_torch.utils.torch_device import get_device
 
 
