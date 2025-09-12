@@ -4,16 +4,16 @@ from typing import Optional
 
 import torch
 
-from cebmf_torch.utils.torch_distribution_operation import (
+from cebmf_torch.utils.distribution_operation import (
     get_data_loglik_exp_torch,
     get_data_loglik_normal_torch,
 )
-from cebmf_torch.utils.torch_mix_opt import optimize_pi_logL
-from cebmf_torch.utils.torch_posterior import posterior_mean_exp, posterior_mean_norm
-from cebmf_torch.utils.torch_utils_mix import (
+from cebmf_torch.utils.mixture import (
     autoselect_scales_mix_exp,
     autoselect_scales_mix_norm,
+    optimize_pi_logL,
 )
+from cebmf_torch.utils.posterior import posterior_mean_exp, posterior_mean_norm
 
 
 class ash_object:
