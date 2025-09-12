@@ -1,6 +1,8 @@
 
 # cebmf_torch (Pure PyTorch)
 
+[![unittest](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml/badge.svg)](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml)
+
 A pure-PyTorch rewrite of EBMF/EBNM components:
 - No NumPy. No SciPy. No R.
 - GPU-accelerated with mini-batch EM for mixture weights.
