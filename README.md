@@ -18,16 +18,15 @@ A pure-PyTorch rewrite of EBMF/EBNM components:
 
 ## Installation
 
-```bash
-# Install UV if you haven't already
-curl -LsSf https://astral.sh/uv/install.sh | sh
+Installation is managed with [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
 
+```bash
 # Clone the repository
 git clone https://github.com/william-denault/cebmf_torch.git
 cd cebmf_torch
 
 # Install the package and dependencies
-uv sync --all
+uv sync
 
 # Run tests
 uv run pytest
