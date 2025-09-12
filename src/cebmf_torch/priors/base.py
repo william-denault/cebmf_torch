@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
-from torch import T, Tensor
+from torch import Tensor
 
 
 @dataclass
