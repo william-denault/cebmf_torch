@@ -1,16 +1,17 @@
 import math
-import torch
 from dataclasses import dataclass
+
+import torch
 from torch import Tensor
 
 from cebmf_torch.utils.torch_utils import (
-    my_etruncnorm,
-    my_e2truncnorm,
-    log_norm_pdf,   # kept for API parity (unused here)
-    logPhi,
-    safe_log,
-    _TWOPI,
     _LOG_SQRT_2PI,
+    _TWOPI,
+    log_norm_pdf,  # kept for API parity (unused here)
+    logPhi,
+    my_e2truncnorm,
+    my_etruncnorm,
+    safe_log,
 )
 
 
@@ -53,17 +54,16 @@ _LOG_2PI = math.log(2 * math.pi)
 def ebnm_point_laplace(
     x: Tensor,
     s: Tensor,
-    par_init=None,                       # None by default; choose safely inside
-    fix_par=(False, False, True),        # [w_logit, log_a, mu]; mu fixed at 0
+    par_init=None,  # None by default; choose safely inside
+    fix_par=(False, False, True),  # [w_logit, log_a, mu]; mu fixed at 0
     max_iter: int = 50,
     tol: float = 1e-3,
-    a_bounds=(1e-2, 1e2),               # slightly tighter; adjust if needed
+    a_bounds=(1e-2, 1e2),  # slightly tighter; adjust if needed
     loga_l2: float = 1e-2,
-    tresh_pi0: float =  1e-3,
-    eps: float = 1e-12, 
+    tresh_pi0: float = 1e-3,
+    eps: float = 1e-12,
     pen_pi0=1,
 ) -> EBNMLaplaceResult:
-
     device, dtype = x.device, x.dtype
     x = x.to(dtype)
     s = torch.clamp(s.to(dtype), min=1e-6)
@@ -97,14 +97,18 @@ def ebnm_point_laplace(
 
     def closure():
         opt.zero_grad(set_to_none=True)
-        w = torch.sigmoid(w_logit) 
-        log_w     = torch.log (w )      # log w
-       
-        pen= -pen_pi0*(torch.log((1-w).clamp(
-            min=eps,
-            max=1-eps,
-            )))
-           
+        w = torch.sigmoid(w_logit)
+        log_w = torch.log(w)  # log w
+
+        pen = -pen_pi0 * (
+            torch.log(
+                (1 - w).clamp(
+                    min=eps,
+                    max=1 - eps,
+                )
+            )
+        )
+
         # bounded a
         log_a_eff = log_a.clamp(
             min=math.log(a_bounds[0]),
@@ -123,13 +127,13 @@ def ebnm_point_laplace(
         lg1 = -a * xc + logPhi(z1)
         lg2 = a * xc + logPhi(z2)
         lsum = torch.logaddexp(lg1, lg2)
-        lg = torch.log(a / 2) + 0.5 * (s * a) ** 2 + lsum 
+        lg = torch.log(a / 2) + 0.5 * (s * a) ** 2 + lsum
         llik_i = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg)
 
-        loss = -llik_i.sum() + loga_l2 * (log_a ** 2) + pen
+        loss = -llik_i.sum() + loga_l2 * (log_a**2) + pen
 
         # graph-preserving guard
-        loss = torch.nan_to_num(loss, nan=1e30, posinf=1e30, neginf=1e30)+pen
+        loss = torch.nan_to_num(loss, nan=1e30, posinf=1e30, neginf=1e30) + pen
         loss.backward()
         return loss
 
@@ -160,11 +164,9 @@ def ebnm_point_laplace(
         )
         a = log_a_eff.exp()
         mu_v = float(mu)
-        
+
         xc = x - mu
 
-
-       
         # spike loglik
         lf = -0.5 * ((xc / s) ** 2) - torch.log(s) - 0.5 * _LOG_2PI
 
@@ -202,27 +204,31 @@ def ebnm_point_laplace(
         # combine spike/slab
         post_mean = gamma * (EX + mu) + (1 - gamma) * mu
         post_mean2 = gamma * (EX2 + 2 * mu * EX + mu * mu) + (1 - gamma) * (mu * mu)
-        post_sd = (post_mean2 - post_mean ** 2).clamp_min(0).sqrt()
+        post_sd = (post_mean2 - post_mean**2).clamp_min(0).sqrt()
 
         # mixture log-likelihood (no hard overrides)
-        log_lik = torch.logaddexp(
-            torch.log1p(-pi0) + lf,
-            torch.log(pi0.clamp_min(eps)) + lg,
-        ).sum().item()  
+        log_lik = (
+            torch.logaddexp(
+                torch.log1p(-pi0) + lf,
+                torch.log(pi0.clamp_min(eps)) + lg,
+            )
+            .sum()
+            .item()
+        )
 
         # Optional early-exit guard; if keeping, ensure tensor ops
         if float(pi0) < tresh_pi0:
             post_mean = torch.zeros_like(x)
-            post_mean2 = torch.zeros_like(x)  +0.0001
-            post_sd =   torch.sqrt(post_mean2)
+            post_mean2 = torch.zeros_like(x) + 0.0001
+            post_sd = torch.sqrt(post_mean2)
             # consistent spike-only log-lik:
-            log_lik = (torch.log1p(-pi0) + lf).sum().item() 
+            log_lik = (torch.log1p(-pi0) + lf).sum().item()
 
     return EBNMLaplaceResult(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi0=float(1-pi0),
+        pi0=float(1 - pi0),
         a=float(a),
         mu=mu_v,
         log_lik=float(log_lik),
