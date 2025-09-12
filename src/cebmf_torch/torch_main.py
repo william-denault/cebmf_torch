@@ -4,9 +4,7 @@ from dataclasses import dataclass
 from typing import Optional, Callable, Dict
 
 import math  
-from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_norm, autoselect_scales_mix_exp
 from cebmf_torch.utils.torch_device import get_device
- 
 from cebmf_torch.priors_torch import get_prior_function_torch, PriorResultTorch
 
 @dataclass

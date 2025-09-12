@@ -113,7 +113,7 @@ def cash_posterior_means(X, betahat, sebetahat, n_epochs=20 ,n_layers=4,  num_cl
     # Training loop
     for epoch in range(n_epochs): 
         total_cash_loss = 0
-        running_loss = 0.0
+ 
         for inputs, targets, noise_std in dataloader:
               
             batch_loglik = get_data_loglik_normal_torch(betahat=targets   ,
@@ -170,7 +170,7 @@ def cash_posterior_means(X, betahat, sebetahat, n_epochs=20 ,n_layers=4,  num_cl
                                    post_mean2,
                                    post_sd,
                                    pi_np =all_pi_values ,
-                                   loss= running_loss,
+                                   loss=total_cash_loss   ,
                                    scale= scale,
                                    model_param=model_param)
 

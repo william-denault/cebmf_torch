@@ -78,7 +78,7 @@ def prior_cash_torch(X, betahat, sebetahat, model_param=None) -> PriorResultTorc
         post_mean2=torch.as_tensor(obj.post_mean2),
         loss=float(obj.loss),
         model_param=obj.model_param,
-        pi0_null=obj.all_pi_values[:0],   # optional: could expose from obj.pi_np
+        pi0_null=obj.pi_np[:,0],   # optional: could expose from obj.pi_np
     )
 
 def prior_emdn_torch(X, betahat, sebetahat, model_param=None) -> PriorResultTorch:

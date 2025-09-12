@@ -126,10 +126,7 @@ def emdn_posterior_means(
         for X_batch, _, _ in full_loader:
             pi, mu, log_sigma = model(X_batch)
 
-    pi_np = pi.cpu().numpy()
-    mu_np = mu.cpu().numpy()
-    scale_np = torch.exp(log_sigma).cpu().numpy()
-
+    
     # Posterior means per observation
     J = len(betahat)
     post_mean  = torch.empty(J, dtype=torch.float32)
@@ -141,17 +138,15 @@ def emdn_posterior_means(
     for i in range(len(betahat)):
         data_loglik =  get_data_loglik_normal_torch(betahat= betahat[i:(i+1)],
                                                     sebetahat= sebetahat[i:(i+1)] ,
-                                                    location=torch.tensor(mu_np[i, :],
-                                                                           dtype=torch.float32),
-                                                    scale =torch.tensor(scale_np[i, :],
-                                                                         dtype=torch.float32))
+                                                    location=mu[i, :] ,
+                                                    scale =torch.exp(log_sigma)[i, :] )
         result = posterior_mean_norm(
             betahat= betahat[i:(i+1)] ,
             sebetahat= sebetahat[i:(i+1)] ,
-            log_pi=torch.log(torch.tensor(pi_np[i, :], dtype=torch.float32)),
+            log_pi=torch.log( pi [i, :] ),
             data_loglik=  data_loglik  ,  
-            location=torch.tensor(mu_np[i, :], dtype=torch.float32),
-            scale=torch.tensor(scale_np[i, :], dtype=torch.float32),
+            location=mu[i, :],
+            scale=torch.exp(log_sigma)[i, :] ,
         )
         post_mean[i] = result.post_mean 
         post_mean2[i] = result.post_mean2 
@@ -161,9 +156,9 @@ def emdn_posterior_means(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        location=mu_np,
-        pi_np=pi_np,
-        scale=scale_np,
+        location=mu ,
+        pi_np=pi ,
+        scale=torch.exp(log_sigma),
         loss=running_loss,
         model_param=model.state_dict(),
     )

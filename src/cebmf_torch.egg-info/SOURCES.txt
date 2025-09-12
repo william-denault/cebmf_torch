@@ -10,7 +10,9 @@ src/cebmf_torch.egg-info/requires.txt
 src/cebmf_torch.egg-info/top_level.txt
 src/cebmf_torch/torch_cebnm/__init__.py
 src/cebmf_torch/torch_cebnm/cash_solver.py
+src/cebmf_torch/torch_cebnm/cov_gb_prior.py
 src/cebmf_torch/torch_cebnm/emdn.py
+src/cebmf_torch/torch_cebnm/spiked_emdn.py
 src/cebmf_torch/torch_ebnm/__init__.py
 src/cebmf_torch/torch_ebnm/torch_ash.py
 src/cebmf_torch/torch_ebnm/torch_ebnm_point_exp.py
@@ -30,5 +32,6 @@ tests/test_ebnm_point_exp_torch.py
 tests/test_emdn_posterior.py
 tests/test_gaussian_exp_posterior_torch.py
 tests/test_gaussian_gaussian_posterior_torch.py
+tests/test_gcbf_posterior.py
 tests/test_point_laplace_torch.py
 tests/test_with_NA_torch.py
