@@ -5,7 +5,6 @@ import torch
 from torch import Tensor
 
 from cebmf_torch.utils.torch_utils import (
-    _LOG_SQRT_2PI,
     logPhi,
     my_e2truncnorm,
     my_etruncnorm,

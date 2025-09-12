@@ -1,9 +1,8 @@
 import math
 
 import torch
-from torch import Tensor
 
-from .torch_utils import logsumexp, my_e2truncnorm, my_etruncnorm
+from .torch_utils import my_e2truncnorm, my_etruncnorm
 
 _LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 
