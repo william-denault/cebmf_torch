@@ -5,8 +5,6 @@
 
 Welcome to the cebmf_torch documentation!
 =========================================
-
-
 .. toctree::
    :maxdepth: 2
    :caption: Contents
@@ -16,7 +14,7 @@ Welcome to the cebmf_torch documentation!
    examples
    api
 
-.. include:: ../../cebmf_torch/README.md
+.. include:: ../../README.md
    :parser: myst_parser.sphinx_
 
 Indices and tables

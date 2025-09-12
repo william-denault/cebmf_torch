@@ -18,6 +18,7 @@ import sys
 
 extensions = [
     'myst_parser',
+    'sphinx.ext.autosummary',
     'sphinx.ext.autodoc',
     'sphinx.ext.doctest',
     'sphinx.ext.intersphinx',
@@ -34,7 +35,10 @@ extensions = [
 ]
 
 # Ensure the package can be imported by Sphinx
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src')))
+sys.path.insert(0, os.path.dirname(os.getcwd()))
+sys.path.insert(0, os.path.abspath('../'))
+sys.path.insert(1, os.path.abspath('../../'))
+sys.path.insert(0, os.path.abspath('../../src/'))
 
 # autosummary removed to avoid importing modules at builder init
 
@@ -43,7 +47,10 @@ autodoc_member_order = 'bysource'
 autodoc_typehints = 'description'
 
 # Mock heavy or optional imports that aren't needed to build docs
-autodoc_mock_imports = ["torch"]
+autodoc_mock_imports = []
+
+# Autosummary: generate stub pages
+autosummary_generate = True
 
 intersphinx_mapping = {
     "rtd": ("https://docs.readthedocs.io/en/stable/", None),

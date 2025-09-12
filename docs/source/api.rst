@@ -1,8 +1,12 @@
-
+.. toctree::
+    :maxdepth: 3
 
 API Reference
 =============
 
-This page links to the source modules for `cebmf_torch`. 
-Autogeneration of documentation is done using the `sphinx.ext.autodoc` extension and 
-will be implemented soon.
+This section documents the API for `cebmf_torch`.
+
+.. .. automodule:: cebmf_torch
+..    :members:
+..    :undoc-members:
+..    :show-inheritance: __call__
