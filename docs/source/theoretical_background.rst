@@ -125,7 +125,33 @@ As a summary, the EBMF approach does the following:
       2. Solve the EBNM problem to estimate :math:`g_k^l` and the posterior distribution of :math:`l_{ki}`.
       3. Solve the EBNM problem to estimate :math:`g_k^f` and the posterior distribution of :math:`f_{ki}`.
 3. Repeat step 2 until convergence.
-   
+
+
+.. admonition:: TODO
+
+      Discuss sparsity and choice of prior families here.
+
+
+Key properties
+^^^^^^^^^^^^^^
+
+1. Turns out to correspond to a variational approximation; approximate posterior by :math:`q(l, f ) = q(l)q( f )`.
+2. This establishes objective function; guarantees convergence
+3. Very flexible prior families; implementing new prior family only involves solving EBNM problem.
+4. Level of sparsity automatically tuned to data as part of fitting (no CV).
+5. Sufficiently efficient for reasonably large problems (no MCMC).
+6. If the family of prior contains a delta function, then we can learn the rank :math:`K`.
+7. Extend to :math:`K > 1` by iteratively adding/updating factors (deflation/backfitting).
+
+
+Covariate Empirical Bayes Matrix Factorization (CEBMF)
+------------------------------------------------------
+
+.. admonition:: TODO
+
+      Add a section here describing how covariates can be incorporated into the
+      EBMF model.
+
 
 References
 ----------
