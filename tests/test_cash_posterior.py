@@ -1,7 +1,7 @@
 import math
 import torch
 import pytest
-from cebmf_torch.torch_cebnm.cash_solver import Cash_posterior_means
+from cebmf_torch.torch_cebnm.cash_solver import cash_posterior_means
 
 @pytest.mark.parametrize("n_samples", [20000])  # keep test fast
 def test_cash_posterior_means_mse(n_samples):
@@ -20,7 +20,7 @@ def test_cash_posterior_means_mse(n_samples):
     s = torch.ones_like(x)                # sebetahat
 
     # Run CASH posterior means
-    res = Cash_posterior_means(
+    res = cash_posterior_means(
         X=X,
         betahat=x,
         sebetahat=s,
