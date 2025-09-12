@@ -1,10 +1,8 @@
-
-import torch
-from torch import Tensor
-from .torch_utils import logsumexp, safe_log, softmax
-
-import torch
 from typing import Optional
+
+import torch
+
+
 @torch.no_grad()
 def optimize_pi_logL(
     logL: torch.Tensor,
@@ -50,7 +48,7 @@ def optimize_pi_logL(
         assert vec_pen.shape == (K,), "penalty tensor must have shape (K,)"
     else:
         vec_pen = torch.ones(K, device=device, dtype=dtype)
-        vec_pen[0] =  penalty 
+        vec_pen[0] = penalty
 
     eps = 1e-12
 
@@ -76,17 +74,17 @@ def optimize_pi_logL(
             idx_all = indices
 
         for start in range(0, n, batch_size):
-            idx = idx_all[start:start + batch_size]
+            idx = idx_all[start : start + batch_size]
             Lb = logL[idx]  # (B, K)
 
             # E-step: responsibilities r_{jk} ∝ pi_k * exp(logL_{jk})
-            log_pi = torch.log(pi + eps)              # (K,)
-            log_r = Lb + log_pi.unsqueeze(0)          # (B, K)
+            log_pi = torch.log(pi + eps)  # (K,)
+            log_r = Lb + log_pi.unsqueeze(0)  # (B, K)
             log_norm = torch.logsumexp(log_r, dim=1, keepdim=True)  # (B,1)
-            r = torch.exp(log_r - log_norm)           # (B, K)
+            r = torch.exp(log_r - log_norm)  # (B, K)
 
             # accumulate expected counts
-            n_k += r.sum(dim=0)                       # (K,)
+            n_k += r.sum(dim=0)  # (K,)
 
         # M-step with Dirichlet prior α (as pseudo-counts)
         n_k = n_k + (vec_pen - 1.0)

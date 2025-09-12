@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader, Dataset
 
-from cebmf_torch.utils.torch_posterior import posterior_mean_norm
 from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch
+from cebmf_torch.utils.torch_posterior import posterior_mean_norm
+
 
 # -------------------------
 # Dataset
@@ -53,7 +53,7 @@ class MDN(nn.Module):
 # -------------------------
 def mdn_loss_with_varying_noise(pi, mu, log_sigma, betahat, sebetahat):
     sigma = torch.exp(log_sigma)
-    total_sigma = torch.sqrt(sigma**2 + sebetahat.unsqueeze(1)**2)
+    total_sigma = torch.sqrt(sigma**2 + sebetahat.unsqueeze(1) ** 2)
     dist = torch.distributions.Normal(mu, total_sigma)
     log_probs = dist.log_prob(betahat.unsqueeze(1)) + torch.log(pi)
     return -torch.logsumexp(log_probs, dim=1).mean()
@@ -63,7 +63,17 @@ def mdn_loss_with_varying_noise(pi, mu, log_sigma, betahat, sebetahat):
 # Result container
 # -------------------------
 class EmdnPosteriorMeanNorm:
-    def __init__(self, post_mean, post_mean2, post_sd, location, pi_np, scale, loss=0, model_param=None):
+    def __init__(
+        self,
+        post_mean,
+        post_mean2,
+        post_sd,
+        location,
+        pi_np,
+        scale,
+        loss=0,
+        model_param=None,
+    ):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -100,7 +110,12 @@ def emdn_posterior_means(
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Init model
-    model = MDN(input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_gaussians=n_gaussians, n_layers=n_layers)
+    model = MDN(
+        input_dim=X_scaled.shape[1],
+        hidden_dim=hidden_dim,
+        n_gaussians=n_gaussians,
+        n_layers=n_layers,
+    )
     if model_param is not None:
         model.load_state_dict(model_param)
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -117,7 +132,9 @@ def emdn_posterior_means(
             optimizer.step()
             running_loss += loss.item()
         if (epoch + 1) % 10 == 0:
-            print(f"[EMDN] Epoch {epoch+1}/{n_epochs}, Loss: {running_loss/len(dataloader):.4f}")
+            print(
+                f"[EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {running_loss / len(dataloader):.4f}"
+            )
 
     # Prediction for all data
     model.eval()
@@ -126,38 +143,37 @@ def emdn_posterior_means(
         for X_batch, _, _ in full_loader:
             pi, mu, log_sigma = model(X_batch)
 
-    
     # Posterior means per observation
     J = len(betahat)
-    post_mean  = torch.empty(J, dtype=torch.float32)
+    post_mean = torch.empty(J, dtype=torch.float32)
     post_mean2 = torch.empty(J, dtype=torch.float32)
-    post_sd    = torch.empty(J, dtype=torch.float32)
+    post_sd = torch.empty(J, dtype=torch.float32)
 
-
-     
     for i in range(len(betahat)):
-        data_loglik =  get_data_loglik_normal_torch(betahat= betahat[i:(i+1)],
-                                                    sebetahat= sebetahat[i:(i+1)] ,
-                                                    location=mu[i, :] ,
-                                                    scale =torch.exp(log_sigma)[i, :] )
-        result = posterior_mean_norm(
-            betahat= betahat[i:(i+1)] ,
-            sebetahat= sebetahat[i:(i+1)] ,
-            log_pi=torch.log( pi [i, :] ),
-            data_loglik=  data_loglik  ,  
+        data_loglik = get_data_loglik_normal_torch(
+            betahat=betahat[i : (i + 1)],
+            sebetahat=sebetahat[i : (i + 1)],
             location=mu[i, :],
-            scale=torch.exp(log_sigma)[i, :] ,
+            scale=torch.exp(log_sigma)[i, :],
         )
-        post_mean[i] = result.post_mean 
-        post_mean2[i] = result.post_mean2 
-        post_sd[i] = result.post_sd 
+        result = posterior_mean_norm(
+            betahat=betahat[i : (i + 1)],
+            sebetahat=sebetahat[i : (i + 1)],
+            log_pi=torch.log(pi[i, :]),
+            data_loglik=data_loglik,
+            location=mu[i, :],
+            scale=torch.exp(log_sigma)[i, :],
+        )
+        post_mean[i] = result.post_mean
+        post_mean2[i] = result.post_mean2
+        post_sd[i] = result.post_sd
 
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        location=mu ,
-        pi_np=pi ,
+        location=mu,
+        pi_np=pi,
         scale=torch.exp(log_sigma),
         loss=running_loss,
         model_param=model.state_dict(),

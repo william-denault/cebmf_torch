@@ -1,0 +1,64 @@
+name: Ruff Format
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "**/*.py"
+
+jobs:
+  ruff-format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Install dependencies
+      run: uv sync
+
+    - name: Get changed Python files
+      id: changed-files
+      uses: tj-actions/changed-files@v44
+      with:
+        files: |
+          **/*.py
+
+    - name: Run Ruff format on changed files
+      if: steps.changed-files.outputs.any_changed == 'true'
+      run: |
+        echo "Changed Python files: ${{ steps.changed-files.outputs.all_changed_files }}"
+        uv run ruff format ${{ steps.changed-files.outputs.all_changed_files }}
+
+    - name: Run Ruff check on changed files
+      if: steps.changed-files.outputs.any_changed == 'true'
+      run: |
+        uv run ruff check --fix ${{ steps.changed-files.outputs.all_changed_files }}
+
+    - name: Check for changes
+      id: verify-changed-files
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Commit changes
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Auto-format Python files with Ruff" -m "Applied by GitHub Action"
+        git push
