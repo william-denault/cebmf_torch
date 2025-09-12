@@ -1,10 +1,10 @@
 # torch_convolved_loglik.py
-import math
 
 import torch
 
+from .maths import _LOG_SQRT_2PI
+
 # ===== numerically-stable primitives =====
-_LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 
 
 def _logpdf_normal(

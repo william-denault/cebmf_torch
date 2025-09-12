@@ -1,10 +1,6 @@
-import math
-
 import torch
 
-from .maths import my_e2truncnorm, my_etruncnorm
-
-_LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
+from .maths import _LOG_SQRT_2PI, my_e2truncnorm, my_etruncnorm
 
 
 def _logpdf_normal(

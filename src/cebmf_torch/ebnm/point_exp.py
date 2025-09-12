@@ -4,14 +4,7 @@ import math
 import torch
 from torch import Tensor
 
-from cebmf_torch.utils.maths import (
-    logPhi,
-    my_e2truncnorm,
-    my_etruncnorm,
-)
-
-_LOG_2PI = math.log(2 * math.pi)
-
+from cebmf_torch.utils.maths import _LOG_SQRT_2PI, logPhi, my_e2truncnorm, my_etruncnorm
 
 # =========================
 # Core pieces
@@ -20,7 +13,7 @@ _LOG_2PI = math.log(2 * math.pi)
 
 def _loglik_spike(xc: Tensor, s: Tensor) -> Tensor:
     # log N(xc | 0, s^2)
-    return -0.5 * (xc / s) ** 2 - torch.log(s) - 0.5 * _LOG_2PI
+    return -0.5 * (xc / s) ** 2 - torch.log(s) - _LOG_SQRT_2PI
 
 
 def _loglik_exp_convolved(xc: Tensor, s: Tensor, a: Tensor) -> Tensor:
