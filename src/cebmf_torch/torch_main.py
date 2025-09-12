@@ -215,10 +215,8 @@ class cEBMF:
 
             lhat = num_l / denom_l
         # print(denom_l)
-        if self.self_row_cov:
-            X_model = torch.vstack(self.X_l, self.L[:, -k])
-        else:
-            X_model = self.X_l
+ 
+        X_model = self.update_cov_L(k)
         with torch.enable_grad():
             resL = self.prior_L_fn.fit(
                 X=X_model,
@@ -256,10 +254,7 @@ class cEBMF:
 
             fhat = num_f / denom_f
 
-            if self.self_col_cov:
-                X_model = torch.vstack(self.X_f, self.F[:, -k])
-            else:
-                X_model = self.X_f
+        X_model = self.update_cov_F(k)
         with torch.enable_grad():
             resF = self.prior_F_fn.fit(
                 X=X_model,
@@ -301,6 +296,50 @@ class cEBMF:
         KL = self.kl_l.sum() + self.kl_f.sum()
         loss = (-ll + KL).item()  # minimize this (negative ELBO)
         self.obj.append(loss)
+
+
+    @torch.no_grad()
+    def update_cov_L(self, k: int):
+        if self.self_row_cov:
+            if self.X_l is None:
+                if self.K > 1:
+                # all columns except k
+                    others = self.L[:, torch.arange(self.K, device=self.device) != k]
+                    X_model = others
+                else:
+                    X_model = self.L.new_ones(self.N, 1)  # intercept
+            else:
+                if self.K > 1:
+                    others = self.L[:, torch.arange(self.K, device=self.device) != k]
+                    X_model = torch.hstack((self.X_l, others))
+                else:
+                    X_model = self.X_l
+        else:
+            X_model = self.X_l
+        return X_model
+
+
+
+    @torch.no_grad()
+    def update_cov_F(self, k: int):
+        if self.self_col_cov:
+            if self.X_f is None:
+                if self.K > 1:
+                    others = self.F[:, torch.arange(self.K, device=self.device) != k]
+                    X_model = others
+                else:
+                    X_model = self.F.new_ones(self.P, 1)
+            else:
+                if self.K > 1:
+                    others = self.F[:, torch.arange(self.K, device=self.device) != k]
+                    X_model = torch.hstack((self.X_f, others))
+                else:
+                    X_model = self.X_f
+        else:
+            X_model = self.X_f
+        return X_model
+
+
 
     @torch.no_grad()
     def update_fitted_value(self):
