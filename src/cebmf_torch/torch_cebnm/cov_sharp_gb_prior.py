@@ -119,7 +119,7 @@ class CgbPosteriorResult:
 # -------------------------
 # Main solver
 # -------------------------
-def cgb_posterior_means(
+def sharp_cgb_posterior_means(
     X,
     betahat,
     sebetahat,
@@ -127,9 +127,11 @@ def cgb_posterior_means(
     n_layers=2,
     hidden_dim=32,
     batch_size=128,
+    ratio=0.01,
     lr=1e-3,
     penalty: float = 2.1,
     model_param=None,
+    eps=1e-3,
 ):
     # Standardize X
     if X.ndim == 1:
@@ -157,11 +159,10 @@ def cgb_posterior_means(
             pi1, pi2, mu2 = model(xb)
 
             # E-step
-            gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
-
+           
             # M-step
-            with torch.no_grad():
-                sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se)
+            
+            sigma2_sq =  ratio*torch.abs(mu2+eps)
 
             # Loss + update
             loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
