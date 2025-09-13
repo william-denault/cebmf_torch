@@ -12,3 +12,4 @@ This section provides practical examples for using cebmf_torch.
    :maxdepth: 1
 
    notebooks/example1.ipynb
+   notebooks/example2.ipynb
