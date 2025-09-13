@@ -17,7 +17,7 @@ import os
 import sys
 
 extensions = [
-    'myst_parser',
+    'myst_nb',
     'sphinx.ext.autosummary',
     'sphinx.ext.autodoc',
     'sphinx.ext.doctest',
