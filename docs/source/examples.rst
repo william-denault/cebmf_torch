@@ -7,3 +7,8 @@ This section provides practical examples for using cebmf_torch.
    :local:
 
 (Add your examples here)
+
+.. toctree::
+   :maxdepth: 1
+
+   notebooks/example1.ipynb
