@@ -20,7 +20,6 @@ extensions = [
     'myst_nb',
     "sphinx.ext.mathjax",  # Required for LaTeX math rendering
     'sphinx.ext.autosummary',
-    'sphinx.ext.autodoc',
     'sphinx.ext.doctest',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
@@ -32,12 +31,21 @@ extensions = [
     'sphinx.ext.imgconverter',
     "sphinx.ext.duration",
     "sphinx.ext.doctest",
-    "sphinx.ext.napoleon",
+    'sphinx.ext.autodoc',
+    'sphinx.ext.napoleon',           # for Google/NumPy style docstrings
+    'sphinx_autodoc_typehints',      # optional, for type hints
+    'sphinx.ext.viewcode',           # adds links to source code
 ]
 
 myst_enable_extensions = [
     "dollarmath",   # enables $$...$$ block math
 ]
+
+autodoc_default_options = {
+    'members': True,
+    'undoc-members': True,
+    'show-inheritance': True,
+}
 
 # Ensure the package can be imported by Sphinx
 sys.path.insert(0, os.path.dirname(os.getcwd()))
