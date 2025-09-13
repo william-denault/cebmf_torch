@@ -1,4 +1,6 @@
 
+[![codecov](https://codecov.io/gh/william-denault/cebmf_torch/branch/5-coverage-statistics-of-tests/graph/badge.svg)](https://codecov.io/gh/william-denault/cebmf_torch)
+
 # cebmf_torch (Pure PyTorch)
 
 A pure-PyTorch rewrite of EBMF/EBNM components:
