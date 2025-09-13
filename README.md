@@ -1,5 +1,6 @@
-
 # cebmf_torch (Pure PyTorch)
+
+[![codecov](https://codecov.io/gh/william-denault/cebmf_torch/branch/main/graph/badge.svg)](https://codecov.io/gh/william-denault/cebmf_torch)
 
 A pure-PyTorch rewrite of EBMF/EBNM components:
 - No NumPy. No SciPy. No R.
