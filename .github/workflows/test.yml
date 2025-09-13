@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [ main, 5-coverage-statistics-of-tests ]
+    branches: [ main ]
   pull_request:
     branches: [ "*" ]
 
