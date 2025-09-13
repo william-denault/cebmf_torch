@@ -18,6 +18,7 @@ import sys
 
 extensions = [
     'myst_nb',
+    "sphinx.ext.mathjax",  # Required for LaTeX math rendering
     'sphinx.ext.autosummary',
     'sphinx.ext.autodoc',
     'sphinx.ext.doctest',
@@ -32,6 +33,10 @@ extensions = [
     "sphinx.ext.duration",
     "sphinx.ext.doctest",
     "sphinx.ext.napoleon",
+]
+
+myst_enable_extensions = [
+    "dollarmath",   # enables $$...$$ block math
 ]
 
 # Ensure the package can be imported by Sphinx
