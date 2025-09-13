@@ -47,6 +47,8 @@ autodoc_default_options = {
     'show-inheritance': True,
 }
 
+nb_execution_mode = "off"  # never execute notebooks
+
 # Ensure the package can be imported by Sphinx
 sys.path.insert(0, os.path.dirname(os.getcwd()))
 sys.path.insert(0, os.path.abspath('../'))
