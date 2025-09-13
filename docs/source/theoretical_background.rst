@@ -147,10 +147,42 @@ Key properties
 Covariate Empirical Bayes Matrix Factorization (CEBMF)
 ------------------------------------------------------
 
+In many applications, we have additional covariate information about the rows and/or columns of the data matrix :math:`X`.
+For example, if our data matrix contains information about the height, weight etc. of individuals, 
+then we may also have information about their age, gender, or other demographic factors, which provides
+additional context that may help in the matrix factorization.
+We call this problem Covariate Empirical Bayes Matrix Factorization (CEBMF).
+
+In this case, the parameters of our prior distributions on the factors can depend on the covariates.
+For example, if we had a simple Gaussian prior on the loadings, we could let the variance depend on the covariates:
+
+.. math::
+      l_{k1}, \ldots, l_{kn} \sim \mathcal{N}(0, \sigma_k^2(z_i)), \quad i = 1, \ldots, n.
+
+where :math:`z_i` is the covariate vector for observation :math:`i` and :math:`\sigma_k^2(\cdot)` is some function
+that maps covariates to variances. This could be the output of a neural network, or some simpler function such as a linear model.
+This problem now has the additional challenge of estimating the function :math:`\sigma_k^2(\cdot)` from the data.
+
+Mixture Density Networks
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+One way to estimate a prior that depends on covariates is to use a Mixture Density Network (MDN).
+An MDN is a neural network that outputs the parameters of a mixture distribution.
+For example, suppose we wanted to use a mixture of Gaussians prior on the loadings
+
+.. math::
+      g(\cdot, z_i, \mathbf{\theta} ) = \sum_{j=1}^J \pi_j(z_i) \mathcal{N}(\cdot, \mu_j(z_i), \sigma_j^2(z_i)).
+
+where :math:`\pi_j(z_i)` are the mixture weights, :math:`\mu_j(z_i)` are the means, 
+and :math:`\sigma_j^2(z_i)` are the variances of the mixture components.
+Then, the MDN would take the covariates :math:`z_i`
+as input and output the mixture weights :math:`\pi_j(z_i)`, means :math:`\mu_j(z_i)` and variances :math:`\sigma_j^2(z_i)`.
+Our task in the CEBMF problem is then to estimate the parameters of the MDN, :math:`\mathbf{\theta}`, from the data, as well
+as the posterior distribution of the loadings and factors.
+
 .. admonition:: TODO
 
-      Add a section here describing how covariates can be incorporated into the
-      EBMF model.
+      Add the loss function we optimise here and a link to the relevant example
 
 
 References
