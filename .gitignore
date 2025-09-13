@@ -145,3 +145,5 @@ Thumbs.db
 
 # UV lock file (uncomment if you don't want to track it)
 # uv.lock
+*__pycache__*
+
