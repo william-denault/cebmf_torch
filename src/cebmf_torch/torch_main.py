@@ -1,5 +1,5 @@
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum, auto
 
 import torch
@@ -23,16 +23,26 @@ class NoiseType(StrEnum):
     COLUMN_WISE = auto()
 
 
-def _impute_nan(Y: Tensor) -> Tensor:
-    # Column-mean imputation in pure torch (for SVD init only)
-    mask = ~torch.isnan(Y)
-    if not mask.any():
-        return Y
-    col_means = torch.nanmean(Y, dim=0)
-    Y_imp = Y.clone()
-    idx = torch.where(~mask)
-    Y_imp[idx] = col_means[idx[1]]
-    return Y_imp
+@dataclass
+class ModelParams:
+    K: int = 5
+    prior_L: str = "norm"
+    prior_F: str = "norm"
+    allow_backfitting: bool = True
+    prune_thresh: float = 1 - 1e-3
+
+
+@dataclass
+class NoiseParams:
+    type: NoiseType = NoiseType.CONSTANT
+
+
+@dataclass
+class CovariateParams:
+    X_l: Tensor | None = None
+    X_f: Tensor | None = None
+    self_row_cov: bool = False
+    self_col_cov: bool = False
 
 
 @dataclass
@@ -45,65 +55,58 @@ class cEBMF:
     """
 
     data: Tensor
-    K: int = 5
-    prior_L: str = "norm"
-    prior_F: str = "norm"
-    type_noise: NoiseType = NoiseType.CONSTANT
+    model: ModelParams = field(default_factory=ModelParams)
+    noise: NoiseParams = field(default_factory=NoiseParams)
+    covariate: CovariateParams = field(default_factory=CovariateParams)
     device: torch.device | None = None
-    allow_backfitting: bool = True
-    prune_thresh: float = 1 - 1e-3
-    X_l: Tensor | None = None
-    X_f: Tensor | None = None
-    self_row_cov: bool = False
-    self_col_cov: bool = False
 
     def __post_init__(self):
         self._validate_inputs()
         self.device = self.device or get_device()
+        self.Y = self.data.to(self.device).float()
         self.N, self.P = self.Y.shape
         self._initialise_priors()
         self._initialise_tensors()
 
     def _validate_inputs(self) -> None:
-        if self.K < 1:
-            raise ValueError(f"K must be >= 1, got {self.K}")
+        if self.model.K < 1:
+            raise ValueError(f"K must be >= 1, got {self.model.K}")
         if torch.isnan(self.data).all():
             raise ValueError("Data cannot be all NaN")
         # More validation...
 
     def _initialise_priors(self):
-        self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.prior_L)
-        self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.prior_F)
-        self.model_state_L = [None] * self.K
-        self.model_state_F = [None] * self.K
+        self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.model.prior_L)
+        self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.model.prior_F)
+        self.model_state_L = [None] * self.model.K
+        self.model_state_F = [None] * self.model.K
 
     def _initialise_tensors(self):
-        self.Y = self.data.to(self.device).float()
         self.mask = (~torch.isnan(self.Y)).float()  # 1 where observed, 0 where NaN
         self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
-        self.L = torch.zeros(self.N, self.K, device=self.device)
-        self.L2 = torch.zeros(self.N, self.K, device=self.device)
-        self.F = torch.zeros(self.P, self.K, device=self.device)
-        self.F2 = torch.zeros(self.P, self.K, device=self.device)
+        self.L = torch.zeros(self.N, self.model.K, device=self.device)
+        self.L2 = torch.zeros(self.N, self.model.K, device=self.device)
+        self.F = torch.zeros(self.P, self.model.K, device=self.device)
+        self.F2 = torch.zeros(self.P, self.model.K, device=self.device)
         self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var)
-        self.kl_l = torch.zeros(self.K, device=self.device)
-        self.kl_f = torch.zeros(self.K, device=self.device)
-        self.pi0_L = [None] * self.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
-        self.pi0_F = [None] * self.K
+        self.kl_l = torch.zeros(self.model.K, device=self.device)
+        self.kl_f = torch.zeros(self.model.K, device=self.device)
+        self.pi0_L = [None] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
+        self.pi0_F = [None] * self.model.K
         self.obj = []
 
     def initialize(self, method: str = "svd"):
         Y_for_init = _impute_nan(self.Y)
         if method == "svd":
             U, S, Vh = torch.linalg.svd(Y_for_init, full_matrices=False)
-            K = min(self.K, S.shape[0])
+            K = min(self.model.K, S.shape[0])
             self.L = (U[:, :K] * S[:K]).contiguous()
             self.F = Vh[:K, :].T.contiguous()
 
         else:
             # random init
-            self.L = torch.randn(self.N, self.K, device=self.device) * 0.01
-            self.F = torch.randn(self.P, self.K, device=self.device) * 0.01
+            self.L = torch.randn(self.N, self.model.K, device=self.device) * 0.01
+            self.F = torch.randn(self.P, self.model.K, device=self.device) * 0.01
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
         self.update_tau()
@@ -118,7 +121,7 @@ class cEBMF:
         """
         R2 = self.expected_residuals_squared()  # (N,P), zeros at missing
 
-        match self.type_noise:
+        match self.noise.type:
             case NoiseType.CONSTANT:
                 dim = None
             case NoiseType.ROW_WISE:
@@ -160,31 +163,31 @@ class cEBMF:
         eps = 1e-12
         # ensure 1-D KL holders (length K)
         if not hasattr(self, "kl_l"):
-            self.kl_l = torch.zeros(self.K, device=self.device)
+            self.kl_l = torch.zeros(self.model.K, device=self.device)
         if not hasattr(self, "kl_f"):
-            self.kl_f = torch.zeros(self.K, device=self.device)
+            self.kl_f = torch.zeros(self.model.K, device=self.device)
 
             # choose tau map depending on mode
         tau_map = None
-        if self.type_noise == NoiseType.CONSTANT:
+        if self.noise.type == NoiseType.CONSTANT:
             # tau_scalar = float(self.tau.item())
             pass
-        elif self.type_noise == NoiseType.ROW_WISE:
+        elif self.noise.type == NoiseType.ROW_WISE:
             tau_map = self.tau_map  # (N,P)
-        elif self.type_noise == NoiseType.COLUMN_WISE:
+        elif self.noise.type == NoiseType.COLUMN_WISE:
             tau_map = self.tau_map  # (N,P)
         else:
             raise ValueError("Invalid type_noise")
 
-        for k in range(self.K):
+        for k in range(self.model.K):
             self.update_factor(k, tau_map=tau_map, eps=eps)
 
-        if self.allow_backfitting and self.K > 1:
-            print(self.K)
-            to_drop = [k for k in range(self.K) if self._should_prune_factor(k)]
-            if len(to_drop) >= self.K:
+        if self.model.allow_backfitting and self.model.K > 1:
+            print(self.model.K)
+            to_drop = [k for k in range(self.model.K) if self._should_prune_factor(k)]
+            if len(to_drop) >= self.model.K:
                 keep_one = min(to_drop)
-                to_drop = [k for k in range(self.K) if k != keep_one]
+                to_drop = [k for k in range(self.model.K) if k != keep_one]
             # drop highest indices first to avoid reindex churn
             to_drop_sorted = sorted(to_drop, reverse=True)
             self._prune_indices(to_drop_sorted)
@@ -265,7 +268,7 @@ class cEBMF:
     def cal_obj(self):
         # Data term
         ER2 = self.expected_residuals_squared()
-        if self.type_noise == NoiseType.CONSTANT:
+        if self.noise.type == NoiseType.CONSTANT:
             m = self.mask.sum().clamp_min(1.0)
             ll = -0.5 * (
                 m * (torch.log(torch.tensor(2 * torch.pi, device=self.device)) - torch.log(self.tau))
@@ -284,41 +287,41 @@ class cEBMF:
 
     @torch.no_grad()
     def update_cov_L(self, k: int):
-        if self.self_row_cov:
-            if self.X_l is None:
-                if self.K > 1:
+        if self.covariate.self_row_cov:
+            if self.covariate.X_l is None:
+                if self.model.K > 1:
                     # all columns except k
-                    others = self.L[:, torch.arange(self.K, device=self.device) != k]
+                    others = self.L[:, torch.arange(self.model.K, device=self.device) != k]
                     X_model = others
                 else:
                     X_model = self.L.new_ones(self.N, 1)  # intercept
             else:
-                if self.K > 1:
-                    others = self.L[:, torch.arange(self.K, device=self.device) != k]
-                    X_model = torch.hstack((self.X_l, others))
+                if self.model.K > 1:
+                    others = self.L[:, torch.arange(self.model.K, device=self.device) != k]
+                    X_model = torch.hstack((self.covariate.X_l, others))
                 else:
-                    X_model = self.X_l
+                    X_model = self.covariate.X_l
         else:
-            X_model = self.X_l
+            X_model = self.covariate.X_l
         return X_model
 
     @torch.no_grad()
     def update_cov_F(self, k: int):
-        if self.self_col_cov:
-            if self.X_f is None:
-                if self.K > 1:
-                    others = self.F[:, torch.arange(self.K, device=self.device) != k]
+        if self.covariate.self_col_cov:
+            if self.covariate.X_f is None:
+                if self.model.K > 1:
+                    others = self.F[:, torch.arange(self.model.K, device=self.device) != k]
                     X_model = others
                 else:
                     X_model = self.F.new_ones(self.P, 1)
             else:
-                if self.K > 1:
-                    others = self.F[:, torch.arange(self.K, device=self.device) != k]
-                    X_model = torch.hstack((self.X_f, others))
+                if self.model.K > 1:
+                    others = self.F[:, torch.arange(self.model.K, device=self.device) != k]
+                    X_model = torch.hstack((self.covariate.X_f, others))
                 else:
-                    X_model = self.X_f
+                    X_model = self.covariate.X_f
         else:
-            X_model = self.X_f
+            X_model = self.covariate.X_f
         return X_model
 
     @torch.no_grad()
@@ -366,13 +369,14 @@ class cEBMF:
         if pi0_min_L == float("-inf") and pi0_min_F == float("-inf"):
             return False
         # If either side indicates "all near spike", prune.
-        return (pi0_min_L >= self.prune_thresh) or (pi0_min_F >= self.prune_thresh)
+        thresh = self.model.prune_thresh
+        return (pi0_min_L >= thresh) or (pi0_min_F >= thresh)
 
     def _prune_indices(self, idxs: list[int]) -> None:
         """In-place prune of K and all factor-aligned structures."""
         if not idxs:
             return
-        keep = [i for i in range(self.K) if i not in idxs]
+        keep = [i for i in range(self.model.K) if i not in idxs]
         self.L = self.L[:, keep]
         self.L2 = self.L2[:, keep]
         self.F = self.F[:, keep]
@@ -383,7 +387,7 @@ class cEBMF:
         self.model_state_F = [self.model_state_F[i] for i in keep]
         self.pi0_L = [self.pi0_L[i] for i in keep]
         self.pi0_F = [self.pi0_F[i] for i in keep]
-        self.K = len(keep)
+        self.model.K = len(keep)
         self.obj = []
 
 
@@ -440,3 +444,15 @@ def normal_means_loglik(
         return out
     else:
         raise ValueError("reduce must be 'sum', 'mean', or 'none'")
+
+
+def _impute_nan(Y: Tensor) -> Tensor:
+    # Column-mean imputation in pure torch (for SVD init only)
+    mask = ~torch.isnan(Y)
+    if not mask.any():
+        return Y
+    col_means = torch.nanmean(Y, dim=0)
+    Y_imp = Y.clone()
+    idx = torch.where(~mask)
+    Y_imp[idx] = col_means[idx[1]]
+    return Y_imp
