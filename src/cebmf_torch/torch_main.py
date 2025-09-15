@@ -24,6 +24,18 @@ class NoiseType(StrEnum):
     COLUMN_WISE = auto()
 
 
+def _impute_nan(Y: Tensor) -> Tensor:
+    # Column-mean imputation in pure torch (for SVD init only)
+    mask = ~torch.isnan(Y)
+    if not mask.any():
+        return Y
+    col_means = torch.nanmean(Y, dim=0)
+    Y_imp = Y.clone()
+    idx = torch.where(~mask)
+    Y_imp[idx] = col_means[idx[1]]
+    return Y_imp
+
+
 class cEBMF:
     """
     Pure-PyTorch EBMF with proper NaN handling:
@@ -76,19 +88,8 @@ class cEBMF:
         self.self_col_cov = self_col_cov
         self.allow_backfitting = allow_backfitting
 
-    def _impute_nan(self, Y: Tensor) -> Tensor:
-        # Column-mean imputation in pure torch (for SVD init only)
-        mask = ~torch.isnan(Y)
-        if not mask.any():
-            return Y
-        col_means = torch.nanmean(Y, dim=0)
-        Y_imp = Y.clone()
-        idx = torch.where(~mask)
-        Y_imp[idx] = col_means[idx[1]]
-        return Y_imp
-
     def initialize(self, method: str = "svd"):
-        Y_for_init = self._impute_nan(self.Y)
+        Y_for_init = _impute_nan(self.Y)
         if method == "svd":
             U, S, Vh = torch.linalg.svd(Y_for_init, full_matrices=False)
             K = min(self.K, S.shape[0])
@@ -141,7 +142,6 @@ class cEBMF:
             self.tau = self.tau_map  # if downstream expects elementwise
         else:
             raise ValueError("dim must be None, 0, or 1")
-
 
     @torch.no_grad()
     def _partial_residual_masked(self, k: int) -> Tensor:
