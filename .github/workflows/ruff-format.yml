@@ -61,4 +61,6 @@ jobs:
         git config --local user.name "GitHub Action"
         git add .
         git commit -m "Auto-format Python files with Ruff" -m "Applied by GitHub Action"
-        git push
+        git push origin HEAD:${GITHUB_REF_NAME}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
