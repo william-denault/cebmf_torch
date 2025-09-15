@@ -1,18 +1,14 @@
 import numpy as np
 import torch
 
-from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch
-from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_norm
+from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
+from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
 
 
 def test_convolved_loglik_postmean():
     betahat = np.array([1, 2, 3, 4, 5], dtype=float)
     sebetahat = np.array([1, 0.4, 5, 1, 1], dtype=float)
-    scale = (
-        autoselect_scales_mix_norm(torch.tensor(betahat), torch.tensor(sebetahat))
-        .cpu()
-        .numpy()
-    )
+    scale = autoselect_scales_mix_norm(torch.tensor(betahat), torch.tensor(sebetahat)).cpu().numpy()
     location = np.zeros_like(scale)
     n = betahat.shape[0]
     p = scale.shape[0]
@@ -71,11 +67,11 @@ def test_convolved_loglik_postmean():
     )
 
     # Apply log-sum-exp with uniform pi
-    log_pi = np.log(np.full((n, p), 1 / p))
-    res = np.log(np.exp(data_loglik) * (1 / p))
+    np.log(np.full((n, p), 1 / p))
+    np.log(np.exp(data_loglik) * (1 / p))
 
     # Reproduce "expected_result" matrix using original constants for sanity
-    expected_res = np.array(
+    np.array(
         [
             [
                 -2.0667347,
