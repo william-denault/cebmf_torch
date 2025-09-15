@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from cebmf_torch.torch_ebnm.torch_ebnm_point_laplace import ebnm_point_laplace
+from cebmf_torch.ebnm.point_laplace import ebnm_point_laplace
 
 
 def test_ebnm_point_laplace_solver_loglik_and_postmean():

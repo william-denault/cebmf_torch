@@ -3,7 +3,7 @@ import math
 import pytest
 import torch
 
-from cebmf_torch.torch_cebnm.emdn import emdn_posterior_means
+from cebmf_torch.cebnm.emdn import emdn_posterior_means
 
 
 @pytest.mark.parametrize("n_samples", [20000])  # keep test fast

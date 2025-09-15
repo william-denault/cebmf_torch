@@ -1,4 +1,4 @@
-from typing import Optional
+import math
 
 import torch
 
@@ -10,9 +10,9 @@ def optimize_pi_logL(
     max_iters: int = 100,
     tol: float = 1e-6,
     verbose: bool = True,
-    batch_size: Optional[int] = None,
+    batch_size: int | None = None,
     shuffle: bool = False,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> torch.Tensor:
     """
     EM algorithm for optimizing mixture weights pi on the simplex given a log-likelihood matrix.
@@ -98,3 +98,68 @@ def optimize_pi_logL(
             break
 
     return pi
+
+
+def _calculate_scales(
+    sigmaamax: float, sigmaamin: float, mult: float, device: torch.device
+) -> torch.Tensor:
+    npoint = int(math.ceil(float(math.log2(sigmaamax / sigmaamin)) / math.log2(mult)))
+    seq = torch.arange(-npoint, 1, device=device, dtype=torch.int64)
+    return torch.cat(
+        [
+            torch.tensor([0.0], device=device),
+            (1.0 / mult) ** (-seq.float()) * sigmaamax,
+        ]
+    )
+
+
+def autoselect_scales_mix_norm(
+    betahat: torch.Tensor, sebetahat: torch.Tensor, max_class=None, mult: float = 2.0
+):
+    device = betahat.device
+    sigmaamin = torch.min(sebetahat) / 10.0
+    if torch.all(betahat**2 < sebetahat**2):
+        sigmaamax = 8.0 * sigmaamin
+    else:
+        sigmaamax = 2.0 * torch.sqrt(torch.max(betahat**2 - sebetahat**2))
+
+    if mult == 0:
+        return torch.tensor([0.0, sigmaamax / 2.0], device=device)
+
+    scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device)
+    if max_class is not None:
+        if scales.numel() != max_class:
+            scales = torch.linspace(
+                torch.min(scales), torch.max(scales), steps=max_class, device=device
+            )
+    return scales
+
+
+def autoselect_scales_mix_exp(
+    betahat: torch.Tensor,
+    sebetahat: torch.Tensor,
+    max_class=None,
+    mult: float = 1.5,
+    tt: float = 1.5,
+):
+    device = betahat.device
+    sigmaamin = torch.maximum(
+        torch.min(sebetahat) / 10.0, torch.tensor(1e-3, device=device)
+    )
+    if torch.all(betahat**2 < sebetahat**2):
+        sigmaamax = 8.0 * sigmaamin
+    else:
+        sigmaamax = tt * torch.sqrt(torch.max(betahat**2))
+
+    if mult == 0:
+        return torch.tensor([0.0, sigmaamax / 2.0], device=device)
+
+    scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device)
+    if max_class is not None:
+        if scales.numel() != max_class:
+            scales = torch.linspace(
+                torch.min(scales), torch.max(scales), steps=max_class, device=device
+            )
+            if scales.numel() >= 3 and scales[2] < 1e-2:
+                scales[2:] = scales[2:] + 1e-2
+    return scales
