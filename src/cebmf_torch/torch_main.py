@@ -58,10 +58,18 @@ class cEBMF:
     self_col_cov: bool = False
 
     def __post_init__(self):
+        self._validate_inputs()
         self.device = self.device or get_device()
         self.N, self.P = self.Y.shape
         self._initialise_priors()
         self._initialise_tensors()
+
+    def _validate_inputs(self) -> None:
+        if self.K < 1:
+            raise ValueError(f"K must be >= 1, got {self.K}")
+        if torch.isnan(self.data).all():
+            raise ValueError("Data cannot be all NaN")
+        # More validation...
 
     def _initialise_priors(self):
         self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.prior_L)
