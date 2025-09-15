@@ -1,6 +1,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum, auto
 
 import torch
 from torch import Tensor
@@ -17,6 +18,12 @@ class CEBMFResult:
     history_obj: list
 
 
+class NoiseType(StrEnum):
+    CONSTANT = auto()
+    ROW_WISE = auto()
+    COLUMN_WISE = auto()
+
+
 class cEBMF:
     """
     Pure-PyTorch EBMF with proper NaN handling:
@@ -31,7 +38,7 @@ class cEBMF:
         K: int = 5,
         prior_L: str | Callable = "norm",
         prior_F: str | Callable = "norm",
-        type_noise: str = "constant",
+        type_noise: NoiseType = NoiseType.CONSTANT,
         device: torch.device | None = None,
         allow_backfitting: bool = True,
         prune_pi0: float = 1 - 1e-3,
@@ -108,7 +115,7 @@ class cEBMF:
         R2 = self.expected_residuals_squared()  # (N,P), zeros at missing
         N, P = self.N, self.P
 
-        if self.type_noise == "constant":
+        if self.type_noise == NoiseType.CONSTANT:
             m = self.mask.sum().clamp_min(1.0)
             mean_R2 = R2.sum() / m
             tau = 1.0 / (mean_R2)
@@ -116,7 +123,7 @@ class cEBMF:
             # If you need a full map like NumPy's np.full(...):
             self.tau_map = torch.full((N, P), tau.item(), device=self.device, dtype=R2.dtype)
 
-        elif self.type_noise == "row_wise":
+        elif self.type_noise == NoiseType.ROW_WISE:
             m_row = self.mask.sum(dim=1).clamp_min(1.0)  # (N,)
             mean_R2_row = R2.sum(dim=1) / m_row  # (N,)
             tau_row = 1.0 / (mean_R2_row)  # (N,)
@@ -124,7 +131,7 @@ class cEBMF:
             self.tau_map = tau_row.view(-1, 1).expand(N, P)  # (N,P)
             self.tau = self.tau_map  # if downstream expects elementwise
 
-        elif self.type_noise == "column_wise":
+        elif self.type_noise == NoiseType.COLUMN_WISE:
             m_col = self.mask.sum(dim=0).clamp_min(1.0)  # (P,)
             mean_R2_col = R2.sum(dim=0) / m_col  # (P,)
             tau_col = 1.0 / (mean_R2_col)  # (P,)
@@ -156,12 +163,12 @@ class cEBMF:
 
             # choose tau map depending on mode
         tau_map = None
-        if self.type_noise == "constant":
+        if self.type_noise == NoiseType.CONSTANT:
             # tau_scalar = float(self.tau.item())
             pass
-        elif self.type_noise == "row_wise":
+        elif self.type_noise == NoiseType.ROW_WISE:
             tau_map = self.tau_map  # (N,P)
-        elif self.type_noise == "column_wise":
+        elif self.type_noise == NoiseType.COLUMN_WISE:
             tau_map = self.tau_map  # (N,P)
         else:
             raise ValueError("Invalid type_noise")
@@ -255,7 +262,7 @@ class cEBMF:
     def cal_obj(self):
         # Data term
         ER2 = self.expected_residuals_squared()
-        if self.type_noise == "constant":
+        if self.type_noise == NoiseType.CONSTANT:
             m = self.mask.sum().clamp_min(1.0)
             ll = -0.5 * (
                 m * (torch.log(torch.tensor(2 * torch.pi, device=self.device)) - torch.log(self.tau))
