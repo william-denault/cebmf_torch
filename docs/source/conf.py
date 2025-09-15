@@ -9,26 +9,26 @@ import sys
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'cebmf_torch'
-copyright = '2025, william-denault'
-author = 'william-denault'
+project = "cebmf_torch"
+copyright = "2025, william-denault"
+author = "william-denault"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'myst_parser',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.doctest',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.todo',
-    'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.ifconfig',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages',
-    'sphinx.ext.imgconverter',
+    "myst_parser",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.todo",
+    "sphinx.ext.coverage",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.ifconfig",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.githubpages",
+    "sphinx.ext.imgconverter",
     "sphinx.ext.duration",
     "sphinx.ext.doctest",
     "sphinx.ext.napoleon",
@@ -36,15 +36,15 @@ extensions = [
 
 # Ensure the package can be imported by Sphinx
 sys.path.insert(0, os.path.dirname(os.getcwd()))
-sys.path.insert(0, os.path.abspath('../'))
-sys.path.insert(1, os.path.abspath('../../'))
-sys.path.insert(0, os.path.abspath('../../src/'))
+sys.path.insert(0, os.path.abspath("../"))
+sys.path.insert(1, os.path.abspath("../../"))
+sys.path.insert(0, os.path.abspath("../../src/"))
 
 # autosummary removed to avoid importing modules at builder init
 
 # Autodoc settings
-autodoc_member_order = 'bysource'
-autodoc_typehints = 'description'
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
 
 # Mock heavy or optional imports that aren't needed to build docs
 autodoc_mock_imports = []
@@ -61,7 +61,7 @@ intersphinx_disabled_domains = ["std"]
 
 templates_path = ["_templates"]
 # source_suffix = '.md'
-master_doc = 'index'
+master_doc = "index"
 
 # -- Options for EPUB output
 epub_show_urls = "footnote"

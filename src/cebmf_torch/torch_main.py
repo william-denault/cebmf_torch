@@ -114,9 +114,7 @@ class cEBMF:
             tau = 1.0 / (mean_R2)
             self.tau = tau  # scalar (back-compat)
             # If you need a full map like NumPy's np.full(...):
-            self.tau_map = torch.full(
-                (N, P), tau.item(), device=self.device, dtype=R2.dtype
-            )
+            self.tau_map = torch.full((N, P), tau.item(), device=self.device, dtype=R2.dtype)
 
         elif self.type_noise == "row_wise":
             m_row = self.mask.sum(dim=1).clamp_min(1.0)  # (N,)
@@ -135,9 +133,7 @@ class cEBMF:
             self.tau = self.tau_map  # if downstream expects elementwise
 
         else:
-            raise ValueError(
-                "type_noise must be 'constant', 'row_wise', or 'column_wise'"
-            )
+            raise ValueError("type_noise must be 'constant', 'row_wise', or 'column_wise'")
 
     # self.tau=torch.tensor(1)
 
@@ -175,11 +171,7 @@ class cEBMF:
 
         if self.allow_backfitting and self.K > 1:
             print(self.K)
-            to_drop = [
-                k
-                for k in range(self.K)
-                if self._should_prune_factor(k, self.prune_thresh)
-            ]
+            to_drop = [k for k in range(self.K) if self._should_prune_factor(k, self.prune_thresh)]
             if len(to_drop) >= self.K:
                 keep_one = min(to_drop)
                 to_drop = [k for k in range(self.K) if k != keep_one]
@@ -189,9 +181,7 @@ class cEBMF:
         self.update_tau()
         self.cal_obj()
 
-    def update_factor(
-        self, k: int, tau_map: Tensor | None = None, eps: float = 1e-12
-    ) -> None:
+    def update_factor(self, k: int, tau_map: Tensor | None = None, eps: float = 1e-12) -> None:
         """
         Update L[:,k], F[:,k] and their second moments using the current priors.
         Handles scalar tau (tau_map=None) or elementwise tau (tau_map is (N,P)).
@@ -202,15 +192,11 @@ class cEBMF:
             fk2 = self.F2[:, k]  # (P,)
 
             if tau_map is None:
-                denom_l = (
-                    (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)
-                )  # (N,)
+                denom_l = (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)  # (N,)
                 num_l = Rk @ fk  # (N,)
                 se_l = torch.sqrt(1.0 / (self.tau * denom_l))
             else:
-                denom_l = (
-                    (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)
-                )  # (N,)
+                denom_l = (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)  # (N,)
                 num_l = (tau_map * Rk) @ fk  # (N,)
                 se_l = torch.sqrt(1.0 / denom_l)
 
@@ -229,9 +215,7 @@ class cEBMF:
             self.model_state_L[k] = resL.model_param
             self.L[:, k] = resL.post_mean
             self.L2[:, k] = resL.post_mean2
-            nm_ll_L = normal_means_loglik(
-                x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2
-            )
+            nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
             self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
             self.pi0_L[k] = resL.pi0_null if hasattr(resL, "pi0_null") else None
 
@@ -241,15 +225,11 @@ class cEBMF:
             lk2 = self.L2[:, k]  # (N,)
 
             if tau_map is None:
-                denom_f = (
-                    (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)
-                )  # (P,)
+                denom_f = (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)  # (P,)
                 num_f = Rk.T @ lk  # (P,)
                 se_f = torch.sqrt(1.0 / (self.tau * denom_f))
             else:
-                denom_f = (
-                    (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)
-                )  # (P,)
+                denom_f = (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)  # (P,)
                 num_f = (tau_map * Rk).T @ lk  # (P,)
                 se_f = torch.sqrt(1.0 / denom_f)
 
@@ -268,9 +248,7 @@ class cEBMF:
             self.F[:, k] = resF.post_mean
             self.F2[:, k] = resF.post_mean2
             # store as scalar on device; PriorResult.loss already = -log_lik
-            nm_ll_F = normal_means_loglik(
-                x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2
-            )
+            nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
             self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
             self.pi0_F[k] = resF.pi0_null if hasattr(resF, "pi0_null") else None
 
@@ -280,11 +258,7 @@ class cEBMF:
         if self.type_noise == "constant":
             m = self.mask.sum().clamp_min(1.0)
             ll = -0.5 * (
-                m
-                * (
-                    torch.log(torch.tensor(2 * torch.pi, device=self.device))
-                    - torch.log(self.tau)
-                )
+                m * (torch.log(torch.tensor(2 * torch.pi, device=self.device)) - torch.log(self.tau))
                 + self.tau * ER2.sum()
             )
         else:
@@ -298,13 +272,12 @@ class cEBMF:
         loss = (-ll + KL).item()  # minimize this (negative ELBO)
         self.obj.append(loss)
 
-
     @torch.no_grad()
     def update_cov_L(self, k: int):
         if self.self_row_cov:
             if self.X_l is None:
                 if self.K > 1:
-                # all columns except k
+                    # all columns except k
                     others = self.L[:, torch.arange(self.K, device=self.device) != k]
                     X_model = others
                 else:
@@ -318,8 +291,6 @@ class cEBMF:
         else:
             X_model = self.X_l
         return X_model
-
-
 
     @torch.no_grad()
     def update_cov_F(self, k: int):
@@ -339,8 +310,6 @@ class cEBMF:
         else:
             X_model = self.X_f
         return X_model
-
-
 
     @torch.no_grad()
     def update_fitted_value(self):
@@ -434,13 +403,7 @@ def normal_means_loglik(
     x, s, Et, Et2 = torch.broadcast_tensors(x, s, Et, Et2)
 
     # Validity mask: finite & s > 0
-    valid = (
-        torch.isfinite(x)
-        & torch.isfinite(s)
-        & torch.isfinite(Et)
-        & torch.isfinite(Et2)
-        & (s > 0)
-    )
+    valid = torch.isfinite(x) & torch.isfinite(s) & torch.isfinite(Et) & torch.isfinite(Et2) & (s > 0)
     if mask is not None:
         valid = valid & mask.to(dtype=torch.bool, device=x.device)
 

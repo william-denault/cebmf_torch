@@ -8,11 +8,7 @@ from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
 def test_convolved_loglik_postmean():
     betahat = np.array([1, 2, 3, 4, 5], dtype=float)
     sebetahat = np.array([1, 0.4, 5, 1, 1], dtype=float)
-    scale = (
-        autoselect_scales_mix_norm(torch.tensor(betahat), torch.tensor(sebetahat))
-        .cpu()
-        .numpy()
-    )
+    scale = autoselect_scales_mix_norm(torch.tensor(betahat), torch.tensor(sebetahat)).cpu().numpy()
     location = np.zeros_like(scale)
     n = betahat.shape[0]
     p = scale.shape[0]

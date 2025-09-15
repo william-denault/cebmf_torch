@@ -62,9 +62,7 @@ def _ash_normal(
 
     L = get_data_loglik_normal_torch(x, s, location=loc, scale=scale)  # (J,K)
     log_pi0 = _optimize_mixture_weights(L, config)
-    pm_obj = posterior_mean_norm(
-        x, s, log_pi=log_pi0, data_loglik=L, location=loc, scale=scale
-    )
+    pm_obj = posterior_mean_norm(x, s, log_pi=log_pi0, data_loglik=L, location=loc, scale=scale)
     return scale, log_pi0, L, pm_obj
 
 
@@ -73,9 +71,7 @@ def _ash_exp(
     s: torch.Tensor,
     config: AshConfig,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, PosteriorMean]:
-    scale = autoselect_scales_mix_exp(
-        x, s, mult=config.mult
-    )  # (K,) with scale[0]=0 (spike)
+    scale = autoselect_scales_mix_exp(x, s, mult=config.mult)  # (K,) with scale[0]=0 (spike)
     L = get_data_loglik_exp_torch(x, s, scale=scale)  # (J,K)
     log_pi0 = _optimize_mixture_weights(L, config)
     pm_obj = posterior_mean_exp(x, s, log_pi=log_pi0, scale=scale)
@@ -119,21 +115,15 @@ class ASHResult:
     mode: float = 0.0
 
     @classmethod
-    def from_data(
-        cls, x: torch.Tensor, s: torch.Tensor, prior: PriorType, config: AshConfig
-    ) -> "ASHResult":
+    def from_data(cls, x: torch.Tensor, s: torch.Tensor, prior: PriorType, config: AshConfig) -> "ASHResult":
         """Factory method to create ASHResult from data."""
         scale, log_pi0, L, pm_obj = ash_optimisers[prior](x, s, config)
         pi0 = torch.exp(log_pi0)
         Lc = torch.maximum(
             L,
-            torch.tensor(
-                config.threshold_loglikelihood, dtype=L.dtype, device=L.device
-            ),
+            torch.tensor(config.threshold_loglikelihood, dtype=L.dtype, device=L.device),
         )
-        log_lik_rows = torch.logsumexp(
-            Lc + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1
-        )
+        log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
         log_lik = float(log_lik_rows.sum().item())
         return cls(
             post_mean=pm_obj.post_mean,

@@ -34,9 +34,7 @@ class CgbNet(nn.Module):
     def __init__(self, input_dim, hidden_dim=32, n_layers=2):
         super().__init__()
         self.input_layer = nn.Linear(input_dim, hidden_dim)
-        self.hidden_layers = nn.ModuleList(
-            [nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)]
-        )
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
         self.output_layer = nn.Linear(hidden_dim, 1)  # logit for π₂(x)
         self.mu_2 = nn.Parameter(torch.tensor(0.0))  # global mean of slab
 
@@ -62,9 +60,7 @@ def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.1, eps=1e-8):
     logp1 = -0.5 * ((targets - 0.0) ** 2 / var1 + torch.log(2 * torch.pi * var1))
     logp2 = -0.5 * ((targets - mu_2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
 
-    log_mix = torch.logaddexp(
-        torch.log(pi_1.clamp_min(eps)) + logp1, torch.log(pi_2.clamp_min(eps)) + logp2
-    )
+    log_mix = torch.logaddexp(torch.log(pi_1.clamp_min(eps)) + logp1, torch.log(pi_2.clamp_min(eps)) + logp2)
     if penalty > 1.0:
         # take mean spike prob for stability
         pi0_clamped = pi_1.mean().clamp_min(eps)
@@ -103,9 +99,7 @@ def m_step_sigma2(gamma2, mu2, targets, se):
 # Result container
 # -------------------------
 class CgbPosteriorResult:
-    def __init__(
-        self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param
-    ):
+    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -143,9 +137,7 @@ def sharp_cgb_posterior_means(
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Init model
-    model = CgbNet(
-        input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers
-    )
+    model = CgbNet(input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers)
     if model_param is not None:
         model.load_state_dict(model_param)
     optimizer = optim.Adam(model.parameters(), lr=lr)

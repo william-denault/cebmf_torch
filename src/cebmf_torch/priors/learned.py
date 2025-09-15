@@ -42,9 +42,7 @@ class LearnedBuilder(PriorBuilder):
         sebetahat: Tensor,
         model_param: Any | None = None,
     ) -> Prior:
-        obj = builder_functions[self.type](
-            X, betahat, sebetahat, model_param=model_param
-        )
+        obj = builder_functions[self.type](X, betahat, sebetahat, model_param=model_param)
 
         # A bit annoying that the different types have different ways of handling pi0
         match self.type:
