@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from enum import StrEnum, auto
-from typing import Any, Callable
+from typing import Any
 
 from torch import Tensor
 

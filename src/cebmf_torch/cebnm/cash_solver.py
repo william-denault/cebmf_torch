@@ -38,7 +38,7 @@ class DensityRegressionDataset(Dataset):
 # Define the CashNet model
 class CashNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes, n_layers):
-        super(CashNet, self).__init__()
+        super().__init__()
 
         # Input layer
         self.input_layer = nn.Linear(input_dim, hidden_dim)

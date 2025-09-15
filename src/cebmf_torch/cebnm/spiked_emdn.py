@@ -40,7 +40,7 @@ class MDN(nn.Module):
         self.pi = nn.Linear(hidden_dim, n_gaussians)  # includes spike (k=0)
         self.mu = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
         self.log_sigma = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
-        self.point_mass = float(0.0)
+        self.point_mass = 0.0
 
     def forward(self, x):
         x = torch.relu(self.fc_in(x))

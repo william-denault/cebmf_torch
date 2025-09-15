@@ -55,7 +55,7 @@ class CgbNet(nn.Module):
 # -------------------------
 # Loss (mixture NLL, stable)
 # -------------------------
-def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=float(1.1), eps=1e-8):
+def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.1, eps=1e-8):
     var1 = se**2
     var2 = sigma2_sq + se**2
 

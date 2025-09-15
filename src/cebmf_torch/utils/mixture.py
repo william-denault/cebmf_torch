@@ -1,5 +1,4 @@
 import math
-from typing import Optional
 
 import torch
 
@@ -11,9 +10,9 @@ def optimize_pi_logL(
     max_iters: int = 100,
     tol: float = 1e-6,
     verbose: bool = True,
-    batch_size: Optional[int] = None,
+    batch_size: int | None = None,
     shuffle: bool = False,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> torch.Tensor:
     """
     EM algorithm for optimizing mixture weights pi on the simplex given a log-likelihood matrix.

@@ -6,7 +6,6 @@ from torch import Tensor
 
 from cebmf_torch.utils.maths import (
     _LOG_SQRT_2PI,
-    log_norm_pdf,  # kept for API parity (unused here)
     logPhi,
     my_e2truncnorm,
     my_etruncnorm,
@@ -94,7 +93,6 @@ def ebnm_point_laplace(
     def closure():
         opt.zero_grad(set_to_none=True)
         w = torch.sigmoid(w_logit)
-        log_w = torch.log(w)  # log w
 
         pen = -pen_pi0 * (
             torch.log(
