@@ -1,15 +1,13 @@
 # torch_convolved_loglik.py
-import math
 
 import torch
 
+from .maths import _LOG_SQRT_2PI
+
 # ===== numerically-stable primitives =====
-_LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 
 
-def _logpdf_normal(
-    x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor
-) -> torch.Tensor:
+def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     z = (x - loc) / scale
     return -0.5 * z.pow(2) - torch.log(scale) - _LOG_SQRT_2PI
 
@@ -100,9 +98,7 @@ def convolved_logpdf_exp_torch(
     J = betahat.shape[0]
     K = scale.shape[0]
     if K < 2:
-        raise ValueError(
-            "scale must have length >= 2 (scale[0] for spike, scale[1:] for Exp)"
-        )
+        raise ValueError("scale must have length >= 2 (scale[0] for spike, scale[1:] for Exp)")
 
     # k=0: spike-at-0 convolved with Normal -> just Normal(0, s^2)
     out0 = _logpdf_normal(betahat, torch.zeros_like(betahat), sebetahat)  # (J,)
@@ -113,9 +109,7 @@ def convolved_logpdf_exp_torch(
     x = betahat.unsqueeze(1)  # (J,1)
     a = rate.unsqueeze(0)  # (1,K-1)
 
-    lg = (
-        torch.log(a) + 0.5 * (s * a).pow(2) - a * x + _logcdf_normal(x / s - s * a)
-    )  # (J,K-1)
+    lg = torch.log(a) + 0.5 * (s * a).pow(2) - a * x + _logcdf_normal(x / s - s * a)  # (J,K-1)
 
     # Concatenate first column
     L = torch.empty((J, K), dtype=torch.get_default_dtype(), device=betahat.device)

@@ -18,7 +18,7 @@ def test_rank1_iter_and_obj():
     Y = torch.tensor(X, dtype=torch.float32)
     m = cEBMF(Y, K=5, prior_L="norm", prior_F="norm")
     m.initialize("svd")
-    base = rmse((m.L @ m.F.T).cpu().numpy(), np.outer(u, v))
+    rmse((m.L @ m.F.T).cpu().numpy(), np.outer(u, v))
     for _ in range(100):
         m.iter_once()
     improved = rmse((m.L @ m.F.T).cpu().numpy(), np.outer(u, v))
