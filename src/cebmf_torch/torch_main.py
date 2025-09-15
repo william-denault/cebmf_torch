@@ -156,11 +156,11 @@ class cEBMF:
     def iter_once(self):
         tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
-            self.update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
+            self._update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
 
-        self.backfit()
+        self._backfit()
         self.update_tau()
-        self.cal_obj()
+        self._cal_obj()
 
     @torch.no_grad()
     def update_tau(self):
@@ -170,7 +170,7 @@ class cEBMF:
         - 'row_wise'   -> tau_row (N,), tau_map broadcast to (N,P)
         - 'column_wise'-> tau_col (P,), tau_map broadcast to (N,P)
         """
-        R2 = self.expected_residuals_squared()  # (N,P), zeros at missing
+        R2 = self._expected_residuals_squared()  # (N,P), zeros at missing
 
         match self.noise.type:
             case NoiseType.CONSTANT:
@@ -184,8 +184,12 @@ class cEBMF:
 
         self._update_tau(R2, dim=dim)
 
+    # =========================================================================
+    # Private Methods - Internal Implementation Details
+    # =========================================================================
+
     @torch.no_grad()
-    def update_factors(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
+    def _update_factors(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
         """Update both L[:,k] and F[:,k] factors."""
         self._update_L_factor(k, tau_map, eps)
         self._update_F_factor(k, tau_map, eps)
@@ -276,9 +280,9 @@ class cEBMF:
         self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
         self.pi0_F[k] = resF.pi0_null
 
-    def cal_obj(self):
+    def _cal_obj(self):
         # Data term
-        ER2 = self.expected_residuals_squared()
+        ER2 = self._expected_residuals_squared()
         if self.noise.type == NoiseType.CONSTANT:
             ll = self._compute_constat_loglik(ER2)
         else:
@@ -304,7 +308,7 @@ class cEBMF:
         )
 
     @torch.no_grad()
-    def backfit(self):
+    def _backfit(self):
         if not (self.model.allow_backfitting and self.model.K > 1):
             return
 
@@ -317,11 +321,11 @@ class cEBMF:
         self._prune_indices(to_drop_sorted)
 
     @torch.no_grad()
-    def update_fitted_value(self):
+    def _update_fitted_value(self):
         self.Y_fit = self.L @ self.F.T
 
     @torch.no_grad()
-    def expected_residuals_squared(self):
+    def _expected_residuals_squared(self):
         """
         E[(Y - sum_k L_k F_k)^2] on observed entries.
         Uses: (Y - E[Y])^2 - sum_k (E[L]^2)(E[F]^2)^T + sum_k E[L^2] E[F^2]^T
