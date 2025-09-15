@@ -184,27 +184,32 @@ class cEBMF:
 
         self._update_tau(R2, dim=dim)
 
+    @torch.no_grad()
     def update_factors(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
-        """
-        Update L[:,k], F[:,k] and their second moments using the current priors.
-        Handles scalar tau (tau_map=None) or elementwise tau (tau_map is (N,P)).
-        """
-        with torch.no_grad():  # ---------- Update L[:, k] ----------
-            Rk = self._partial_residual_masked(k)  # (N,P), zeros where missing
-            fk = self.F[:, k]  # (P,)
-            fk2 = self.F2[:, k]  # (P,)
+        """Update both L[:,k] and F[:,k] factors."""
+        self._update_L_factor(k, tau_map, eps)
+        self._update_F_factor(k, tau_map, eps)
 
-            if tau_map is None:
-                denom_l = (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)  # (N,)
-                num_l = Rk @ fk  # (N,)
-                se_l = torch.sqrt(1.0 / (self.tau * denom_l))
-            else:
-                denom_l = (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)  # (N,)
-                num_l = (tau_map * Rk) @ fk  # (N,)
-                se_l = torch.sqrt(1.0 / denom_l)
+    @torch.no_grad()
+    def _update_L_factor(self, k: int, tau_map: Tensor | None, eps: float) -> None:
+        """Update L[:,k] factor and its second moments."""
+        # Compute statistics
+        Rk = self._partial_residual_masked(k)  # (N,P), zeros where missing
+        fk = self.F[:, k]  # (P,)
+        fk2 = self.F2[:, k]  # (P,)
 
-            lhat = num_l / denom_l
+        if tau_map is None:
+            denom_l = (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)  # (N,)
+            num_l = Rk @ fk  # (N,)
+            se_l = torch.sqrt(1.0 / (self.tau * denom_l))
+        else:
+            denom_l = (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)  # (N,)
+            num_l = (tau_map * Rk) @ fk  # (N,)
+            se_l = torch.sqrt(1.0 / denom_l)
 
+        lhat = num_l / denom_l
+
+        # Fit prior
         X_model = self.update_cov_L(k)
         with torch.enable_grad():
             resL = self.prior_L_fn.fit(
@@ -213,30 +218,35 @@ class cEBMF:
                 sebetahat=se_l,
                 model_param=self.model_state_L[k],
             )
-        with torch.no_grad():
-            self.model_state_L[k] = resL.model_param
-            self.L[:, k] = resL.post_mean
-            self.L2[:, k] = resL.post_mean2
-            nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
-            self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
-            self.pi0_L[k] = resL.pi0_null
 
-            # ---------- Update F[:, k] ----------
-            Rk = self._partial_residual_masked(k)  # recompute with updated L
-            lk = self.L[:, k]  # (N,)
-            lk2 = self.L2[:, k]  # (N,)
+        # Update state
+        self.model_state_L[k] = resL.model_param
+        self.L[:, k] = resL.post_mean
+        self.L2[:, k] = resL.post_mean2
+        nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
+        self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
+        self.pi0_L[k] = resL.pi0_null
 
-            if tau_map is None:
-                denom_f = (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)  # (P,)
-                num_f = Rk.T @ lk  # (P,)
-                se_f = torch.sqrt(1.0 / (self.tau * denom_f))
-            else:
-                denom_f = (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)  # (P,)
-                num_f = (tau_map * Rk).T @ lk  # (P,)
-                se_f = torch.sqrt(1.0 / denom_f)
+    @torch.no_grad()
+    def _update_F_factor(self, k: int, tau_map: Tensor | None, eps: float) -> None:
+        """Update F[:,k] factor and its second moments."""
+        # Compute statistics (recompute Rk with updated L)
+        Rk = self._partial_residual_masked(k)
+        lk = self.L[:, k]  # (N,)
+        lk2 = self.L2[:, k]  # (N,)
 
-            fhat = num_f / denom_f
+        if tau_map is None:
+            denom_f = (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)  # (P,)
+            num_f = Rk.T @ lk  # (P,)
+            se_f = torch.sqrt(1.0 / (self.tau * denom_f))
+        else:
+            denom_f = (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)  # (P,)
+            num_f = (tau_map * Rk).T @ lk  # (P,)
+            se_f = torch.sqrt(1.0 / denom_f)
 
+        fhat = num_f / denom_f
+
+        # Fit prior
         X_model = self.update_cov_F(k)
         with torch.enable_grad():
             resF = self.prior_F_fn.fit(
@@ -245,14 +255,14 @@ class cEBMF:
                 sebetahat=se_f,
                 model_param=self.model_state_F[k],
             )
-        with torch.no_grad():
-            self.model_state_F[k] = resF.model_param
-            self.F[:, k] = resF.post_mean
-            self.F2[:, k] = resF.post_mean2
-            # store as scalar on device; PriorResult.loss already = -log_lik
-            nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
-            self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
-            self.pi0_F[k] = resF.pi0_null
+
+        # Update state
+        self.model_state_F[k] = resF.model_param
+        self.F[:, k] = resF.post_mean
+        self.F2[:, k] = resF.post_mean2
+        nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
+        self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
+        self.pi0_F[k] = resF.pi0_null
 
     def cal_obj(self):
         # Data term
@@ -348,7 +358,9 @@ class cEBMF:
         self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var)
         self.kl_l = torch.zeros(self.model.K, device=self.device)
         self.kl_f = torch.zeros(self.model.K, device=self.device)
-        self.pi0_L: list[Tensor | float | None] = [None] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
+        self.pi0_L: list[Tensor | float | None] = [
+            None
+        ] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
         self.pi0_F: list[Tensor | float | None] = [None] * self.model.K
         self.obj = []
 
