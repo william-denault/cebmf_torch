@@ -7,6 +7,7 @@ from torch import Tensor
 
 from cebmf_torch.priors import PRIOR_REGISTRY
 from cebmf_torch.utils.device import get_device
+from cebmf_torch.utils.maths import safe_tensor_to_float
 
 
 @dataclass
@@ -349,22 +350,13 @@ class cEBMF:
         R2 = (R2 * self.mask).clamp_min(0.0)  # zero where missing; no negatives
         return R2
 
-    def _pi0_min_value(self, pi0_val) -> float:
-        if pi0_val is None:
-            return float("-inf")
-        if isinstance(pi0_val, torch.Tensor):
-            if pi0_val.numel() == 0:
-                return float("-inf")
-            return float(pi0_val.min().item())
-        return float(pi0_val)
-
     def _should_prune_factor(self, k: int) -> bool:
         """
         Remove factor k if we have π₀ info and the smallest π₀ across coordinates
         (for any side that provided it) is ≥ thresh. (Your spec: use the *lowest* π₀.)
         """
-        pi0_min_L = self._pi0_min_value(self.pi0_L[k])
-        pi0_min_F = self._pi0_min_value(self.pi0_F[k])
+        pi0_min_L = safe_tensor_to_float(self.pi0_L[k])
+        pi0_min_F = safe_tensor_to_float(self.pi0_F[k])
         # if neither side provided π0, don't prune
         if pi0_min_L == float("-inf") and pi0_min_F == float("-inf"):
             return False
