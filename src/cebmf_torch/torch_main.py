@@ -1,5 +1,4 @@
 import math
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum, auto
 
@@ -36,6 +35,7 @@ def _impute_nan(Y: Tensor) -> Tensor:
     return Y_imp
 
 
+@dataclass
 class cEBMF:
     """
     Pure-PyTorch EBMF with proper NaN handling:
@@ -44,49 +44,45 @@ class cEBMF:
     - Mini-batch optimization for mixture weights inside ash().
     """
 
-    def __init__(
-        self,
-        data: Tensor,
-        K: int = 5,
-        prior_L: str | Callable = "norm",
-        prior_F: str | Callable = "norm",
-        type_noise: NoiseType = NoiseType.CONSTANT,
-        device: torch.device | None = None,
-        allow_backfitting: bool = True,
-        prune_pi0: float = 1 - 1e-3,
-        X_l: Tensor = None,
-        X_f: Tensor = None,
-        self_row_cov=False,
-        self_col_cov=False,
-    ):
-        self.device = device or get_device()
-        self.Y = data.to(self.device).float()
+    data: Tensor
+    K: int = 5
+    prior_L: str = "norm"
+    prior_F: str = "norm"
+    type_noise: NoiseType = NoiseType.CONSTANT
+    device: torch.device | None = None
+    allow_backfitting: bool = True
+    prune_thresh: float = 1 - 1e-3
+    X_l: Tensor | None = None
+    X_f: Tensor | None = None
+    self_row_cov: bool = False
+    self_col_cov: bool = False
+
+    def __post_init__(self):
+        self.device = self.device or get_device()
+        self.N, self.P = self.Y.shape
+        self._initialise_priors()
+        self._initialise_tensors()
+
+    def _initialise_priors(self):
+        self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.prior_L)
+        self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.prior_F)
+        self.model_state_L = [None] * self.K
+        self.model_state_F = [None] * self.K
+
+    def _initialise_tensors(self):
+        self.Y = self.data.to(self.device).float()
         self.mask = (~torch.isnan(self.Y)).float()  # 1 where observed, 0 where NaN
         self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
-        self.K = K
-        self.N, self.P = self.Y.shape
-        self.prior_L_fn = PRIOR_REGISTRY.get_builder(prior_L)
-        self.prior_F_fn = PRIOR_REGISTRY.get_builder(prior_F)
-        self.model_state_L = [None] * K
-        self.model_state_F = [None] * K
-        self.type_noise = type_noise
-        self.L = torch.zeros(self.N, K, device=self.device)
-        self.L2 = torch.zeros(self.N, K, device=self.device)
-        self.F = torch.zeros(self.P, K, device=self.device)
-        self.F2 = torch.zeros(self.P, K, device=self.device)
+        self.L = torch.zeros(self.N, self.K, device=self.device)
+        self.L2 = torch.zeros(self.N, self.K, device=self.device)
+        self.F = torch.zeros(self.P, self.K, device=self.device)
+        self.F2 = torch.zeros(self.P, self.K, device=self.device)
         self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var)
         self.kl_l = torch.zeros(self.K, device=self.device)
         self.kl_f = torch.zeros(self.K, device=self.device)
-        self.prune_thresh = prune_pi0
-        self.pi0_L = [None] * K  # store latest pi0 for L[:,k]; scalar or Tensor or None
-        self.pi0_F = [None] * K
+        self.pi0_L = [None] * self.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
+        self.pi0_F = [None] * self.K
         self.obj = []
-        self.X_l = X_l
-        self.X_f = X_f
-
-        self.self_row_cov = self_row_cov
-        self.self_col_cov = self_col_cov
-        self.allow_backfitting = allow_backfitting
 
     def initialize(self, method: str = "svd"):
         Y_for_init = _impute_nan(self.Y)
@@ -177,7 +173,7 @@ class cEBMF:
 
         if self.allow_backfitting and self.K > 1:
             print(self.K)
-            to_drop = [k for k in range(self.K) if self._should_prune_factor(k, self.prune_thresh)]
+            to_drop = [k for k in range(self.K) if self._should_prune_factor(k)]
             if len(to_drop) >= self.K:
                 keep_one = min(to_drop)
                 to_drop = [k for k in range(self.K) if k != keep_one]
@@ -351,7 +347,7 @@ class cEBMF:
             return float(pi0_val.min().item())
         return float(pi0_val)
 
-    def _should_prune_factor(self, k: int, thresh: float) -> bool:
+    def _should_prune_factor(self, k: int) -> bool:
         """
         Remove factor k if we have π₀ info and the smallest π₀ across coordinates
         (for any side that provided it) is ≥ thresh. (Your spec: use the *lowest* π₀.)
@@ -362,7 +358,7 @@ class cEBMF:
         if pi0_min_L == float("-inf") and pi0_min_F == float("-inf"):
             return False
         # If either side indicates "all near spike", prune.
-        return (pi0_min_L >= thresh) or (pi0_min_F >= thresh)
+        return (pi0_min_L >= self.prune_thresh) or (pi0_min_F >= self.prune_thresh)
 
     def _prune_indices(self, idxs: list[int]) -> None:
         """In-place prune of K and all factor-aligned structures."""
