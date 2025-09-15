@@ -134,32 +134,12 @@ class cEBMF:
         self._initialise_priors()
         self._initialise_tensors()
 
-    def _validate_inputs(self) -> None:
-        if self.model.K < 1:
-            raise ValueError(f"K must be >= 1, got {self.model.K}")
-        if torch.isnan(self.data).all():
-            raise ValueError("Data cannot be all NaN")
-        # More validation...
-
-    def _initialise_priors(self):
-        self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.model.prior_L)
-        self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.model.prior_F)
-        self.model_state_L = [None] * self.model.K
-        self.model_state_F = [None] * self.model.K
-
-    def _initialise_tensors(self):
-        self.mask = (~torch.isnan(self.Y)).float()  # 1 where observed, 0 where NaN
-        self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
-        self.L = torch.zeros(self.N, self.model.K, device=self.device)
-        self.L2 = torch.zeros(self.N, self.model.K, device=self.device)
-        self.F = torch.zeros(self.P, self.model.K, device=self.device)
-        self.F2 = torch.zeros(self.P, self.model.K, device=self.device)
-        self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var)
-        self.kl_l = torch.zeros(self.model.K, device=self.device)
-        self.kl_f = torch.zeros(self.model.K, device=self.device)
-        self.pi0_L = [None] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
-        self.pi0_F = [None] * self.model.K
-        self.obj = []
+    @torch.no_grad()
+    def fit(self, maxit: int = 50):
+        self.initialise_factors()
+        for _ in range(maxit):
+            self.iter_once()
+        return CEBMFResult(self.L, self.F, self.tau, self.obj)
 
     def initialise_factors(self, method: str = "svd"):
         if method not in INIT_STRATEGIES:
@@ -171,6 +151,22 @@ class cEBMF:
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
         self.update_tau()
+
+    @torch.no_grad()
+    def iter_once(self):
+        # ensure 1-D KL holders (length K)
+        if not hasattr(self, "kl_l"):
+            self.kl_l = torch.zeros(self.model.K, device=self.device)
+        if not hasattr(self, "kl_f"):
+            self.kl_f = torch.zeros(self.model.K, device=self.device)
+
+        tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
+        for k in range(self.model.K):
+            self.update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
+
+        self.backfit()
+        self.update_tau()
+        self.cal_obj()
 
     @torch.no_grad()
     def update_tau(self):
@@ -194,55 +190,7 @@ class cEBMF:
 
         self._set_tau(R2, dim=dim)
 
-    @torch.no_grad()
-    def _set_tau(self, R2: Tensor, dim: None | int) -> None:
-        m = self.mask.sum(dim=dim).clamp_min(1.0)
-        mean_R2 = R2.sum(dim=dim) / m
-        tau = 1.0 / (mean_R2)
-        if dim is None:
-            self.tau = tau  # scalar (back-compat)
-            self.tau_map = torch.full((self.N, self.P), tau.item(), device=self.device, dtype=R2.dtype)
-        elif dim == 1:
-            self.tau_map = tau.view(-1, 1).expand(self.N, self.P)  # (N,P)
-            self.tau = self.tau_map  # if downstream expects elementwise
-        elif dim == 0:
-            self.tau_map = tau.view(1, -1).expand(self.N, self.P)  # (N,P)
-            self.tau = self.tau_map  # if downstream expects elementwise
-        else:
-            raise ValueError("dim must be None, 0, or 1")
-
-    @torch.no_grad()
-    def _partial_residual_masked(self, k: int) -> Tensor:
-        # Rk for observed entries only
-        recon = self.L @ self.F.T
-        k_contrib = torch.outer(self.L[:, k], self.F[:, k])
-        Rk = (self.Y0 - (recon - k_contrib)) * self.mask
-        return Rk
-
-    @torch.no_grad()
-    def iter_once(self):
-        # ensure 1-D KL holders (length K)
-        if not hasattr(self, "kl_l"):
-            self.kl_l = torch.zeros(self.model.K, device=self.device)
-        if not hasattr(self, "kl_f"):
-            self.kl_f = torch.zeros(self.model.K, device=self.device)
-
-        tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
-        for k in range(self.model.K):
-            self.update_factor(k, tau_map=tau_map, eps=NUMERICAL_EPS)
-
-        if self.model.allow_backfitting and self.model.K > 1:
-            to_drop = [k for k in range(self.model.K) if self._should_prune_factor(k)]
-            if len(to_drop) >= self.model.K:
-                keep_one = min(to_drop)
-                to_drop = [k for k in range(self.model.K) if k != keep_one]
-            # drop highest indices first to avoid reindex churn
-            to_drop_sorted = sorted(to_drop, reverse=True)
-            self._prune_indices(to_drop_sorted)
-        self.update_tau()
-        self.cal_obj()
-
-    def update_factor(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
+    def update_factors(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
         """
         Update L[:,k], F[:,k] and their second moments using the current priors.
         Handles scalar tau (tau_map=None) or elementwise tau (tau_map is (N,P)).
@@ -333,13 +281,26 @@ class cEBMF:
         self.obj.append(loss)
 
     @torch.no_grad()
+    def backfit(self):
+        if not (self.model.allow_backfitting and self.model.K > 1):
+            return
+
+        to_drop = [k for k in range(self.model.K) if self._should_prune_factor(k)]
+        if len(to_drop) >= self.model.K:
+            keep_one = min(to_drop)
+            to_drop = [k for k in range(self.model.K) if k != keep_one]
+        # drop highest indices first to avoid reindex churn
+        to_drop_sorted = sorted(to_drop, reverse=True)
+        self._prune_indices(to_drop_sorted)
+
+    @torch.no_grad()
     def update_cov_L(self, k: int):
         return self._build_covariate_matrix(
             external_cov=self.covariate.X_l,
             self_cov_enabled=self.covariate.self_row_cov,
             factors=self.L,
             k=k,
-            dim_size=self.N
+            dim_size=self.N,
         )
 
     @torch.no_grad()
@@ -349,19 +310,12 @@ class cEBMF:
             self_cov_enabled=self.covariate.self_col_cov,
             factors=self.F,
             k=k,
-            dim_size=self.P
+            dim_size=self.P,
         )
 
     @torch.no_grad()
     def update_fitted_value(self):
         self.Y_fit = self.L @ self.F.T
-
-    @torch.no_grad()
-    def fit(self, maxit: int = 50):
-        self.initialise_factors()
-        for _ in range(maxit):
-            self.iter_once()
-        return CEBMFResult(self.L, self.F, self.tau, self.obj)
 
     @torch.no_grad()
     def expected_residuals_squared(self):
@@ -376,6 +330,58 @@ class cEBMF:
         R2 = resid_mean_sq - first_moment_sq + second_moment
         R2 = (R2 * self.mask).clamp_min(0.0)  # zero where missing; no negatives
         return R2
+
+    def _validate_inputs(self) -> None:
+        if self.model.K < 1:
+            raise ValueError(f"K must be >= 1, got {self.model.K}")
+        if torch.isnan(self.data).all():
+            raise ValueError("Data cannot be all NaN")
+        # More validation...
+
+    def _initialise_priors(self):
+        self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.model.prior_L)
+        self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.model.prior_F)
+        self.model_state_L = [None] * self.model.K
+        self.model_state_F = [None] * self.model.K
+
+    def _initialise_tensors(self):
+        self.mask = (~torch.isnan(self.Y)).float()  # 1 where observed, 0 where NaN
+        self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
+        self.L = torch.zeros(self.N, self.model.K, device=self.device)
+        self.L2 = torch.zeros(self.N, self.model.K, device=self.device)
+        self.F = torch.zeros(self.P, self.model.K, device=self.device)
+        self.F2 = torch.zeros(self.P, self.model.K, device=self.device)
+        self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var)
+        self.kl_l = torch.zeros(self.model.K, device=self.device)
+        self.kl_f = torch.zeros(self.model.K, device=self.device)
+        self.pi0_L = [None] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
+        self.pi0_F = [None] * self.model.K
+        self.obj = []
+
+    @torch.no_grad()
+    def _set_tau(self, R2: Tensor, dim: None | int) -> None:
+        m = self.mask.sum(dim=dim).clamp_min(1.0)
+        mean_R2 = R2.sum(dim=dim) / m
+        tau = 1.0 / (mean_R2)
+        if dim is None:
+            self.tau = tau  # scalar (back-compat)
+            self.tau_map = torch.full((self.N, self.P), tau.item(), device=self.device, dtype=R2.dtype)
+        elif dim == 1:
+            self.tau_map = tau.view(-1, 1).expand(self.N, self.P)  # (N,P)
+            self.tau = self.tau_map  # if downstream expects elementwise
+        elif dim == 0:
+            self.tau_map = tau.view(1, -1).expand(self.N, self.P)  # (N,P)
+            self.tau = self.tau_map  # if downstream expects elementwise
+        else:
+            raise ValueError("dim must be None, 0, or 1")
+
+    @torch.no_grad()
+    def _partial_residual_masked(self, k: int) -> Tensor:
+        # Rk for observed entries only
+        recon = self.L @ self.F.T
+        k_contrib = torch.outer(self.L[:, k], self.F[:, k])
+        Rk = (self.Y0 - (recon - k_contrib)) * self.mask
+        return Rk
 
     def _should_prune_factor(self, k: int) -> bool:
         """
