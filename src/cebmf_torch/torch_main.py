@@ -1,6 +1,7 @@
 import math
 from dataclasses import dataclass, field
 from enum import StrEnum, auto
+from typing import Protocol
 
 import torch
 from torch import Tensor
@@ -8,6 +9,70 @@ from torch import Tensor
 from cebmf_torch.priors import PRIOR_REGISTRY
 from cebmf_torch.utils.device import get_device
 from cebmf_torch.utils.maths import safe_tensor_to_float
+
+# Add at top of file after imports:
+NUMERICAL_EPS = 1e-12
+RANDOM_INIT_SCALE = 0.01
+DEFAULT_PRUNE_THRESH = 1 - 1e-3
+
+
+# Initialization strategies
+class InitialisationStrategy(Protocol):
+    """Protocol for factor initialization strategies."""
+
+    def __call__(self, Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
+        """
+        Initialize L and F matrices.
+
+        Args:
+            Y: Input data tensor (N, P)
+            N: Number of rows
+            P: Number of columns
+            K: Number of factors
+            device: Target device
+
+        Returns:
+            Tuple of (L, F) tensors
+        """
+        ...
+
+
+def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
+    """SVD-based initialization strategy."""
+    Y_for_init = _impute_nan(Y)
+    U, S, Vh = torch.linalg.svd(Y_for_init, full_matrices=False)
+    K_actual = min(K, S.shape[0])
+    L = (U[:, :K_actual] * S[:K_actual]).contiguous()
+    F = Vh[:K_actual, :].T.contiguous()
+
+    # Pad with zeros if K > rank
+    if K_actual < K:
+        L = torch.cat([L, torch.zeros(N, K - K_actual, device=device)], dim=1)
+        F = torch.cat([F, torch.zeros(P, K - K_actual, device=device)], dim=1)
+
+    return L, F
+
+
+def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
+    """Random initialization strategy."""
+    L = torch.randn(N, K, device=device) * RANDOM_INIT_SCALE
+    F = torch.randn(P, K, device=device) * RANDOM_INIT_SCALE
+    return L, F
+
+
+def zero_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
+    """Zero initialization strategy."""
+    L = torch.zeros(N, K, device=device)
+    F = torch.zeros(P, K, device=device)
+    return L, F
+
+
+# Registry for initialization strategies
+INIT_STRATEGIES = {
+    "svd": svd_initialise,
+    "random": random_initialise,
+    "zero": zero_initialise,
+}
 
 
 @dataclass
@@ -30,7 +95,7 @@ class ModelParams:
     prior_L: str = "norm"
     prior_F: str = "norm"
     allow_backfitting: bool = True
-    prune_thresh: float = 1 - 1e-3
+    prune_thresh: float = DEFAULT_PRUNE_THRESH
 
 
 @dataclass
@@ -96,18 +161,13 @@ class cEBMF:
         self.pi0_F = [None] * self.model.K
         self.obj = []
 
-    def initialize(self, method: str = "svd"):
-        Y_for_init = _impute_nan(self.Y)
-        if method == "svd":
-            U, S, Vh = torch.linalg.svd(Y_for_init, full_matrices=False)
-            K = min(self.model.K, S.shape[0])
-            self.L = (U[:, :K] * S[:K]).contiguous()
-            self.F = Vh[:K, :].T.contiguous()
+    def initialise_factors(self, method: str = "svd"):
+        if method not in INIT_STRATEGIES:
+            raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
 
-        else:
-            # random init
-            self.L = torch.randn(self.N, self.model.K, device=self.device) * 0.01
-            self.F = torch.randn(self.P, self.model.K, device=self.device) * 0.01
+        initialise_fn = INIT_STRATEGIES[method]
+        self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
+
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
         self.update_tau()
@@ -161,30 +221,17 @@ class cEBMF:
 
     @torch.no_grad()
     def iter_once(self):
-        eps = 1e-12
         # ensure 1-D KL holders (length K)
         if not hasattr(self, "kl_l"):
             self.kl_l = torch.zeros(self.model.K, device=self.device)
         if not hasattr(self, "kl_f"):
             self.kl_f = torch.zeros(self.model.K, device=self.device)
 
-            # choose tau map depending on mode
-        tau_map = None
-        if self.noise.type == NoiseType.CONSTANT:
-            # tau_scalar = float(self.tau.item())
-            pass
-        elif self.noise.type == NoiseType.ROW_WISE:
-            tau_map = self.tau_map  # (N,P)
-        elif self.noise.type == NoiseType.COLUMN_WISE:
-            tau_map = self.tau_map  # (N,P)
-        else:
-            raise ValueError("Invalid type_noise")
-
+        tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
-            self.update_factor(k, tau_map=tau_map, eps=eps)
+            self.update_factor(k, tau_map=tau_map, eps=NUMERICAL_EPS)
 
         if self.model.allow_backfitting and self.model.K > 1:
-            print(self.model.K)
             to_drop = [k for k in range(self.model.K) if self._should_prune_factor(k)]
             if len(to_drop) >= self.model.K:
                 keep_one = min(to_drop)
@@ -195,7 +242,7 @@ class cEBMF:
         self.update_tau()
         self.cal_obj()
 
-    def update_factor(self, k: int, tau_map: Tensor | None = None, eps: float = 1e-12) -> None:
+    def update_factor(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
         """
         Update L[:,k], F[:,k] and their second moments using the current priors.
         Handles scalar tau (tau_map=None) or elementwise tau (tau_map is (N,P)).
@@ -215,7 +262,6 @@ class cEBMF:
                 se_l = torch.sqrt(1.0 / denom_l)
 
             lhat = num_l / denom_l
-        # print(denom_l)
 
         X_model = self.update_cov_L(k)
         with torch.enable_grad():
@@ -331,7 +377,7 @@ class cEBMF:
 
     @torch.no_grad()
     def fit(self, maxit: int = 50):
-        self.initialize()
+        self.initialise_factors()
         for _ in range(maxit):
             self.iter_once()
         return CEBMFResult(self.L, self.F, self.tau, self.obj)
@@ -390,7 +436,7 @@ def normal_means_loglik(
     Et2: torch.Tensor,
     mask: torch.Tensor | None = None,
     reduce: str = "sum",
-    eps: float = 1e-12,
+    eps: float = NUMERICAL_EPS,
 ) -> torch.Tensor:
     """
     Expected normal-means log-likelihood:
