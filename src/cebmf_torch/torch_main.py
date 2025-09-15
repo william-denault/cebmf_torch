@@ -175,10 +175,10 @@ class cEBMF:
         match self.noise.type:
             case NoiseType.CONSTANT:
                 dim = None
-            case NoiseType.ROW_WISE:
-                dim = 1
             case NoiseType.COLUMN_WISE:
                 dim = 0
+            case NoiseType.ROW_WISE:
+                dim = 1
             case _:
                 raise ValueError("type_noise must be 'constant', 'row_wise', or 'column_wise'")
 
@@ -210,7 +210,13 @@ class cEBMF:
         lhat = num_l / denom_l
 
         # Fit prior
-        X_model = self.update_cov_L(k)
+        X_model = self._build_covariate_matrix(
+            external_cov=self.covariate.X_l,
+            self_cov_enabled=self.covariate.self_row_cov,
+            factors=self.L,
+            k=k,
+            dim_size=self.N,
+        )
         with torch.enable_grad():
             resL = self.prior_L_fn.fit(
                 X=X_model,
@@ -247,7 +253,13 @@ class cEBMF:
         fhat = num_f / denom_f
 
         # Fit prior
-        X_model = self.update_cov_F(k)
+        X_model = self._build_covariate_matrix(
+            external_cov=self.covariate.X_f,
+            self_cov_enabled=self.covariate.self_col_cov,
+            factors=self.F,
+            k=k,
+            dim_size=self.P,
+        )
         with torch.enable_grad():
             resF = self.prior_F_fn.fit(
                 X=X_model,
@@ -268,21 +280,28 @@ class cEBMF:
         # Data term
         ER2 = self.expected_residuals_squared()
         if self.noise.type == NoiseType.CONSTANT:
-            m = self.mask.sum().clamp_min(1.0)
-            ll = -0.5 * (
-                m * (torch.log(torch.tensor(2 * torch.pi, device=self.device)) - torch.log(self.tau))
-                + self.tau * ER2.sum()
-            )
+            ll = self._compute_constat_loglik(ER2)
         else:
-            obs = self.mask.bool()
-            ll = -0.5 * (
-                torch.log(torch.tensor(2 * torch.pi, device=self.device)) * obs.sum()
-                - torch.log(self.tau_map[obs]).sum()
-                + (self.tau_map * ER2)[obs].sum()
-            )
+            ll = self._compute_elementwise_loglik(ER2)
+
         KL = self.kl_l.sum() + self.kl_f.sum()
         loss = (-ll + KL).item()  # minimize this (negative ELBO)
         self.obj.append(loss)
+
+    def _compute_constat_loglik(self, ER2: Tensor) -> Tensor:
+        m = self.mask.sum().clamp_min(1.0)
+        return -0.5 * (
+            m * (torch.log(torch.tensor(2 * torch.pi, device=self.device)) - torch.log(self.tau))
+            + self.tau * ER2.sum()
+        )
+
+    def _compute_elementwise_loglik(self, ER2: Tensor) -> Tensor:
+        obs = self.mask.bool()
+        return -0.5 * (
+            torch.log(torch.tensor(2 * torch.pi, device=self.device)) * obs.sum()
+            - torch.log(self.tau_map[obs]).sum()
+            + (self.tau_map * ER2)[obs].sum()
+        )
 
     @torch.no_grad()
     def backfit(self):
@@ -296,26 +315,6 @@ class cEBMF:
         # drop highest indices first to avoid reindex churn
         to_drop_sorted = sorted(to_drop, reverse=True)
         self._prune_indices(to_drop_sorted)
-
-    @torch.no_grad()
-    def update_cov_L(self, k: int):
-        return self._build_covariate_matrix(
-            external_cov=self.covariate.X_l,
-            self_cov_enabled=self.covariate.self_row_cov,
-            factors=self.L,
-            k=k,
-            dim_size=self.N,
-        )
-
-    @torch.no_grad()
-    def update_cov_F(self, k: int):
-        return self._build_covariate_matrix(
-            external_cov=self.covariate.X_f,
-            self_cov_enabled=self.covariate.self_col_cov,
-            factors=self.F,
-            k=k,
-            dim_size=self.P,
-        )
 
     @torch.no_grad()
     def update_fitted_value(self):
@@ -366,20 +365,21 @@ class cEBMF:
 
     @torch.no_grad()
     def _update_tau(self, R2: Tensor, dim: None | int) -> None:
+        if dim not in (None, 0, 1):
+            raise ValueError("dim must be None, 0, or 1")
+
         m = self.mask.sum(dim=dim).clamp_min(1.0)
         mean_R2 = R2.sum(dim=dim) / m
         tau = 1.0 / (mean_R2)
+
         if dim is None:
             self.tau = tau  # scalar (back-compat)
             self.tau_map = torch.full((self.N, self.P), tau.item(), device=self.device, dtype=R2.dtype)
-        elif dim == 1:
-            self.tau_map = tau.view(-1, 1).expand(self.N, self.P)  # (N,P)
-            self.tau = self.tau_map  # if downstream expects elementwise
-        elif dim == 0:
-            self.tau_map = tau.view(1, -1).expand(self.N, self.P)  # (N,P)
-            self.tau = self.tau_map  # if downstream expects elementwise
-        else:
-            raise ValueError("dim must be None, 0, or 1")
+            return
+
+        view = (-1, 1) if dim == 1 else (1, -1)
+        self.tau_map = tau.view(*view).expand(self.N, self.P)  # (N,P)
+        self.tau = self.tau_map  # if downstream expects elementwise
 
     @torch.no_grad()
     def _partial_residual_masked(self, k: int) -> Tensor:
