@@ -4,9 +4,10 @@ import torch
 from torch import Tensor
 
 _TWOPI = 2.0 * math.pi
-_SQRT_2PI = math.sqrt(2.0 * math.pi)
+_SQRT_2PI = math.sqrt(_TWOPI)
 _EPS = 1e-12
-_LOG_SQRT_2PI = 0.5 * math.log(_TWOPI)
+_LOG_2PI = math.log(_TWOPI)
+_LOG_SQRT_2PI = 0.5 * _LOG_2PI
 
 
 def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:

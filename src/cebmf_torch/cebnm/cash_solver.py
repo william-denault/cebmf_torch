@@ -7,11 +7,11 @@ import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 
-from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch
-from cebmf_torch.utils.torch_posterior import posterior_mean_norm
+from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 
 # Import utils.py directly
-from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_norm
+from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
+from cebmf_torch.utils.posterior import posterior_mean_norm
 
 
 # Define dataset class that includes observation noise
@@ -38,7 +38,7 @@ class DensityRegressionDataset(Dataset):
 # Define the CashNet model
 class CashNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes, n_layers):
-        super(CashNet, self).__init__()
+        super().__init__()
 
         # Input layer
         self.input_layer = nn.Linear(input_dim, hidden_dim)

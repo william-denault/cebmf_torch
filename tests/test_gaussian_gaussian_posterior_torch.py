@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch
-from cebmf_torch.utils.torch_utils_mix import autoselect_scales_mix_norm
+from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
+from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
 
 
 def test_convolved_loglik_postmean():
@@ -71,11 +71,11 @@ def test_convolved_loglik_postmean():
     )
 
     # Apply log-sum-exp with uniform pi
-    log_pi = np.log(np.full((n, p), 1 / p))
-    res = np.log(np.exp(data_loglik) * (1 / p))
+    np.log(np.full((n, p), 1 / p))
+    np.log(np.exp(data_loglik) * (1 / p))
 
     # Reproduce "expected_result" matrix using original constants for sanity
-    expected_res = np.array(
+    np.array(
         [
             [
                 -2.0667347,

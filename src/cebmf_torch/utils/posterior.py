@@ -1,10 +1,6 @@
-import math
-
 import torch
 
-from .torch_utils import my_e2truncnorm, my_etruncnorm
-
-_LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
+from .maths import _LOG_SQRT_2PI, my_e2truncnorm, my_etruncnorm
 
 
 def _logpdf_normal(
@@ -23,7 +19,7 @@ def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
 # from cebmf.routines.distribution_operation import get_data_loglik_normal
 
 
-class PosteriorMeanExp:
+class PosteriorMean:
     def __init__(self, post_mean, post_mean2, post_sd):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
@@ -79,7 +75,7 @@ def posterior_mean_exp(
     sebetahat: torch.Tensor,
     log_pi: torch.Tensor,
     scale: torch.Tensor,
-) -> PosteriorMeanExp:
+) -> PosteriorMean:
     """
     Torch version of your posterior_mean_exp with the same numerics/structure.
     Shapes:
@@ -151,14 +147,7 @@ def posterior_mean_exp(
     post_mean2 = post_mean2 + mu**2 + 2 * mu * post_mean
     post_mean = post_mean + mu
 
-    return PosteriorMeanExp(post_mean, post_mean2, post_sd)
-
-
-class PosteriorMeanNorm:
-    def __init__(self, post_mean, post_mean2, post_sd):
-        self.post_mean = post_mean
-        self.post_mean2 = post_mean2
-        self.post_sd = post_sd
+    return PosteriorMean(post_mean, post_mean2, post_sd)
 
 
 @torch.no_grad()
@@ -182,7 +171,7 @@ def posterior_mean_norm(
     data_loglik: torch.Tensor,
     scale: torch.Tensor,
     location: torch.Tensor | None = None,
-) -> PosteriorMeanNorm:
+) -> PosteriorMean:
     """
     Torch version of your posterior_mean_norm.
     location: (K,) or (J,K); if None, zeros like scale.
@@ -235,7 +224,7 @@ def posterior_mean_norm(
     post_mean2 = torch.sum(resp * (t_ind_Var + m_comp.pow(2)), dim=1)
     post_sd = torch.sqrt(torch.clamp(post_mean2 - post_mean.pow(2), min=0.0))
 
-    return PosteriorMeanNorm(post_mean, post_mean2, post_sd)
+    return PosteriorMean(post_mean, post_mean2, post_sd)
 
 
 # --- point-mass + normal prior posterior (Torch) ---
