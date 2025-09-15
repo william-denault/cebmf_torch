@@ -173,6 +173,7 @@ Mixture Density Networks
 One way to estimate a prior that depends on covariates is to use a Mixture Density Network (MDN).
 An MDN is a neural network that outputs the parameters of a mixture distribution.
 For example, suppose we wanted to use a mixture of Gaussians prior on the loadings
+(we call this :code:`emdm` in the code)
 
 .. math::
       g(\cdot, z_i, \mathbf{\theta} ) = \sum_{j=1}^J \pi_j(z_i) \mathcal{N}(\cdot, \mu_j(z_i), \sigma_j^2(z_i)).
@@ -183,6 +184,16 @@ Then, the MDN would take the covariates :math:`z_i`
 as input and output the mixture weights :math:`\pi_j(z_i)`, means :math:`\mu_j(z_i)` and variances :math:`\sigma_j^2(z_i)`.
 Our task in the CEBMF problem is then to estimate the parameters of the MDN, :math:`\mathbf{\theta}`, from the data, as well
 as the posterior distribution of the loadings and factors.
+
+An alternative parameterization which we use in the code fixes the mean and variance of single Gaussian,
+and we learn the weights between a delta function at zero and a Gaussian with known mean and variance
+(we call this :code:`cgb` in the code):
+
+.. math::
+      g(\cdot, z_i, \mathbf{\theta} ) = \pi(z_i) \delta_0(\cdot) + (1 - \pi(z_i)) \mathcal{N}(\cdot, \mu, \sigma^2).
+
+In this example, we learn the function :math:`\pi(z_i)` with a neural network, 
+while the mean :math:`\mu` and variance :math:`\sigma^2` are fixed.
 
 .. admonition:: TODO
 
