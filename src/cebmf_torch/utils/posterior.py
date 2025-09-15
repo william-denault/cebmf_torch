@@ -1,15 +1,9 @@
-import math
-
 import torch
 
-from .torch_utils import my_e2truncnorm, my_etruncnorm
-
-_LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
+from .maths import _LOG_SQRT_2PI, my_e2truncnorm, my_etruncnorm
 
 
-def _logpdf_normal(
-    x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor
-) -> torch.Tensor:
+def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     z = (x - loc) / scale
     return -0.5 * z.pow(2) - torch.log(scale) - _LOG_SQRT_2PI
 
@@ -23,7 +17,7 @@ def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
 # from cebmf.routines.distribution_operation import get_data_loglik_normal
 
 
-class PosteriorMeanExp:
+class PosteriorMean:
     def __init__(self, post_mean, post_mean2, post_sd):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
@@ -31,9 +25,7 @@ class PosteriorMeanExp:
 
 
 @torch.no_grad()
-def wpost_exp(
-    x: torch.Tensor, s: torch.Tensor, w: torch.Tensor, scale: torch.Tensor
-) -> torch.Tensor:
+def wpost_exp(x: torch.Tensor, s: torch.Tensor, w: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     """
     Responsibilities for spike+exponential mixture prior on (theta>=0).
     Inputs:
@@ -79,7 +71,7 @@ def posterior_mean_exp(
     sebetahat: torch.Tensor,
     log_pi: torch.Tensor,
     scale: torch.Tensor,
-) -> PosteriorMeanExp:
+) -> PosteriorMean:
     """
     Torch version of your posterior_mean_exp with the same numerics/structure.
     Shapes:
@@ -119,20 +111,14 @@ def posterior_mean_exp(
         s_i = sebetahat[i]
         m_tilt = x_i - (s_i**2) * a  # (K-1,)
 
-        e1 = my_etruncnorm(
-            torch.zeros_like(m_tilt), torch.full_like(m_tilt, float("inf")), m_tilt, s_i
-        )
-        e2 = my_e2truncnorm(
-            torch.zeros_like(m_tilt), torch.full_like(m_tilt, 99999.0), m_tilt, s_i
-        )
+        e1 = my_etruncnorm(torch.zeros_like(m_tilt), torch.full_like(m_tilt, float("inf")), m_tilt, s_i)
+        e2 = my_e2truncnorm(torch.zeros_like(m_tilt), torch.full_like(m_tilt, 99999.0), m_tilt, s_i)
 
         # Mix only over Exp components (skip spike at 0)
         r_exp = post_assign[i, 1:]  # (K-1,)
         post_mean[i] = torch.sum(r_exp * e1)
         post_mean2[i] = torch.sum(r_exp * e2)
-        post_mean2[i] = torch.maximum(
-            post_mean2[i], post_mean[i]
-        )  # mimic original guard
+        post_mean2[i] = torch.maximum(post_mean2[i], post_mean[i])  # mimic original guard
 
     # Handle infinite s
     if torch.isinf(sebetahat).any():
@@ -141,9 +127,7 @@ def posterior_mean_exp(
         # post_mean[inf] = sum_k r_k / a_k
         post_mean[inf_mask] = torch.sum(post_assign[inf_mask, 1:] / a, dim=1)
         # post_mean2[inf] = sum_k 2 r_k / a_k^2
-        post_mean2[inf_mask] = torch.sum(
-            2.0 * post_assign[inf_mask, 1:] / (a**2), dim=1
-        )
+        post_mean2[inf_mask] = torch.sum(2.0 * post_assign[inf_mask, 1:] / (a**2), dim=1)
 
     post_sd = torch.sqrt(torch.clamp(post_mean2 - post_mean**2, min=0.0))
 
@@ -151,20 +135,11 @@ def posterior_mean_exp(
     post_mean2 = post_mean2 + mu**2 + 2 * mu * post_mean
     post_mean = post_mean + mu
 
-    return PosteriorMeanExp(post_mean, post_mean2, post_sd)
-
-
-class PosteriorMeanNorm:
-    def __init__(self, post_mean, post_mean2, post_sd):
-        self.post_mean = post_mean
-        self.post_mean2 = post_mean2
-        self.post_sd = post_sd
+    return PosteriorMean(post_mean, post_mean2, post_sd)
 
 
 @torch.no_grad()
-def apply_log_sum_exp(
-    data_loglik: torch.Tensor, assignment_loglik: torch.Tensor
-) -> torch.Tensor:
+def apply_log_sum_exp(data_loglik: torch.Tensor, assignment_loglik: torch.Tensor) -> torch.Tensor:
     """
     Row-wise: (L + log_pi) - logsumexp(L + log_pi, axis=1).
     Uses the provided log_sum_exp helper if desired; here we use torch.logsumexp.
@@ -182,7 +157,7 @@ def posterior_mean_norm(
     data_loglik: torch.Tensor,
     scale: torch.Tensor,
     location: torch.Tensor | None = None,
-) -> PosteriorMeanNorm:
+) -> PosteriorMean:
     """
     Torch version of your posterior_mean_norm.
     location: (K,) or (J,K); if None, zeros like scale.
@@ -235,7 +210,7 @@ def posterior_mean_norm(
     post_mean2 = torch.sum(resp * (t_ind_Var + m_comp.pow(2)), dim=1)
     post_sd = torch.sqrt(torch.clamp(post_mean2 - post_mean.pow(2), min=0.0))
 
-    return PosteriorMeanNorm(post_mean, post_mean2, post_sd)
+    return PosteriorMean(post_mean, post_mean2, post_sd)
 
 
 # --- point-mass + normal prior posterior (Torch) ---
@@ -280,8 +255,6 @@ def posterior_point_mass_normal(
     sigma_post2 = 1.0 / (1.0 / sigma_0**2 + 1.0 / se**2)
 
     post_mean = w0 * mu0 + w1 * mu_post
-    post_var = w0 * (mu0 - post_mean).pow(2) + w1 * (
-        sigma_post2 + (mu_post - post_mean).pow(2)
-    )
+    post_var = w0 * (mu0 - post_mean).pow(2) + w1 * (sigma_post2 + (mu_post - post_mean).pow(2))
 
     return post_mean, post_var

@@ -3,18 +3,18 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import os
+import sys
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'cebmf_torch'
-copyright = '2025, william-denault'
-author = 'william-denault'
+project = "cebmf_torch"
+copyright = "2025, william-denault"
+author = "william-denault"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
-
-import os
-import sys
 
 extensions = [
     'myst_nb',
@@ -51,15 +51,15 @@ nb_execution_mode = "off"  # never execute notebooks
 
 # Ensure the package can be imported by Sphinx
 sys.path.insert(0, os.path.dirname(os.getcwd()))
-sys.path.insert(0, os.path.abspath('../'))
-sys.path.insert(1, os.path.abspath('../../'))
-sys.path.insert(0, os.path.abspath('../../src/'))
+sys.path.insert(0, os.path.abspath("../"))
+sys.path.insert(1, os.path.abspath("../../"))
+sys.path.insert(0, os.path.abspath("../../src/"))
 
 # autosummary removed to avoid importing modules at builder init
 
 # Autodoc settings
-autodoc_member_order = 'bysource'
-autodoc_typehints = 'description'
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
 
 # Mock heavy or optional imports that aren't needed to build docs
 autodoc_mock_imports = []
@@ -76,7 +76,7 @@ intersphinx_disabled_domains = ["std"]
 
 templates_path = ["_templates"]
 # source_suffix = '.md'
-master_doc = 'index'
+master_doc = "index"
 
 # -- Options for EPUB output
 epub_show_urls = "footnote"

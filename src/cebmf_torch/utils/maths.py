@@ -4,19 +4,16 @@ import torch
 from torch import Tensor
 
 _TWOPI = 2.0 * math.pi
-_SQRT_2PI = math.sqrt(2.0 * math.pi)
+_SQRT_2PI = math.sqrt(_TWOPI)
 _EPS = 1e-12
-_LOG_SQRT_2PI = 0.5 * math.log(_TWOPI)
+_LOG_2PI = math.log(_TWOPI)
+_LOG_SQRT_2PI = 0.5 * _LOG_2PI
 
 
 def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
     # log N(x | loc, scale)
     z = (x - loc) / (scale + 1e-32)
-    return (
-        -0.5 * torch.log(torch.tensor(_TWOPI, device=x.device))
-        - torch.log(scale + 1e-32)
-        - 0.5 * z * z
-    )
+    return -0.5 * torch.log(torch.tensor(_TWOPI, device=x.device)) - torch.log(scale + 1e-32) - 0.5 * z * z
 
 
 def norm_cdf(x: Tensor) -> Tensor:
@@ -101,11 +98,7 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
     scaled_res = torch.where(endpts_equal, (alpha + beta) / 2, scaled_res)
 
     lower_bd = torch.maximum(beta + 1.0 / beta, (alpha + beta) / 2)
-    bad_idx = (
-        (~torch.isnan(beta))
-        & (beta < 0)
-        & ((scaled_res < lower_bd) | (scaled_res > beta))
-    )
+    bad_idx = (~torch.isnan(beta)) & (beta < 0) & ((scaled_res < lower_bd) | (scaled_res > beta))
     scaled_res = torch.where(bad_idx, lower_bd, scaled_res)
 
     scaled_res = torch.where(flip, -scaled_res, scaled_res)
@@ -152,12 +145,8 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     beta_frac = beta * torch.exp(torch.clamp(logphi(beta) - pnorm_diff, max=300.0))
 
     # handle nan/inf
-    alpha_frac = torch.where(
-        ~torch.isfinite(alpha_frac), torch.zeros_like(alpha_frac), alpha_frac
-    )
-    beta_frac = torch.where(
-        ~torch.isfinite(beta_frac), torch.zeros_like(beta_frac), beta_frac
-    )
+    alpha_frac = torch.where(~torch.isfinite(alpha_frac), torch.zeros_like(alpha_frac), alpha_frac)
+    beta_frac = torch.where(~torch.isfinite(beta_frac), torch.zeros_like(beta_frac), beta_frac)
 
     scaled_res = torch.ones_like(alpha)
 
@@ -173,11 +162,7 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     upper_bd2 = (alpha**2 + alpha * beta + beta**2) / 3
     upper_bd = torch.minimum(upper_bd1, upper_bd2)
 
-    bad_idx = (
-        (~torch.isnan(beta))
-        & (beta < 0)
-        & ((scaled_res < beta**2) | (scaled_res > upper_bd))
-    )
+    bad_idx = (~torch.isnan(beta)) & (beta < 0) & ((scaled_res < beta**2) | (scaled_res > upper_bd))
     scaled_res = torch.where(bad_idx, upper_bd, scaled_res)
 
     res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta) + sd**2 * scaled_res

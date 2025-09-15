@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from cebmf_torch.torch_ebnm.torch_ash import ash
-from cebmf_torch.utils.torch_utils import (
+from cebmf_torch.ebnm.ash import ash
+from cebmf_torch.utils.maths import (
     my_e2truncnorm,
     my_etruncnorm,
 )
@@ -20,9 +20,5 @@ def test_ash_exp():
     res = ash(betahat, sebetahat, prior="exp", mult=mult)
     expected_posteriror = np.array([0.2136, 1.9500, 0.6813, 3.6777, 4.6960])
     expected_posteriror2 = np.array([0.3402, 3.9630, 3.1711, 14.5822, 23.0564])
-    np.testing.assert_allclose(
-        res.post_mean.cpu().numpy(), expected_posteriror, atol=1e-3
-    )
-    np.testing.assert_allclose(
-        res.post_mean2.cpu().numpy(), expected_posteriror2, atol=1e-3
-    )
+    np.testing.assert_allclose(res.post_mean.cpu().numpy(), expected_posteriror, atol=1e-3)
+    np.testing.assert_allclose(res.post_mean2.cpu().numpy(), expected_posteriror2, atol=1e-3)
