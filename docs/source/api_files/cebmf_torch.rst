@@ -7,20 +7,13 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   cebmf_torch.torch_cebnm
-   cebmf_torch.torch_ebnm
+   cebmf_torch.cebnm
+   cebmf_torch.ebnm
+   cebmf_torch.priors
    cebmf_torch.utils
 
 Submodules
 ----------
-
-cebmf\_torch.priors\_torch module
----------------------------------
-
-.. automodule:: cebmf_torch.priors_torch
-   :members:
-   :show-inheritance:
-   :undoc-members:
 
 cebmf\_torch.torch\_main module
 -------------------------------
