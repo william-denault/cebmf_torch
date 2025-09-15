@@ -94,6 +94,11 @@ class cEBMF:
             self.F = torch.randn(self.P, self.K, device=self.device) * 0.01
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
+        self.R = (self.Y0 - self.L @ self.F.T)
+        self.R.mul_(self.mask)
+
+    # optional one-time sanitize (defensive)
+        self.R.nan_to_num_(nan=0.0)
         self.update_tau()
 
     @torch.no_grad()
@@ -186,19 +191,29 @@ class cEBMF:
         Update L[:,k], F[:,k] and their second moments using the current priors.
         Handles scalar tau (tau_map=None) or elementwise tau (tau_map is (N,P)).
         """
-        with torch.no_grad():  # ---------- Update L[:, k] ----------
-            Rk = self._partial_residual_masked(k)  # (N,P), zeros where missing
-            fk = self.F[:, k]  # (P,)
-            fk2 = self.F2[:, k]  # (P,)
+        mask_f = self.mask if self.mask.dtype.is_floating_point else self.mask.to(self.L.dtype)
 
+        Lk  = self.L[:, k]    # (N,)
+        Fk  = self.F[:, k]    # (P,)
+        Lk2 = self.L2[:, k]   # (N,)
+        Fk2 = self.F2[:, k]   # (P,)
+
+        # ---- 1) Add back k's contribution: R <- R + Lk Fk^T  (no outer allocation) ----
+        # This forms the partial residual that keeps all components except k removed.
+        self.R.addr_(Lk, Fk, alpha=1.0)
+        self.R.mul_(mask_f)
+        with torch.no_grad():  # ---------- Update L[:, k] ----------
             if tau_map is None:
-                denom_l = (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)  # (N,)
-                num_l = Rk @ fk  # (N,)
-                se_l = torch.sqrt(1.0 / (self.tau * denom_l))
+                denom_l = mask_f @ Fk2                             # (N,)
+                # num_l[i]   = sum_j R[i,j] * Fk[j]
+                num_l   = self.R @ Fk                              # (N,)
+                se_l    = torch.sqrt(1.0 / (self.tau * denom_l.clamp_min(eps)))
             else:
-                denom_l = (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)  # (N,)
-                num_l = (tau_map * Rk) @ fk  # (N,)
-                se_l = torch.sqrt(1.0 / denom_l)
+                # denom_l[i] = sum_j tau_map[i,j]*mask[i,j]*Fk2[j]
+                denom_l = (tau_map * mask_f) @ Fk2                 # (N,)
+            # num_l[i]   = sum_j tau_map[i,j]*R[i,j]*Fk[j]   (no (tau_map*R) buffer)
+                num_l   = torch.einsum('ij,ij,j->i', self.R, tau_map, Fk)  # (N,)
+                se_l    = torch.sqrt(1.0 / denom_l.clamp_min(eps))
 
             lhat = num_l / denom_l
         # print(denom_l)
@@ -220,20 +235,32 @@ class cEBMF:
             self.pi0_L[k] = resL.pi0_null if hasattr(resL, "pi0_null") else None
 
             # ---------- Update F[:, k] ----------
-            Rk = self._partial_residual_masked(k)  # recompute with updated L
-            lk = self.L[:, k]  # (N,)
-            lk2 = self.L2[:, k]  # (N,)
+            # ---- 2) Subtract UPDATED L_k: R <- R - Lk_new Fk^T ----
+            Lk = self.L[:, k]  # updated
+            lk2 = self.L2[:, k]
+            self.R.addr_(Lk, Fk, alpha=-1.0)
+            self.R.mul_(mask_f)
 
+    # ---- 3) Add back (updated L_k) again to prepare F update: R <- R + Lk_new Fk^T ----
+            self.R.addr_(Lk, Fk, alpha=1.0)
+            self.R.mul_(mask_f)
+          
+
+        with torch.no_grad():
             if tau_map is None:
-                denom_f = (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)  # (P,)
-                num_f = Rk.T @ lk  # (P,)
-                se_f = torch.sqrt(1.0 / (self.tau * denom_f))
+                # denom_f[j] = sum_i mask[i,j] * Lk2[i]
+                denom_f = mask_f.T @ self.L2[:, k]                 # (P,)
+                # num_f[j]   = sum_i R[i,j] * Lk[i]
+                num_f   = self.R.T @ Lk                            # (P,)
+                se_f    = torch.sqrt(1.0 / (self.tau * denom_f.clamp_min(eps)))
             else:
-                denom_f = (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)  # (P,)
-                num_f = (tau_map * Rk).T @ lk  # (P,)
-                se_f = torch.sqrt(1.0 / denom_f)
+                # denom_f[j] = sum_i tau_map[i,j]*mask[i,j]*Lk2[i]
+                denom_f = (tau_map * mask_f).transpose(0, 1) @ self.L2[:, k]  # (P,)
+            # num_f[j]   = sum_i tau_map[i,j]*R[i,j]*Lk[i]
+                num_f   = torch.einsum('ij,ij,i->j', self.R, tau_map, Lk)     # (P,)
+                se_f    = torch.sqrt(1.0 / denom_f.clamp_min(eps))
 
-            fhat = num_f / denom_f
+            fhat = num_f / denom_f.clamp_min(eps)
 
         X_model = self.update_cov_F(k)
         with torch.enable_grad():
@@ -251,6 +278,10 @@ class cEBMF:
             nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
             self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
             self.pi0_F[k] = resF.pi0_null if hasattr(resF, "pi0_null") else None
+
+            Fk = self.F[:, k]  # updated
+            self.R.addr_(Lk, Fk, alpha=-1.0)
+            self.R.mul_(mask_f)
 
     def cal_obj(self):
         # Data term
