@@ -284,7 +284,7 @@ class cEBMF:
         # Data term
         ER2 = self._expected_residuals_squared()
         if self.noise.type == NoiseType.CONSTANT:
-            ll = self._compute_constat_loglik(ER2)
+            ll = self._compute_constant_loglik(ER2)
         else:
             ll = self._compute_elementwise_loglik(ER2)
 
@@ -292,7 +292,7 @@ class cEBMF:
         loss = (-ll + KL).item()  # minimize this (negative ELBO)
         self.obj.append(loss)
 
-    def _compute_constat_loglik(self, ER2: Tensor) -> Tensor:
+    def _compute_constant_loglik(self, ER2: Tensor) -> Tensor:
         m = self.mask.sum().clamp_min(1.0)
         return -0.5 * (
             m * (torch.log(torch.tensor(2 * torch.pi, device=self.device)) - torch.log(self.tau))
