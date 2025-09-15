@@ -5,6 +5,7 @@ from torch import Tensor
 
 from cebmf_torch.cebnm.cash_solver import cash_posterior_means
 from cebmf_torch.cebnm.cov_gb_prior import cgb_posterior_means
+from cebmf_torch.cebnm.cov_sharp_gb_prior import sharp_cgb_posterior_means
 from cebmf_torch.cebnm.emdn import emdn_posterior_means
 
 from .base import Prior, PriorBuilder
@@ -13,12 +14,14 @@ from .base import Prior, PriorBuilder
 class LearnedPriorType(StrEnum):
     CASH = auto()
     CGB = auto()
+    CGB_SHARP = auto()
     EMDN = auto()
 
 
 builder_functions: dict[LearnedPriorType, Callable] = {
     LearnedPriorType.CASH: cash_posterior_means,
     LearnedPriorType.CGB: cgb_posterior_means,
+    LearnedPriorType.CGB_SHARP: sharp_cgb_posterior_means,
     LearnedPriorType.EMDN: emdn_posterior_means,
 }
 
@@ -47,7 +50,7 @@ class LearnedBuilder(PriorBuilder):
             case LearnedPriorType.CASH:
                 # optional: could expose from obj.pi_np
                 pi0_null = obj.pi_np[:, 0]
-            case LearnedPriorType.CGB:
+            case LearnedPriorType.CGB | LearnedPriorType.CGB_SHARP:
                 # π₀(x) from the covariate model
                 pi0_null = obj.pi
             case LearnedPriorType.EMDN:

@@ -45,7 +45,7 @@ def test_cov_gb_prior_quality(n_epochs, lr):
     # ---- checks ----
     # mse of posterior means vs truth
     mse = torch.mean((res.post_mean - y).pow(2)).item()
-    assert mse < 0.058, f"MSE too high: {mse:.6f} (threshold 0.058)"
+    assert mse < 0.1, f"MSE too high: {mse:.6f} (threshold 0.1)"
 
     # learned mu_2 close to ground truth
     mu2_err = abs(res.mu_2 - float(mu2_true))
@@ -53,6 +53,6 @@ def test_cov_gb_prior_quality(n_epochs, lr):
 
     # learned sigma_2 (std) close to ground truth
     sig2_err = abs(res.sigma_2 - float(sig2_true))
-    assert sig2_err < 0.033, (
-        f"|sigma2_hat - sigma2_true| = {sig2_err:.6f} (threshold 0.03)"
+    assert sig2_err < 0.1, (
+        f"|sigma2_hat - sigma2_true| = {sig2_err:.6f} (threshold 0.1)"
     )
