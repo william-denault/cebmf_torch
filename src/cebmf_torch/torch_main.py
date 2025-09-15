@@ -111,38 +111,37 @@ class cEBMF:
         - 'row_wise'   -> tau_row (N,), tau_map broadcast to (N,P)
         - 'column_wise'-> tau_col (P,), tau_map broadcast to (N,P)
         """
-        # eps = 1e-12
         R2 = self.expected_residuals_squared()  # (N,P), zeros at missing
-        N, P = self.N, self.P
 
-        if self.type_noise == NoiseType.CONSTANT:
-            m = self.mask.sum().clamp_min(1.0)
-            mean_R2 = R2.sum() / m
-            tau = 1.0 / (mean_R2)
+        match self.type_noise:
+            case NoiseType.CONSTANT:
+                dim = None
+            case NoiseType.ROW_WISE:
+                dim = 1
+            case NoiseType.COLUMN_WISE:
+                dim = 0
+            case _:
+                raise ValueError("type_noise must be 'constant', 'row_wise', or 'column_wise'")
+
+        self._set_tau(R2, dim=dim)
+
+    @torch.no_grad()
+    def _set_tau(self, R2: Tensor, dim: None | int) -> None:
+        m = self.mask.sum(dim=dim).clamp_min(1.0)
+        mean_R2 = R2.sum(dim=dim) / m
+        tau = 1.0 / (mean_R2)
+        if dim is None:
             self.tau = tau  # scalar (back-compat)
-            # If you need a full map like NumPy's np.full(...):
-            self.tau_map = torch.full((N, P), tau.item(), device=self.device, dtype=R2.dtype)
-
-        elif self.type_noise == NoiseType.ROW_WISE:
-            m_row = self.mask.sum(dim=1).clamp_min(1.0)  # (N,)
-            mean_R2_row = R2.sum(dim=1) / m_row  # (N,)
-            tau_row = 1.0 / (mean_R2_row)  # (N,)
-            self.tau_row = tau_row
-            self.tau_map = tau_row.view(-1, 1).expand(N, P)  # (N,P)
+            self.tau_map = torch.full((self.N, self.P), tau.item(), device=self.device, dtype=R2.dtype)
+        elif dim == 1:
+            self.tau_map = tau.view(-1, 1).expand(self.N, self.P)  # (N,P)
             self.tau = self.tau_map  # if downstream expects elementwise
-
-        elif self.type_noise == NoiseType.COLUMN_WISE:
-            m_col = self.mask.sum(dim=0).clamp_min(1.0)  # (P,)
-            mean_R2_col = R2.sum(dim=0) / m_col  # (P,)
-            tau_col = 1.0 / (mean_R2_col)  # (P,)
-            self.tau_col = tau_col
-            self.tau_map = tau_col.view(1, -1).expand(N, P)  # (N,P)
+        elif dim == 0:
+            self.tau_map = tau.view(1, -1).expand(self.N, self.P)  # (N,P)
             self.tau = self.tau_map  # if downstream expects elementwise
-
         else:
-            raise ValueError("type_noise must be 'constant', 'row_wise', or 'column_wise'")
+            raise ValueError("dim must be None, 0, or 1")
 
-    # self.tau=torch.tensor(1)
 
     @torch.no_grad()
     def _partial_residual_masked(self, k: int) -> Tensor:
