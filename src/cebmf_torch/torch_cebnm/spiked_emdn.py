@@ -1,12 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
-
-from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch
-from cebmf_torch.utils.torch_posterior import posterior_mean_norm
-
 
 # -------------------------
 # Dataset
@@ -25,90 +20,83 @@ class DensityRegressionDataset(Dataset):
 
 
 # -------------------------
-# Mixture Density Network (spike + slabs)
-#   pi: (N, K) for [spike, slabs...]
-#   mu/log_sigma: (N, K-1) for slabs only
+# Mixture Density Network with spike at 0
 # -------------------------
 class MDN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_gaussians, n_layers=4):
+    """
+    n_components = K + 1 (component 0 is the spike at 0)
+    Outputs:
+      pi:   (N, K+1)    mixture weights
+      mu:   (N, K+1)    means, mu[:,0] == 0
+      sigma:(N, K+1)    prior stds, sigma[:,0] == 0 (spike prior)
+    """
+    def __init__(self, input_dim, hidden_dim, n_components, n_layers=4):
         super().__init__()
-        assert n_gaussians >= 2, "Need at least 1 spike + 1 slab."
+        assert n_components >= 2, "n_components must be >= 2 (at least one spike + one slab)."
+        self.K = n_components - 1  # number of slabs
+
         self.fc_in = nn.Linear(input_dim, hidden_dim)
         self.hidden_layers = nn.ModuleList(
             [nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)]
         )
-        self.pi = nn.Linear(hidden_dim, n_gaussians)  # includes spike (k=0)
-        self.mu = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
-        self.log_sigma = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
-        self.point_mass = float(0.0)
+
+        # Heads
+        self.pi_head = nn.Linear(hidden_dim, n_components)       # spike + slabs
+        self.mu_slab_head = nn.Linear(hidden_dim, self.K)        # slabs only
+        self.log_sigma_slab_head = nn.Linear(hidden_dim, self.K) # slabs only
 
     def forward(self, x):
-        x = torch.relu(self.fc_in(x))
+        h = torch.relu(self.fc_in(x))
         for layer in self.hidden_layers:
-            x = torch.relu(layer(x))
-        pi = torch.softmax(self.pi(x), dim=1)  # (N, K)
-        mu = self.mu(x)  # (N, K-1)
-        # keep slabs' std positive and stable
-        log_sigma = torch.log(
-            torch.nn.functional.softplus(self.log_sigma(x)) + 1e-6
-        )  # (N, K-1)
-        return pi, mu, log_sigma
+            h = torch.relu(layer(h))
+
+        # Weights across spike+slabs
+        pi = torch.softmax(self.pi_head(h), dim=1)               # (N, K+1)
+
+        # Slab parameters
+        mu_slab = self.mu_slab_head(h)                           # (N, K)
+        sigma_slab = torch.exp(self.log_sigma_slab_head(h))      # (N, K)
+
+        # Prepend spike columns
+        N = x.shape[0]
+        device, dtype = x.device, mu_slab.dtype
+        zero_col = torch.zeros((N, 1), device=device, dtype=dtype)
+
+        mu = torch.cat([zero_col, mu_slab], dim=1)               # (N, K+1)
+        sigma = torch.cat([zero_col, sigma_slab], dim=1)         # (N, K+1)
+
+        return pi, mu, sigma
 
 
 # -------------------------
-# Loss: correct spike+slabs mixture + steerable spike penalty
+# Loss (spike handled via sigma[:,0]==0) + optional L2 on slabs
 # -------------------------
-def mdn_spike_loss_with_varying_noise(
-    pi,
-    mu,
-    log_sigma,
-    betahat,
-    sebetahat,
-    *,
-    penalty: float = 1.0,
-    beta_prior: tuple | None = None,
-    eps: float = 1e-8,
-):
-    # Spike likelihood: mean=0, total var = se^2
-    var_spike = sebetahat**2  # (N,)
-    logp_spike = -0.5 * (
-        (betahat**2) / var_spike + torch.log(2 * torch.pi * var_spike)
-    )  # (N,)
+def mdn_spike_loss_with_varying_noise(pi, mu, sigma, betahat, sebetahat, penalty=0.0, eps=1e-8):
+    """
+    betahat:   (N,)
+    sebetahat: (N,)
+    pi:        (N, K+1)
+    mu:        (N, K+1) with mu[:,0]==0
+    sigma:     (N, K+1) with sigma[:,0]==0
+    """
+    eps = 1e-12
+    b = betahat.unsqueeze(1)                    # (N,1)
+    se = sebetahat.unsqueeze(1)                 # (N,1)
 
-    # Slab likelihoods: mean=mu_j, total sd = sqrt(prior_sd^2 + se^2)
-    sigma_slab = torch.exp(log_sigma)  # (N, K-1) prior sd
-    total_sigma_slab = torch.sqrt(
-        sigma_slab**2 + sebetahat.unsqueeze(1) ** 2
-    )  # (N, K-1)
-    dist_slab = torch.distributions.Normal(mu, total_sigma_slab)
-    logp_slabs = dist_slab.log_prob(betahat.unsqueeze(1))  # (N, K-1)
+    # Predictive std: sqrt(se^2 + sigma^2). Spike gets total_sigma = se.
+    total_sigma = torch.sqrt(se**2 + sigma**2)  # (N, K+1)
+    dist = torch.distributions.Normal(loc=mu, scale=total_sigma)
 
-    # Mixture log-likelihood = logsumexp over [spike, slabs...]
-    log_terms_spike = torch.log(pi[:, :1].clamp_min(eps)) + logp_spike.unsqueeze(
-        1
-    )  # (N, 1)
-    log_terms_slabs = torch.log(pi[:, 1:].clamp_min(eps)) + logp_slabs  # (N, K-1)
-    all_log_terms = torch.cat([log_terms_spike, log_terms_slabs], dim=1)  # (N, K)
-    nll = -torch.logsumexp(all_log_terms, dim=1).mean()
+    log_probs = dist.log_prob(b.expand_as(mu)) + torch.log(pi.clamp_min(eps))
+    nll = -torch.logsumexp(log_probs, dim=1).mean()
 
-    # (A) simple steer: penalty>1 encourages spike
-    reg_simple = 0.0
-    if penalty != 1.0:
-        lam = float(penalty) - 1.0  # >0 encourages spike
-        reg_simple = -(lam) * torch.log(pi[:, 0].clamp_min(eps)).mean()
-
-    # (B) optional Beta(alpha0, beta0) prior on pi_spike
-    reg_beta = 0.0
-    if beta_prior is not None:
-        a0, b0 = map(float, beta_prior)
-        # log(1 - pi0) needs safe clamp
-        one_minus_pi0 = (1.0 - pi[:, 0]).clamp_min(eps)
-        reg_beta = -(
-            (a0 - 1.0) * torch.log(pi[:, 0].clamp_min(eps))
-            + (b0 - 1.0) * torch.log(one_minus_pi0)
-        ).mean()
-
-    return nll + reg_simple + reg_beta
+    if penalty > 1:
+        # L2 on slab means (skip spike col 0)
+        #nll = nll + penalty * (mu[:, 1:]**2).mean()
+        pi0_clamped = pi[:,0].mean().clamp_min(eps)
+        penalty_term = (penalty - 1.0) *  (pi0_clamped)
+        nll = nll - penalty_term
+    return nll
 
 
 # -------------------------
@@ -123,45 +111,48 @@ class EmdnPosteriorMeanNorm:
         location,
         pi_np,
         scale,
-        loss=0,
+        loss=0.0,
         model_param=None,
     ):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
-        self.location = location
-        self.pi_np = pi_np
-        self.scale = scale
+        self.location = location     # mu (N, K+1)
+        self.pi_np = pi_np           # pi (N, K+1)
+        self.scale = scale           # sigma (N, K+1)
         self.loss = loss
         self.model_param = model_param
 
 
 # -------------------------
-# Main solver
+# Main solver (pure Torch; no sklearn)
 # -------------------------
-def spiked_mdn_posterior_means(
+def spiked_emdn_posterior_means(
     X,
     betahat,
     sebetahat,
     n_epochs=50,
     n_layers=4,
-    n_gaussians=5,
+    n_gaussians=5,     # total components incl. spike
     hidden_dim=64,
     batch_size=512,
     lr=1e-3,
+    penalty=0.0,     # L2 strength on slab means
     model_param=None,
-    *,
-    penalty: float = 1.0,  # >1 encourages spike; =1 neutral
-    beta_prior: tuple | None = None,  # e.g. (17., 5.) => target pi_spike ~ 0.77
-    print_every=10,
+    verbose_every=10,
 ):
-    # Standardize X
+    # ---- Standardize X with Torch (avoid sklearn) ----
+    X = torch.as_tensor(X, dtype=torch.float32)
     if X.ndim == 1:
-        X = X.reshape(-1, 1)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+        X = X.view(-1, 1)
+    X_mean = X.mean(dim=0, keepdim=True)
+    X_std  = X.std(dim=0, unbiased=False, keepdim=True).clamp_min(1e-8)
+    X_scaled = (X - X_mean) / X_std
 
-    # Data
+    betahat = torch.as_tensor(betahat, dtype=torch.float32)
+    sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32)
+
+    # Dataset + DataLoader
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
@@ -169,7 +160,7 @@ def spiked_mdn_posterior_means(
     model = MDN(
         input_dim=X_scaled.shape[1],
         hidden_dim=hidden_dim,
-        n_gaussians=n_gaussians,
+        n_components=n_gaussians,
         n_layers=n_layers,
     )
     if model_param is not None:
@@ -182,63 +173,46 @@ def spiked_mdn_posterior_means(
         running_loss = 0.0
         for inputs, targets, noise_std in dataloader:
             optimizer.zero_grad()
-            pi, mu, log_sigma = model(inputs)
+            pi, mu, sigma = model(inputs)
             loss = mdn_spike_loss_with_varying_noise(
-                pi,
-                mu,
-                log_sigma,
-                targets,
-                noise_std,
-                penalty=penalty,
-                beta_prior=beta_prior,
+                pi, mu, sigma, targets, noise_std, penalty=penalty
             )
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
-        if (epoch + 1) % print_every == 0:
-            print(
-                f"[Spiked-EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {running_loss / len(dataloader):.4f}"
-            )
+        if verbose_every and (epoch + 1) % verbose_every == 0:
+            print(f"[EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {running_loss / len(dataloader):.4f}")
 
-    # Predict (all data)
+    # Predict on full data
     model.eval()
     full_loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
     with torch.no_grad():
         for X_batch, _, _ in full_loader:
-            pi_pred, mu_pred, log_sigma_pred = model(X_batch)
+            pi, mu, sigma = model(X_batch)
 
-    # Build full mixture params including the spike at 0 with prior sd=0
-    mu_full = torch.cat([torch.zeros_like(mu_pred[:, :1]), mu_pred], dim=1)  # (N, K)
-    sigma_full = torch.cat(
-        [torch.zeros_like(log_sigma_pred[:, :1]), torch.exp(log_sigma_pred)], dim=1
-    )  # (N, K)
+    # Posterior means per observation via your utilities
+    from cebmf_torch.utils.torch_distribution_operation import get_data_loglik_normal_torch
+    from cebmf_torch.utils.torch_posterior import posterior_mean_norm
 
-    pi_np = pi_pred.cpu().numpy()
-    mu_np = mu_full.cpu().numpy()
-    scale_np = sigma_full.sqrt().cpu().numpy()  # prior SDs (0 for spike)
+    J = betahat.shape[0]
+    post_mean = torch.empty(J, dtype=torch.float32)
+    post_mean2 = torch.empty(J, dtype=torch.float32)
+    post_sd = torch.empty(J, dtype=torch.float32)
 
-    # Posterior moments per observation
-    N = len(betahat)
-    post_mean = torch.empty(N, dtype=torch.float32)
-    post_mean2 = torch.empty(N, dtype=torch.float32)
-    post_sd = torch.empty(N, dtype=torch.float32)
-
-    for i in range(N):
+    for i in range(J):
         data_loglik = get_data_loglik_normal_torch(
-            betahat=betahat[i : (i + 1)],
-            sebetahat=sebetahat[i : (i + 1)],
-            location=torch.tensor(mu_np[i, :], dtype=torch.float32),
-            scale=torch.tensor(
-                scale_np[i, :], dtype=torch.float32
-            ),  # 0 for spike ⇒ total sd = se
+            betahat=betahat[i:i+1],
+            sebetahat=sebetahat[i:i+1],
+            location=mu[i, :],
+            scale=sigma[i, :],             # spike has 0 prior sd
         )
         result = posterior_mean_norm(
-            betahat=betahat[i : (i + 1)],
-            sebetahat=sebetahat[i : (i + 1)],
-            log_pi=torch.log(torch.tensor(pi_np[i, :], dtype=torch.float32) + 1e-8),
+            betahat=betahat[i:i+1],
+            sebetahat=sebetahat[i:i+1],
+            log_pi=torch.log(pi[i, :].clamp_min(1e-12)),
             data_loglik=data_loglik,
-            location=torch.tensor(mu_np[i, :], dtype=torch.float32),
-            scale=torch.tensor(scale_np[i, :], dtype=torch.float32),
+            location=mu[i, :],
+            scale=sigma[i, :],
         )
         post_mean[i] = result.post_mean
         post_mean2[i] = result.post_mean2
@@ -248,9 +222,9 @@ def spiked_mdn_posterior_means(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        location=mu_np,
-        pi_np=pi_np,
-        scale=scale_np,
+        location=mu,
+        pi_np=pi,
+        scale=sigma,
         loss=running_loss,
         model_param=model.state_dict(),
     )
