@@ -154,12 +154,6 @@ class cEBMF:
 
     @torch.no_grad()
     def iter_once(self):
-        # ensure 1-D KL holders (length K)
-        if not hasattr(self, "kl_l"):
-            self.kl_l = torch.zeros(self.model.K, device=self.device)
-        if not hasattr(self, "kl_f"):
-            self.kl_f = torch.zeros(self.model.K, device=self.device)
-
         tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
             self.update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
