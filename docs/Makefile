@@ -19,6 +19,7 @@ help:
 
 # Generate API docs
 apidoc:
+	rm -r $(SOURCEDIR)/api_files || true
 	$(SPHINX_APIDOC) -f -o $(SOURCEDIR)/api_files $(MODULE_DIR)
 
 # Copy notebooks into source/notebooks before building
