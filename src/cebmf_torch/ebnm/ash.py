@@ -1,8 +1,8 @@
 # torch_convolved_loglik.py
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Callable
 
 import torch
 

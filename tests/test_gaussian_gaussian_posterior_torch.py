@@ -71,11 +71,11 @@ def test_convolved_loglik_postmean():
     )
 
     # Apply log-sum-exp with uniform pi
-    log_pi = np.log(np.full((n, p), 1 / p))
-    res = np.log(np.exp(data_loglik) * (1 / p))
+    np.log(np.full((n, p), 1 / p))
+    np.log(np.exp(data_loglik) * (1 / p))
 
     # Reproduce "expected_result" matrix using original constants for sanity
-    expected_res = np.array(
+    np.array(
         [
             [
                 -2.0667347,

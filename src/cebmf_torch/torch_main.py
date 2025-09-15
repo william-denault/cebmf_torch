@@ -1,6 +1,6 @@
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import torch
 from torch import Tensor
@@ -32,7 +32,7 @@ class cEBMF:
         prior_L: str | Callable = "norm",
         prior_F: str | Callable = "norm",
         type_noise: str = "constant",
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
         allow_backfitting: bool = True,
         prune_pi0: float = 1 - 1e-3,
         X_l: Tensor = None,
@@ -161,7 +161,8 @@ class cEBMF:
             # choose tau map depending on mode
         tau_map = None
         if self.type_noise == "constant":
-            tau_scalar = float(self.tau.item())
+            # tau_scalar = float(self.tau.item())
+            pass
         elif self.type_noise == "row_wise":
             tau_map = self.tau_map  # (N,P)
         elif self.type_noise == "column_wise":
@@ -189,7 +190,7 @@ class cEBMF:
         self.cal_obj()
 
     def update_factor(
-        self, k: int, tau_map: Optional[Tensor] = None, eps: float = 1e-12
+        self, k: int, tau_map: Tensor | None = None, eps: float = 1e-12
     ) -> None:
         """
         Update L[:,k], F[:,k] and their second moments using the current priors.
@@ -215,7 +216,7 @@ class cEBMF:
 
             lhat = num_l / denom_l
         # print(denom_l)
- 
+
         X_model = self.update_cov_L(k)
         with torch.enable_grad():
             resL = self.prior_L_fn.fit(
@@ -358,7 +359,6 @@ class cEBMF:
         E[(Y - sum_k L_k F_k)^2] on observed entries.
         Uses: (Y - E[Y])^2 - sum_k (E[L]^2)(E[F]^2)^T + sum_k E[L^2] E[F^2]^T
         """
-        eps = 1e-12
         Yfit = self.L @ self.F.T  # (N,P)
         resid_mean_sq = (self.Y0 - Yfit).pow(2)  # (N,P)
         first_moment_sq = (self.L.pow(2)) @ (self.F.pow(2)).T  # Σ_k (E[L]^2)(E[F]^2)^T

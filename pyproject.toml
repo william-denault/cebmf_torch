@@ -7,7 +7,7 @@ name = "cebmf_torch"
 version = "0.1.0"
 description = "Pure-PyTorch Empirical Bayes Matrix Factorization with mini-batch EM"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
   { name = "William R.P. Denault", email = "wdenault@uchicago.edu" }
@@ -26,8 +26,8 @@ dev = [
     "ruff>=0.13.0",
 ]
 [tool.ruff]
-line-length = 88
-target-version = "py39"
+line-length = 119
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
