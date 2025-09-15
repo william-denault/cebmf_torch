@@ -182,7 +182,7 @@ class cEBMF:
             case _:
                 raise ValueError("type_noise must be 'constant', 'row_wise', or 'column_wise'")
 
-        self._set_tau(R2, dim=dim)
+        self._update_tau(R2, dim=dim)
 
     def update_factors(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
         """
@@ -219,7 +219,7 @@ class cEBMF:
             self.L2[:, k] = resL.post_mean2
             nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
             self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
-            self.pi0_L[k] = resL.pi0_null if hasattr(resL, "pi0_null") else None
+            self.pi0_L[k] = resL.pi0_null
 
             # ---------- Update F[:, k] ----------
             Rk = self._partial_residual_masked(k)  # recompute with updated L
@@ -252,7 +252,7 @@ class cEBMF:
             # store as scalar on device; PriorResult.loss already = -log_lik
             nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
             self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
-            self.pi0_F[k] = resF.pi0_null if hasattr(resF, "pi0_null") else None
+            self.pi0_F[k] = resF.pi0_null
 
     def cal_obj(self):
         # Data term
@@ -348,12 +348,12 @@ class cEBMF:
         self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var)
         self.kl_l = torch.zeros(self.model.K, device=self.device)
         self.kl_f = torch.zeros(self.model.K, device=self.device)
-        self.pi0_L = [None] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
-        self.pi0_F = [None] * self.model.K
+        self.pi0_L: list[Tensor | float | None] = [None] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
+        self.pi0_F: list[Tensor | float | None] = [None] * self.model.K
         self.obj = []
 
     @torch.no_grad()
-    def _set_tau(self, R2: Tensor, dim: None | int) -> None:
+    def _update_tau(self, R2: Tensor, dim: None | int) -> None:
         m = self.mask.sum(dim=dim).clamp_min(1.0)
         mean_R2 = R2.sum(dim=dim) / m
         tau = 1.0 / (mean_R2)
