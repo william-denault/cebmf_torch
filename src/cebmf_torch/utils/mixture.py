@@ -100,9 +100,7 @@ def optimize_pi_logL(
     return pi
 
 
-def _calculate_scales(
-    sigmaamax: float, sigmaamin: float, mult: float, device: torch.device
-) -> torch.Tensor:
+def _calculate_scales(sigmaamax: float, sigmaamin: float, mult: float, device: torch.device) -> torch.Tensor:
     npoint = int(math.ceil(float(math.log2(sigmaamax / sigmaamin)) / math.log2(mult)))
     seq = torch.arange(-npoint, 1, device=device, dtype=torch.int64)
     return torch.cat(
@@ -113,9 +111,7 @@ def _calculate_scales(
     )
 
 
-def autoselect_scales_mix_norm(
-    betahat: torch.Tensor, sebetahat: torch.Tensor, max_class=None, mult: float = 2.0
-):
+def autoselect_scales_mix_norm(betahat: torch.Tensor, sebetahat: torch.Tensor, max_class=None, mult: float = 2.0):
     device = betahat.device
     sigmaamin = torch.min(sebetahat) / 10.0
     if torch.all(betahat**2 < sebetahat**2):
@@ -129,9 +125,7 @@ def autoselect_scales_mix_norm(
     scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device)
     if max_class is not None:
         if scales.numel() != max_class:
-            scales = torch.linspace(
-                torch.min(scales), torch.max(scales), steps=max_class, device=device
-            )
+            scales = torch.linspace(torch.min(scales), torch.max(scales), steps=max_class, device=device)
     return scales
 
 
@@ -143,9 +137,7 @@ def autoselect_scales_mix_exp(
     tt: float = 1.5,
 ):
     device = betahat.device
-    sigmaamin = torch.maximum(
-        torch.min(sebetahat) / 10.0, torch.tensor(1e-3, device=device)
-    )
+    sigmaamin = torch.maximum(torch.min(sebetahat) / 10.0, torch.tensor(1e-3, device=device))
     if torch.all(betahat**2 < sebetahat**2):
         sigmaamax = 8.0 * sigmaamin
     else:
@@ -157,9 +149,7 @@ def autoselect_scales_mix_exp(
     scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device)
     if max_class is not None:
         if scales.numel() != max_class:
-            scales = torch.linspace(
-                torch.min(scales), torch.max(scales), steps=max_class, device=device
-            )
+            scales = torch.linspace(torch.min(scales), torch.max(scales), steps=max_class, device=device)
             if scales.numel() >= 3 and scales[2] < 1e-2:
                 scales[2:] = scales[2:] + 1e-2
     return scales

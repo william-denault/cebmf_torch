@@ -44,9 +44,7 @@ class CashNet(nn.Module):
         self.input_layer = nn.Linear(input_dim, hidden_dim)
 
         # Hidden layers
-        self.hidden_layers = nn.ModuleList(
-            [nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)]
-        )
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
 
         # Output layer
         self.output_layer = nn.Linear(hidden_dim, num_classes)
@@ -77,9 +75,7 @@ def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.1, epsilon=1e-10):
 
     if penalty > 1:
         pi_clamped = torch.clamp(torch.sum(pred_pi[:, 0]), min=epsilon)
-        penalized_log_likelihood_value = first_sum + (penalty - 1) * torch.log(
-            pi_clamped
-        )
+        penalized_log_likelihood_value = first_sum + (penalty - 1) * torch.log(pi_clamped)
     else:
         penalized_log_likelihood_value = first_sum
 
@@ -88,9 +84,7 @@ def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.1, epsilon=1e-10):
 
 # Class to store the results
 class cash_PosteriorMeanNorm:
-    def __init__(
-        self, post_mean, post_mean2, post_sd, pi_np, scale, loss=0, model_param=None
-    ):
+    def __init__(self, post_mean, post_mean2, post_sd, pi_np, scale, loss=0, model_param=None):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -117,9 +111,7 @@ def cash_posterior_means(
     # Standardize X
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    scale = autoselect_scales_mix_norm(
-        betahat=betahat, sebetahat=sebetahat, max_class=num_classes
-    )
+    scale = autoselect_scales_mix_norm(betahat=betahat, sebetahat=sebetahat, max_class=num_classes)
     # Create dataset and dataloader
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -144,17 +136,13 @@ def cash_posterior_means(
             optimizer_cash.zero_grad()
             outputs = model_cash(inputs)
 
-            cash_loss = pen_loglik_loss(
-                pred_pi=outputs, marginal_log_lik=batch_loglik, penalty=penalty
-            )
+            cash_loss = pen_loglik_loss(pred_pi=outputs, marginal_log_lik=batch_loglik, penalty=penalty)
             cash_loss.backward()
             optimizer_cash.step()
             total_cash_loss += cash_loss.item()
 
         if (epoch + 1) % 10 == 0:
-            print(
-                f"Epoch {epoch + 1}/{n_epochs},   Variance Loss: {total_cash_loss / len(dataloader):.4f}"
-            )
+            print(f"Epoch {epoch + 1}/{n_epochs},   Variance Loss: {total_cash_loss / len(dataloader):.4f}")
             # After training the model, compute the posterior mean
 
     model_cash.eval()
@@ -168,9 +156,7 @@ def cash_posterior_means(
     post_mean = torch.empty(J, dtype=torch.float32)
     post_mean2 = torch.empty(J, dtype=torch.float32)
     post_sd = torch.empty(J, dtype=torch.float32)
-    data_loglik = get_data_loglik_normal_torch(
-        betahat=betahat, sebetahat=sebetahat, location=0 * scale, scale=scale
-    )
+    data_loglik = get_data_loglik_normal_torch(betahat=betahat, sebetahat=sebetahat, location=0 * scale, scale=scale)
     # Estimate posterior means for each observation
 
     for i in range(len(betahat)):

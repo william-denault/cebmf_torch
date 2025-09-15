@@ -31,9 +31,7 @@ class MDN(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_gaussians, n_layers=4):
         super().__init__()
         self.fc_in = nn.Linear(input_dim, hidden_dim)
-        self.hidden_layers = nn.ModuleList(
-            [nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)]
-        )
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
         self.pi = nn.Linear(hidden_dim, n_gaussians)
         self.mu = nn.Linear(hidden_dim, n_gaussians)
         self.log_sigma = nn.Linear(hidden_dim, n_gaussians)
@@ -132,9 +130,7 @@ def emdn_posterior_means(
             optimizer.step()
             running_loss += loss.item()
         if (epoch + 1) % 10 == 0:
-            print(
-                f"[EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {running_loss / len(dataloader):.4f}"
-            )
+            print(f"[EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {running_loss / len(dataloader):.4f}")
 
     # Prediction for all data
     model.eval()

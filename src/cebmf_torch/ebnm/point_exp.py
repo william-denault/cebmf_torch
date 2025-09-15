@@ -22,9 +22,7 @@ def _loglik_exp_convolved(xc: Tensor, s: Tensor, a: Tensor) -> Tensor:
     return torch.log(a / 1.0) + 0.5 * (s * a) ** 2 - a * xc + logPhi(z)
 
 
-def _posterior_moments_exp_branch(
-    xc: Tensor, s: Tensor, a: Tensor
-) -> tuple[Tensor, Tensor]:
+def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Tensor, Tensor]:
     """
     Moments for the Exp branch using the tilted Normal:
     Z ~ N(m_tilt, s^2) truncated to [0, +inf),

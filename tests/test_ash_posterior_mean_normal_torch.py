@@ -10,9 +10,7 @@ from cebmf_torch.utils.posterior import posterior_mean_norm
 def test_ash_loglik_and_scale():
     betahat = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
     sebetahat = torch.tensor([1.0, 0.4, 5.0, 1.0, 1.0])
-    res = ash(
-        betahat, sebetahat, mult=torch.sqrt(torch.tensor(2.0)).item(), prior="norm"
-    )
+    res = ash(betahat, sebetahat, mult=torch.sqrt(torch.tensor(2.0)).item(), prior="norm")
     expected_log_lik = -16.91767637608251
     expected_scale = np.array(
         [
@@ -71,12 +69,8 @@ def test_optimize_pi_and_posterior_mean_norm_shape():
     excepted_postmean = np.array([0.0902, 1.9818, 0.2705, 3.7831, 4.7769])
 
     excepted_postmean2 = np.array([0.1756, 4.0868, 2.6417, 15.3774, 23.7875])
-    np.testing.assert_allclose(
-        out.post_mean.cpu().numpy(), excepted_postmean, atol=1e-3
-    )
+    np.testing.assert_allclose(out.post_mean.cpu().numpy(), excepted_postmean, atol=1e-3)
 
-    np.testing.assert_allclose(
-        out.post_mean2.cpu().numpy(), excepted_postmean2, atol=1e-3
-    )
+    np.testing.assert_allclose(out.post_mean2.cpu().numpy(), excepted_postmean2, atol=1e-3)
 
     assert result.shape == (5, scale.numel())

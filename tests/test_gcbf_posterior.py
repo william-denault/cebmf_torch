@@ -53,6 +53,4 @@ def test_cov_gb_prior_quality(n_epochs, lr):
 
     # learned sigma_2 (std) close to ground truth
     sig2_err = abs(res.sigma_2 - float(sig2_true))
-    assert sig2_err < 0.1, (
-        f"|sigma2_hat - sigma2_true| = {sig2_err:.6f} (threshold 0.1)"
-    )
+    assert sig2_err < 0.1, f"|sigma2_hat - sigma2_true| = {sig2_err:.6f} (threshold 0.1)"
