@@ -126,7 +126,7 @@ class EmdnPosteriorMeanNorm:
 # -------------------------
 # Main solver
 # -------------------------
-def spiked_mdn_posterior_means(
+def spiked_emdn_posterior_means(
     X,
     betahat,
     sebetahat,
