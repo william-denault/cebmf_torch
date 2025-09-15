@@ -124,7 +124,7 @@ class cEBMF:
     model: ModelParams = field(default_factory=ModelParams)
     noise: NoiseParams = field(default_factory=NoiseParams)
     covariate: CovariateParams = field(default_factory=CovariateParams)
-    device: torch.device | None = None
+    device: torch.device = field(default_factory=get_device)
 
     def __post_init__(self):
         self._validate_inputs()
@@ -334,42 +334,23 @@ class cEBMF:
 
     @torch.no_grad()
     def update_cov_L(self, k: int):
-        if self.covariate.self_row_cov:
-            if self.covariate.X_l is None:
-                if self.model.K > 1:
-                    # all columns except k
-                    others = self.L[:, torch.arange(self.model.K, device=self.device) != k]
-                    X_model = others
-                else:
-                    X_model = self.L.new_ones(self.N, 1)  # intercept
-            else:
-                if self.model.K > 1:
-                    others = self.L[:, torch.arange(self.model.K, device=self.device) != k]
-                    X_model = torch.hstack((self.covariate.X_l, others))
-                else:
-                    X_model = self.covariate.X_l
-        else:
-            X_model = self.covariate.X_l
-        return X_model
+        return self._build_covariate_matrix(
+            external_cov=self.covariate.X_l,
+            self_cov_enabled=self.covariate.self_row_cov,
+            factors=self.L,
+            k=k,
+            dim_size=self.N
+        )
 
     @torch.no_grad()
     def update_cov_F(self, k: int):
-        if self.covariate.self_col_cov:
-            if self.covariate.X_f is None:
-                if self.model.K > 1:
-                    others = self.F[:, torch.arange(self.model.K, device=self.device) != k]
-                    X_model = others
-                else:
-                    X_model = self.F.new_ones(self.P, 1)
-            else:
-                if self.model.K > 1:
-                    others = self.F[:, torch.arange(self.model.K, device=self.device) != k]
-                    X_model = torch.hstack((self.covariate.X_f, others))
-                else:
-                    X_model = self.covariate.X_f
-        else:
-            X_model = self.covariate.X_f
-        return X_model
+        return self._build_covariate_matrix(
+            external_cov=self.covariate.X_f,
+            self_cov_enabled=self.covariate.self_col_cov,
+            factors=self.F,
+            k=k,
+            dim_size=self.P
+        )
 
     @torch.no_grad()
     def update_fitted_value(self):
@@ -427,6 +408,23 @@ class cEBMF:
         self.pi0_F = [self.pi0_F[i] for i in keep]
         self.model.K = len(keep)
         self.obj = []
+
+    def _build_covariate_matrix(
+        self, external_cov: Tensor | None, self_cov_enabled: bool, factors: Tensor, k: int, dim_size: int
+    ) -> Tensor | None:
+        """Build covariate matrix combining external and self-covariates."""
+        if not self_cov_enabled:
+            return external_cov
+
+        # Get other factors (excluding k)
+        if self.model.K > 1:
+            others = factors[:, torch.arange(self.model.K, device=self.device) != k]
+            if external_cov is None:
+                return others
+            return torch.hstack((external_cov, others))
+
+        # K=1 case: return external covariates or intercept
+        return external_cov if external_cov is not None else factors.new_ones(dim_size, 1)
 
 
 def normal_means_loglik(
