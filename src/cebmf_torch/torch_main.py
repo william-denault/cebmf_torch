@@ -37,6 +37,7 @@ class InitialisationStrategy(Protocol):
         ...
 
 
+@torch.no_grad()
 def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
     """SVD-based initialization strategy."""
     Y_for_init = _impute_nan(Y)
@@ -53,6 +54,7 @@ def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> t
     return L, F
 
 
+@torch.no_grad()
 def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
     """Random initialization strategy."""
     L = torch.randn(N, K, device=device) * RANDOM_INIT_SCALE
@@ -60,6 +62,7 @@ def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -
     return L, F
 
 
+@torch.no_grad()
 def zero_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
     """Zero initialization strategy."""
     L = torch.zeros(N, K, device=device)
@@ -141,6 +144,7 @@ class cEBMF:
             self.iter_once()
         return CEBMFResult(self.L, self.F, self.tau, self.obj)
 
+    @torch.no_grad()
     def initialise_factors(self, method: str = "svd"):
         if method not in INIT_STRATEGIES:
             raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
@@ -280,6 +284,7 @@ class cEBMF:
         self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
         self.pi0_F[k] = resF.pi0_null
 
+    @torch.no_grad()
     def _cal_obj(self):
         # Data term
         ER2 = self._expected_residuals_squared()
@@ -292,6 +297,7 @@ class cEBMF:
         loss = (-ll + KL).item()  # minimize this (negative ELBO)
         self.obj.append(loss)
 
+    @torch.no_grad()
     def _compute_constant_loglik(self, ER2: Tensor) -> Tensor:
         m = self.mask.sum().clamp_min(1.0)
         return -0.5 * (
@@ -299,6 +305,7 @@ class cEBMF:
             + self.tau * ER2.sum()
         )
 
+    @torch.no_grad()
     def _compute_elementwise_loglik(self, ER2: Tensor) -> Tensor:
         obs = self.mask.bool()
         return -0.5 * (
@@ -338,6 +345,7 @@ class cEBMF:
         R2 = (R2 * self.mask).clamp_min(0.0)  # zero where missing; no negatives
         return R2
 
+    @torch.no_grad()
     def _validate_inputs(self) -> None:
         if self.model.K < 1:
             raise ValueError(f"K must be >= 1, got {self.model.K}")
@@ -345,12 +353,14 @@ class cEBMF:
             raise ValueError("Data cannot be all NaN")
         # More validation...
 
+    @torch.no_grad()
     def _initialise_priors(self):
         self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.model.prior_L)
         self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.model.prior_F)
         self.model_state_L = [None] * self.model.K
         self.model_state_F = [None] * self.model.K
 
+    @torch.no_grad()
     def _initialise_tensors(self):
         self.mask = (~torch.isnan(self.Y)).float()  # 1 where observed, 0 where NaN
         self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
@@ -393,6 +403,7 @@ class cEBMF:
         Rk = (self.Y0 - (recon - k_contrib)) * self.mask
         return Rk
 
+    @torch.no_grad()
     def _should_prune_factor(self, k: int) -> bool:
         """
         Remove factor k if we have π₀ info and the smallest π₀ across coordinates
@@ -407,6 +418,7 @@ class cEBMF:
         thresh = self.model.prune_thresh
         return (pi0_min_L >= thresh) or (pi0_min_F >= thresh)
 
+    @torch.no_grad()
     def _prune_indices(self, idxs: list[int]) -> None:
         """In-place prune of K and all factor-aligned structures."""
         if not idxs:
@@ -425,6 +437,7 @@ class cEBMF:
         self.model.K = len(keep)
         self.obj = []
 
+    @torch.no_grad()
     def _build_covariate_matrix(
         self, external_cov: Tensor | None, self_cov_enabled: bool, factors: Tensor, k: int, dim_size: int
     ) -> Tensor | None:
@@ -498,6 +511,7 @@ def normal_means_loglik(
         raise ValueError("reduce must be 'sum', 'mean', or 'none'")
 
 
+@torch.no_grad()
 def _impute_nan(Y: Tensor) -> Tensor:
     # Column-mean imputation in pure torch (for SVD init only)
     mask = ~torch.isnan(Y)
