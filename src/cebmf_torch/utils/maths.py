@@ -70,6 +70,23 @@ def do_truncnorm_argchecks(a: torch.Tensor, b: torch.Tensor):
     return a, b
 
 
+def safe_tensor_to_float(
+    value: torch.Tensor | float | None, null_value: float = float("-inf"), reduction: str = "min"
+) -> float:
+    """Convert tensor/float/None to float with safe handling."""
+    if value is None:
+        return null_value
+    if isinstance(value, torch.Tensor):
+        if value.numel() == 0:
+            return null_value
+        if reduction == "min":
+            return float(value.min().item())
+        elif reduction == "max":
+            return float(value.max().item())
+        # ... other reductions
+    return float(value)
+
+
 # ------------------------
 # E[Z | a<Z<b]  and E[Z^2 | a<Z<b] for Z~N(mean, sd^2)
 # ------------------------
