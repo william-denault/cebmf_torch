@@ -1,10 +1,10 @@
 import numpy as np
 import torch
 
-from cebmf_torch.ebnm.ash import ash
+# Updated to use clean imports from new API
+from cebmf_torch import ash
+from cebmf_torch.utils import autoselect_scales_mix_norm, optimize_pi_logL, posterior_mean_norm
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
-from cebmf_torch.utils.mixture import autoselect_scales_mix_norm, optimize_pi_logL
-from cebmf_torch.utils.posterior import posterior_mean_norm
 
 
 def test_ash_loglik_and_scale():
