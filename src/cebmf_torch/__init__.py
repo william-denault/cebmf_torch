@@ -1,4 +1,3 @@
-# Main classes
 # Submodules for advanced usage
 from . import cebnm, ebnm, priors, utils
 
@@ -6,14 +5,11 @@ from . import cebnm, ebnm, priors, utils
 from .ebnm.ash import ash
 from .ebnm.point_exp import ebnm_point_exp
 from .ebnm.point_laplace import ebnm_point_laplace
-from .torch_main import CovariateParams, ModelParams, NoiseParams, cEBMF
+from .torch_main import cEBMF
 
 __all__ = [
     # Main classes
     "cEBMF",
-    "ModelParams",
-    "NoiseParams",
-    "CovariateParams",
     # Core functions
     "ash",
     "ebnm_point_exp",
