@@ -17,20 +17,41 @@ Here's a simple example demonstrating matrix factorization:
 .. code-block:: python
 
     import torch
-    from cebmf_torch import cEBMF, ModelParams
+    from cebmf_torch import cEBMF
     
     # Generate synthetic data
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     Y = torch.randn(500, 200, device=device)
     
-    # Create and fit model
-    model_params = ModelParams(K=5, prior_L='norm', prior_F='norm')
-    model = cEBMF(data=Y, model=model_params)
+    # Create and fit model with simple interface
+    model = cEBMF(data=Y, K=5, prior_L='norm', prior_F='norm', device=device)
     result = model.fit(maxit=10)
     
     print(f"L shape: {result.L.shape}")  # (500, 5)
     print(f"F shape: {result.F.shape}")  # (200, 5) 
     print(f"Precision: {result.tau.item():.3f}")
+
+Quick Usage Patterns
+~~~~~~~~~~~~~~~~~~~~~
+
+The cEBMF interface is designed to be straightforward:
+
+.. code-block:: python
+
+    from cebmf_torch import cEBMF
+    
+    # Basic usage with defaults
+    model = cEBMF(data=Y)  # Uses K=5, normal priors
+    
+    # Customized priors and rank
+    model = cEBMF(data=Y, K=10, prior_L='exp', prior_F='laplace')
+    
+    # With covariates
+    model = cEBMF(data=Y, K=3, X_l=row_covariates, X_f=col_covariates)
+    
+    # Different noise models
+    from cebmf_torch.torch_main import NoiseType
+    model = cEBMF(data=Y, K=5, noise_type=NoiseType.ROW_WISE)
 
 Empirical Bayes Normal Means (EBNM)
 ------------------------------------
@@ -81,7 +102,7 @@ Handling Missing Data
 .. code-block:: python
 
     import torch
-    from cebmf_torch import cEBMF, ModelParams
+    from cebmf_torch import cEBMF
     
     # Create data with missing values
     Y = torch.randn(100, 50)
@@ -89,8 +110,7 @@ Handling Missing Data
     Y[torch.rand_like(Y) < 0.1] = float('nan')  # Random missing
     
     # cEBMF handles NaN automatically
-    model_params = ModelParams(K=3)
-    model = cEBMF(data=Y, model=model_params)
+    model = cEBMF(data=Y, K=3)
     result = model.fit(maxit=20)
     
     # Check convergence
@@ -134,11 +154,10 @@ Custom Initialization
 
 .. code-block:: python
 
-    from cebmf_torch import cEBMF, ModelParams
+    from cebmf_torch import cEBMF
     
     Y = torch.randn(200, 100)
-    model_params = ModelParams(K=5)
-    model = cEBMF(data=Y, model=model_params)
+    model = cEBMF(data=Y, K=5)
     
     # Different initialization strategies
     result_svd = model.fit(maxit=10)  # Default: SVD
@@ -178,15 +197,14 @@ GPU Acceleration
 .. code-block:: python
 
     import torch
-    from cebmf_torch import cEBMF, ModelParams
+    from cebmf_torch import cEBMF
     
     # Always specify device for tensors
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     Y = torch.randn(1000, 500, device=device)
     
-    # Model automatically inherits device from data
-    model_params = ModelParams(K=10)
-    model = cEBMF(data=Y, model=model_params)
+    # Model automatically inherits device from data or specify explicitly
+    model = cEBMF(data=Y, K=10, device=device)
     result = model.fit(maxit=50)
 
 Convergence Monitoring
@@ -194,11 +212,10 @@ Convergence Monitoring
 
 .. code-block:: python
 
-    from cebmf_torch import cEBMF, ModelParams
+    from cebmf_torch import cEBMF
     
     Y = torch.randn(300, 200)
-    model_params = ModelParams(K=8, allow_backfitting=True)
-    model = cEBMF(data=Y, model=model_params)
+    model = cEBMF(data=Y, K=8, allow_backfitting=True)
     
     result = model.fit(maxit=100)
     
