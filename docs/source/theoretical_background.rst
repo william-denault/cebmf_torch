@@ -11,7 +11,7 @@ implementation. It focuses on Empirical Bayes Matrix Factorization (EBMF)
 and the closely related Empirical Bayes Normal Means (EBNM) problems that are
 used as building blocks.
 
-Empirical Bayes Nornal Means (EBNM)
+Empirical Bayes Normal Means (EBNM)
 -----------------------------------
 
 Before describing EBMF, we first describe the simpler EBNM problem.
@@ -216,7 +216,7 @@ Although this is a special case of the EMDN model with one of the components hav
 zero variance, it is numerically more stable to treat it separately.
 
 
-CBG (Covariate Generalized Binary)
+CGB (Covariate Generalized Binary)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The Spiked-EMDN model can be simplified to a two-component mixture of a point mass at zero and a single Gaussian
@@ -225,11 +225,11 @@ The Spiked-EMDN model can be simplified to a two-component mixture of a point ma
       g(\cdot, z_i) = \pi(z_i) \delta_0(\cdot) + (1 - \pi(z_i)) \mathcal{N}(\cdot, \mu, \sigma^2).
 
 In this case we learn the function :math:`\pi(z_i)` with a neural network, but simplify our task
-by treating $\mu$ and :math:`\sigma^2` as independent of :math:`z_i` and learning them as global parameters.
+by treating :math:`\mu` and :math:`\sigma^2` as independent of :math:`z_i` and learning them as global parameters.
 This model is useful when we believe that there are two fundamental populations in the data, and we
 want to learn the probability that each observation belongs to one of these populations.
 
-Sharp_CBG (Sharp Covariate Generalized Binary)
+Sharp_CGB (Sharp Covariate Generalized Binary)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The CBG model can be further simplified by relating the mean and variance of the Gaussian component to be
@@ -238,17 +238,8 @@ The CBG model can be further simplified by relating the mean and variance of the
       \sigma = \omega \vert \mu \vert.
 
 This parameterization is useful when we believe that the variance of the non-zero component. We fix
-$\omega$ to be a small constant and learn the mean :math:`\mu` as a global parameter.
-
-.. An alternative parameterization which we use in the code fixes the mean and variance of single Gaussian,
-.. and we learn the weights between a delta function at zero and a Gaussian with known mean and variance
-.. (we call this :code:`cgb` in the code):
-
-.. .. math::
-..       g(\cdot, z_i, \mathbf{\theta} ) = \pi(z_i) \delta_0(\cdot) + (1 - \pi(z_i)) \mathcal{N}(\cdot, \mu, \sigma^2).
-
-.. In this example, we learn the function :math:`\pi(z_i)` with a neural network, 
-.. while the mean :math:`\mu` and variance :math:`\sigma^2` are fixed.
+:math:`\omega` to be a small constant and learn the mean :math:`\mu` as a global parameter.
+In this case, we again learn the function :math:`\pi(z_i)` with a neural network.
 
 .. admonition:: TODO
 
