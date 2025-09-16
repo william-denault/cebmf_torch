@@ -154,9 +154,9 @@ class cEBMF:
 
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
-        self.R = (self.Y0 - self.L @ self.F.T)
+        self.R = self.Y0 - self.L @ self.F.T
         self.R.mul_(self.mask)
-        
+
         self.R.nan_to_num_(nan=0.0)
         self.update_tau()
 
@@ -196,28 +196,28 @@ class cEBMF:
     # Private Methods - Internal Implementation Details
     # =========================================================================
 
-    @torch.no_grad() 
+    @torch.no_grad()
     def _update_factors(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
         """Orchestrates residualization. Only this method mutates self.R."""
         mask_f = self.mask if self.mask.dtype.is_floating_point else self.mask.to(self.L.dtype)
- 
+
         Lk = self.L[:, k]
         Fk = self.F[:, k]
- 
+
         self.R.addr_(Lk, Fk, alpha=1.0)
         self.R.mul_(mask_f)
- 
+
         self._update_L_factor(k, tau_map, eps)
- 
+
         Lk = self.L[:, k]  # updated
         self.R.addr_(Lk, Fk, alpha=-1.0)
         self.R.mul_(mask_f)
- 
+
         self.R.addr_(Lk, Fk, alpha=1.0)
         self.R.mul_(mask_f)
- 
+
         self._update_F_factor(k, tau_map, eps)
- 
+
         Fk = self.F[:, k]  # updated
         self.R.addr_(Lk, Fk, alpha=-1.0)
         self.R.mul_(mask_f)
@@ -226,17 +226,17 @@ class cEBMF:
     def _update_L_factor(self, k: int, tau_map: Tensor | None, eps: float) -> None:
         """Update L[:,k] and L2[:,k]; assumes self.R already has k added back."""
         mask_f = self.mask if self.mask.dtype.is_floating_point else self.mask.to(self.L.dtype)
-        Fk  = self.F[:, k]
+        Fk = self.F[:, k]
         Fk2 = self.F2[:, k]
 
         if tau_map is None:
-            denom_l = mask_f @ Fk2                   # (N,)
-            num_l   = self.R @ Fk                    # (N,)
-            se_l    = torch.sqrt(1.0 / (self.tau * denom_l.clamp_min(eps)))
+            denom_l = mask_f @ Fk2  # (N,)
+            num_l = self.R @ Fk  # (N,)
+            se_l = torch.sqrt(1.0 / (self.tau * denom_l.clamp_min(eps)))
         else:
-            denom_l = (tau_map * mask_f) @ Fk2       # (N,)
-            num_l   = torch.einsum('ij,ij,j->i', self.R, tau_map, Fk)
-            se_l    = torch.sqrt(1.0 / denom_l.clamp_min(eps))
+            denom_l = (tau_map * mask_f) @ Fk2  # (N,)
+            num_l = torch.einsum("ij,ij,j->i", self.R, tau_map, Fk)
+            se_l = torch.sqrt(1.0 / denom_l.clamp_min(eps))
 
         lhat = num_l / denom_l.clamp_min(eps)
 
@@ -250,37 +250,39 @@ class cEBMF:
         )
         with torch.enable_grad():
             resL = self.prior_L_fn.fit(
-                X=X_model, betahat=lhat, sebetahat=se_l, model_param=self.model_state_L[k],
+                X=X_model,
+                betahat=lhat,
+                sebetahat=se_l,
+                model_param=self.model_state_L[k],
             )
 
         # write back
         self.model_state_L[k] = resL.model_param
-        self.L[:, k]  = resL.post_mean
+        self.L[:, k] = resL.post_mean
         self.L2[:, k] = resL.post_mean2
         nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
-        self.kl_l[k]  = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
+        self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
         self.pi0_L[k] = resL.pi0_null
-
 
     @torch.no_grad()
     def _update_F_factor(self, k: int, tau_map: Tensor | None, eps: float) -> None:
         """Update F[:,k] and F2[:,k]; assumes self.R has UPDATED L_k added back."""
         mask_f = self.mask if self.mask.dtype.is_floating_point else self.mask.to(self.L.dtype)
-        Lk  = self.L[:, k]
+        Lk = self.L[:, k]
         Lk2 = self.L2[:, k]
 
         if tau_map is None:
-            denom_f = mask_f.T @ Lk2                 # (P,)
-            num_f   = self.R.T @ Lk                  # (P,)
-            se_f    = torch.sqrt(1.0 / (self.tau * denom_f.clamp_min(eps)))
+            denom_f = mask_f.T @ Lk2  # (P,)
+            num_f = self.R.T @ Lk  # (P,)
+            se_f = torch.sqrt(1.0 / (self.tau * denom_f.clamp_min(eps)))
         else:
             denom_f = (tau_map * mask_f).transpose(0, 1) @ Lk2
-            num_f   = torch.einsum('ij,ij,i->j', self.R, tau_map, Lk)
-            se_f    = torch.sqrt(1.0 / denom_f.clamp_min(eps))
+            num_f = torch.einsum("ij,ij,i->j", self.R, tau_map, Lk)
+            se_f = torch.sqrt(1.0 / denom_f.clamp_min(eps))
 
         fhat = num_f / denom_f.clamp_min(eps)
 
-    # fit prior for F
+        # fit prior for F
         X_model = self._build_covariate_matrix(
             external_cov=self.covariate.X_f,
             self_cov_enabled=self.covariate.self_col_cov,
@@ -290,15 +292,18 @@ class cEBMF:
         )
         with torch.enable_grad():
             resF = self.prior_F_fn.fit(
-                X=X_model, betahat=fhat, sebetahat=se_f, model_param=self.model_state_F[k],
+                X=X_model,
+                betahat=fhat,
+                sebetahat=se_f,
+                model_param=self.model_state_F[k],
             )
 
         # write back
         self.model_state_F[k] = resF.model_param
-        self.F[:, k]  = resF.post_mean
+        self.F[:, k] = resF.post_mean
         self.F2[:, k] = resF.post_mean2
         nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
-        self.kl_f[k]  = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
+        self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
         self.pi0_F[k] = resF.pi0_null
 
     @torch.no_grad()
