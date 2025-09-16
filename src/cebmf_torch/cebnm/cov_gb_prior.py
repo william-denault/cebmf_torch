@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
-
+import torch.nn.functional as F
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
 
 
@@ -47,7 +47,10 @@ class CgbNet(nn.Module):
             x = self.relu(layer(x))
         pi_2 = self.sigmoid(self.output_layer(x)).squeeze(-1)  # (N,)
         pi_1 = 1.0 - pi_2
-        return pi_1, pi_2, self.mu_2
+
+        mu_2_pos = F.softplus(self.mu_2) + 1e-6   # ensures strictly > 0
+
+        return pi_1, pi_2, mu_2_pos
 
 
 # -------------------------
@@ -99,14 +102,14 @@ def m_step_sigma2(gamma2, mu2, targets, se):
 # Result container
 # -------------------------
 class CgbPosteriorResult:
-    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param):
+    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, log_lik, model_param):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
         self.pi = pi  # π₀(x): spike weight
         self.mu_2 = mu_2
         self.sigma_2 = sigma_2
-        self.loss = loss
+        self.log_lik =log_lik
         self.model_param = model_param
 
 
