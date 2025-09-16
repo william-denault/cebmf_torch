@@ -1,5 +1,5 @@
 # Main classes
-from .torch_main import cEBMF
+from .torch_main import CovariateParams, ModelParams, NoiseParams, cEBMF
 
 # Core EBNM functions - commonly used building blocks
 from .ebnm.ash import ash
@@ -12,6 +12,9 @@ from . import cebnm, ebnm, priors, utils
 __all__ = [
     # Main classes
     "cEBMF",
+    "ModelParams",
+    "NoiseParams",
+    "CovariateParams",
     # Core functions
     "ash",
     "ebnm_point_exp",
