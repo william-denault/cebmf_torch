@@ -42,11 +42,7 @@ and then compute the posterior distribution :math:`p(\theta_i \mid y_i, \sigma, 
 
 .. admonition:: TODO
 
-      Add a short worked example for the EBNM problem here: simulate a small
-      dataset (:math:`y_i`), estimate a prior :math:`g` (for example using a
-      mixture prior or ash), and show how to compute posterior means
-      :math:`E(\theta_i \mid y_i, \hat{g})`. See the :doc:`examples` page for
-      longer scripts that can be adapted into this section.
+      Link to relevant example. See the :doc:`examples`
 
 
 Empirical Bayes Matrix Factorization
@@ -131,7 +127,7 @@ As a summary, the EBMF approach does the following:
 
 .. admonition:: TODO
 
-      Discuss sparsity and choice of prior families here. Discuss what our outputs are (posterior means)
+      Discuss sparsity and what our outputs are (posterior means)
 
 
 Key properties
@@ -167,33 +163,92 @@ This problem now has the additional challenge of estimating the function :math:`
 
 In the code, we define the covariates for :math:`L` to be :code:`X_l` and for :math:`F` to be :code:`X_f`.
 
-Mixture Density Networks
+
+Prior families
+--------------
+
+We make use of many prior families in the code, which we define below.
+
+ASH (Adaptive Shrinkage)
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-One way to estimate a prior that depends on covariates is to use a Mixture Density Network (MDN).
-An MDN is a neural network that outputs the parameters of a mixture distribution.
-For example, suppose we wanted to use a mixture of Gaussians prior on the loadings
-(we call this :code:`emdm` in the code)
+In the simplest example, we assume that the prior is a mixture of a point mass at zero and a mixture of zero-mean Gaussians
 
 .. math::
-      g(\cdot, z_i, \mathbf{\theta} ) = \sum_{j=1}^J \pi_j(z_i) \mathcal{N}(\cdot, \mu_j(z_i), \sigma_j^2(z_i)).
+      g(\cdot,) = \pi_0 \delta_0 (\cdot) + \sum_{j=1}^J \pi_j \mathcal{N}(\cdot, 0, \sigma_j^2),
+
+where :math:`\pi_j` are the mixture weights and :math:`\sigma_j^2` are a fixed grid of variances.
+Here we learn the parameters :math:`\{\pi_j\}`, but the variances are fixed.
+
+CASH (Covariate Adaptive Shrinkage)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ASH model can be extended to allow the mixture weights to depend on covariates :math:`z`,
+
+.. math::
+      g(\cdot, z ) = \pi_0 (z) \delta_0 (\cdot) + \sum_{j=1}^J \pi_j (z) \mathcal{N}(\cdot, 0, \sigma_j^2),
+
+where :math:`\pi_j(z)` are the mixture weights that depend on covariates :math:`z` and :math:`\sigma_j^2` are a fixed grid of variances.
+Here we learn the functions :math:`\{\pi_j(z)\}` by fitting neural networks, but the variances are fixed.
+
+EMDN (Empirical Mixture Density Network)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Instead of restricting ourselves to a mixture of zero-mean Gaussians with known variance, 
+we can use a more flexible prior family where the entire prior distribution depends on covariates :math:`z` 
+through a Mixture Density Network (MDN)
+
+.. math::
+      g(\cdot, z_i) = \sum_{j=1}^J \pi_j(z_i) \mathcal{N}(\cdot, \mu_j(z_i), \sigma_j^2(z_i)),
 
 where :math:`\pi_j(z_i)` are the mixture weights, :math:`\mu_j(z_i)` are the means, 
 and :math:`\sigma_j^2(z_i)` are the variances of the mixture components.
-Then, the MDN would take the covariates :math:`z_i`
-as input and output the mixture weights :math:`\pi_j(z_i)`, means :math:`\mu_j(z_i)` and variances :math:`\sigma_j^2(z_i)`.
-Our task in the CEBMF problem is then to estimate the parameters of the MDN, :math:`\mathbf{\theta}`, from the data, as well
-as the posterior distribution of the loadings and factors.
 
-An alternative parameterization which we use in the code fixes the mean and variance of single Gaussian,
-and we learn the weights between a delta function at zero and a Gaussian with known mean and variance
-(we call this :code:`cgb` in the code):
+Spiked-EMDN (Spiked Empirical Mixture Density Network)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The EMDN model can be expanded by including a point mass at zero in the mixture.
 
 .. math::
-      g(\cdot, z_i, \mathbf{\theta} ) = \pi(z_i) \delta_0(\cdot) + (1 - \pi(z_i)) \mathcal{N}(\cdot, \mu, \sigma^2).
+      g(\cdot, z_i) = \pi_0(z_i) \delta_0(\cdot) + \sum_{j=1}^J \pi_j(z_i) \mathcal{N}(\cdot, \mu_j(z_i), \sigma_j^2(z_i)).
 
-In this example, we learn the function :math:`\pi(z_i)` with a neural network, 
-while the mean :math:`\mu` and variance :math:`\sigma^2` are fixed.
+Although this is a special case of the EMDN model with one of the components having
+zero variance, it is numerically more stable to treat it separately.
+
+
+CBG (Covariate Generalized Binary)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Spiked-EMDN model can be simplified to a two-component mixture of a point mass at zero and a single Gaussian
+
+.. math::
+      g(\cdot, z_i) = \pi(z_i) \delta_0(\cdot) + (1 - \pi(z_i)) \mathcal{N}(\cdot, \mu, \sigma^2).
+
+In this case we learn the function :math:`\pi(z_i)` with a neural network, but simplify our task
+by treating $\mu$ and :math:`\sigma^2` as independent of :math:`z_i` and learning them as global parameters.
+This model is useful when we believe that there are two fundamental populations in the data, and we
+want to learn the probability that each observation belongs to one of these populations.
+
+Sharp_CBG (Sharp Covariate Generalized Binary)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The CBG model can be further simplified by relating the mean and variance of the Gaussian component to be
+
+.. math::
+      \sigma = \omega \vert \mu \vert.
+
+This parameterization is useful when we believe that the variance of the non-zero component. We fix
+$\omega$ to be a small constant and learn the mean :math:`\mu` as a global parameter.
+
+.. An alternative parameterization which we use in the code fixes the mean and variance of single Gaussian,
+.. and we learn the weights between a delta function at zero and a Gaussian with known mean and variance
+.. (we call this :code:`cgb` in the code):
+
+.. .. math::
+..       g(\cdot, z_i, \mathbf{\theta} ) = \pi(z_i) \delta_0(\cdot) + (1 - \pi(z_i)) \mathcal{N}(\cdot, \mu, \sigma^2).
+
+.. In this example, we learn the function :math:`\pi(z_i)` with a neural network, 
+.. while the mean :math:`\mu` and variance :math:`\sigma^2` are fixed.
 
 .. admonition:: TODO
 
