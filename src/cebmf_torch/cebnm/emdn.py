@@ -97,6 +97,32 @@ def emdn_posterior_means(
     lr=1e-3,
     model_param=None,
 ):
+    """
+    Fit a Mixture Density Network to estimate the prior distribution of effects.
+    In the EBNM problem, we observe estimates `betahat` with standard errors `sebetahat` and want to estimate
+    the prior distribution of the true effects.
+
+    betahat ~ N(theta, sebetahat^2)
+
+    theta ~ G, where G is modeled as a mixture of Gaussians with parameters predicted by a neural network. 
+    
+    Args:
+        :X (torch.Tensor): Covariates for each observation, shape (n_samples, n_features).
+        :betahat (torch.Tensor): Observed effect estimates, shape (n_samples,).
+        :sebetahat (torch.Tensor): Standard errors of the effect estimates, shape (n_samples,).
+        :n_epochs (int): Number of training epochs.
+        :n_layers (int): Number of hidden layers in the neural network.
+        :n_gaussians (int): Number of Gaussian components in the mixture.
+        :hidden_dim (int): Number of hidden units in each layer.
+        :batch_size (int): Batch size for training.
+        :lr (float): Learning rate for the optimizer.
+        :model_param (dict, optional): Pre-trained model parameters to initialize the network.
+
+    Returns:
+        :EmdnPosteriorMeanNorm: Container with posterior means, standard deviations, and model parameters.
+    
+    """
+
     # Standardize X
     if X.ndim == 1:
         X = X.reshape(-1, 1)
