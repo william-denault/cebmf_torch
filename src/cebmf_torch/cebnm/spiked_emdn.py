@@ -229,7 +229,7 @@ def spiked_emdn_posterior_means(
 
     pi_np = pi_pred.cpu().numpy()
     mu_np = mu_full.cpu().numpy()
-    scale_np = sigma_full.cpu().numpy()  # prior SDs (0 for spike)
+    scale_np = sigma_full.sqrt().cpu().numpy()   # prior SDs (0 for spike)
 
 
   
