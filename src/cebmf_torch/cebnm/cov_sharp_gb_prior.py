@@ -36,7 +36,7 @@ class DensityRegressionDataset(Dataset):
 # π0(x) network; global μ (>=0); fixed ω
 # -------------------------
 class CgbNet(nn.Module):
-    def __init__(self, input_dim, hidden_dim=64, n_layers=2, omega=0.2, mu_init=1.0):
+    def __init__(self, input_dim, hidden_dim=64, n_layers=2, omega=0.02, mu_init=1.0):
         super().__init__()
         layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
         for _ in range(n_layers - 1):
@@ -173,8 +173,8 @@ def sharp_cgb_posterior_means(
     X,
     betahat,
     sebetahat,
-    omega=0.2,
-    n_epochs=80,
+    omega=0.02,
+    n_epochs=50,
     n_layers=2,
     hidden_dim=64,
     batch_size=256,
