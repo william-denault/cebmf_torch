@@ -44,15 +44,15 @@ def test_basic_parameter_recovery(device):
 
     # finite outputs
     assert math.isfinite(res.log_lik)
-    assert 0.0 < res.pi < 1.0
-    assert res.mu >= 0.0
+    assert 0.0 < res.pi0 < 1.0
+    assert res.mode >= 0.0
     assert torch.isfinite(res.post_mean).all()
     assert torch.isfinite(res.post_sd).all()
     assert torch.isfinite(res.post_mean2).all()
 
     # parameter recovery (tolerances generous to allow stochastic variation)
-    assert abs(res.pi - true_pi) < 0.06
-    assert abs(res.mu - true_mu) < 0.35
+    assert abs(res.pi0 - true_pi) < 0.06
+    assert abs(res.mode - true_mu) < 0.35
 
     # moment consistency: Var >= 0, E[X^2] >= E[X]^2
     pm, pm2 = res.post_mean, res.post_mean2
@@ -120,11 +120,11 @@ def test_extreme_cases_pi_near_zero_and_one():
     # Almost all spikes
     _, x0, s0 = simulate_gb(n=2000, pi=0.02, mu=2.0, omega=0.2, s_val=0.5, seed=555)
     r0 = ebnm_gb(x0, s0, omega=0.2)
-    assert r0.pi < 0.15
+    assert r0.pi0 < 0.15
     assert r0.post_mean.mean().item() < 0.15
 
     # Almost all slabs
     _, x1, s1 = simulate_gb(n=2000, pi=0.98, mu=2.0, omega=0.2, s_val=0.5, seed=556)
     r1 = ebnm_gb(x1, s1, omega=0.2)
-    assert r1.pi > 0.8
+    assert r1.pi0 > 0.8
     assert r1.post_mean.mean().item() > 0.5

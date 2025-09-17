@@ -14,9 +14,9 @@ class EBNMGBResult:
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    pi: float        # slab weight π
-    mu: float        # learned μ ≥ 0
-    omega: float     # fixed ω (σ = ω μ)
+    pi0: float        # slab weight π
+    mode: float        # learned μ ≥ 0
+    scale: float     # fixed ω (σ = ω μ)
     log_lik: float
 
 def _log_normal_pdf(x: Tensor, mean: Tensor, sd: Tensor) -> Tensor:
@@ -193,8 +193,9 @@ def ebnm_gb(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi=float(pi),
-        mu=float(mu),
-        omega=float(omega),
+        pi0=float(pi),
+        mode=float(mu),
+        scale=float(1/(omega+1e-8)),
         log_lik=float(log_lik),
     )
+ 
