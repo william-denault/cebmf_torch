@@ -155,8 +155,39 @@ def ash(
 ):
     """
     Adaptive shrinkage with mixture priors ("norm" or "exp") in pure PyTorch.
+
     Uses EM for π (mini-batch capable via batch_size).
-    Returns ash_object with Torch tensors.
+    Returns an ASHResult object with Torch tensors.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Observed data.
+    s : torch.Tensor
+        Standard errors of the observed data.
+    prior : PriorType, optional
+        Type of prior to use (default: PriorType.NORM).
+    mult : float, optional
+        Multiplier for scale grid (default: sqrt(2.0)).
+    penalty : float, optional
+        Penalty for mixture weights (default: 10.0).
+    verbose : bool, optional
+        Verbosity flag (default: True).
+    threshold_loglikelihood : float, optional
+        Minimum log-likelihood threshold (default: -300.0).
+    mode : float, optional
+        Mode parameter (for normal prior only, default: 0.0).
+    batch_size : int or None, optional
+        Batch size for EM updates (default: 128).
+    shuffle : bool, optional
+        Whether to shuffle data in EM (default: False).
+    seed : int or None, optional
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    ASHResult
+        Result object containing posterior summaries and model parameters.
     """
 
     # choose optimizer mode (EM by default here)
