@@ -61,9 +61,10 @@ fit = model.fit(maxit=10)
 print(fit.L.shape, fit.F.shape, fit.tau.item())
 ```
 
+
 ## Documentation & Examples
 
-- Full documentation: [See the docs folder or online documentation if available]
+- Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
 - Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
 
 ## Notes & Tips
