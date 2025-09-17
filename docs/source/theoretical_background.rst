@@ -40,9 +40,9 @@ We thus find the maximum likelihood estimate of :math:`g`:
 
 and then compute the posterior distribution :math:`p(\theta_i \mid y_i, \sigma, \hat{g})`.
 
-.. admonition:: TODO
-
-      Link to relevant example. Explain why this is a good idea. Maybe figure here. See the :doc:`examples`
+This can significantly reduce the scatter between a prediction and the truth, when compared
+to using the maximum likelihood estimate :math:`\hat{\theta}_i = y_i`.
+See the :doc:`notebooks/spiked_emdn` for an example of this.
 
 
 Empirical Bayes Matrix Factorization
