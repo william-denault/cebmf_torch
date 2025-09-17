@@ -128,7 +128,7 @@ def m_step_sigma2(gamma2, mu2, targets, se):
 # Result container
 # -------------------------
 class CgbPosteriorResult:
-    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, log_lik, model_param):
+    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param):
         """
         Container for the results of the CGB posterior mean estimation.
 
@@ -146,7 +146,7 @@ class CgbPosteriorResult:
             Global mean of the slab component.
         sigma_2 : float
             Global standard deviation of the slab component.
-        log_lik : float
+        loss : float
             Final training loss or log-likelihood.
         model_param : dict
             Trained model parameters (state_dict).
@@ -157,7 +157,7 @@ class CgbPosteriorResult:
         self.pi = pi  # π₀(x): spike weight
         self.mu_2 = mu_2
         self.sigma_2 = sigma_2
-        self.log_lik = log_lik
+        self.loss = loss
         self.model_param = model_param
 
 
