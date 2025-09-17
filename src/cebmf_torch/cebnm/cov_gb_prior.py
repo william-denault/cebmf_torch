@@ -106,7 +106,7 @@ class CgbPosteriorResult:
         self.pi = pi  # π₀(x): spike weight
         self.mu_2 = mu_2
         self.sigma_2 = sigma_2
-        self.loss=loss
+        self.loss = loss
         self.model_param = model_param
 
 

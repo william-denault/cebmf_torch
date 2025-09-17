@@ -231,8 +231,6 @@ def spiked_emdn_posterior_means(
     mu_np = mu_full.cpu().numpy()
     scale_np = sigma_full.cpu().numpy()  # prior SDs (0 for spike)
 
-
-  
     # Posterior moments per observation
     N = len(betahat)
     post_mean = torch.empty(N, dtype=torch.float32)
