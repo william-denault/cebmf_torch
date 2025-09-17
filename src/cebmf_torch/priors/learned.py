@@ -30,6 +30,7 @@ class LearnedPriorType(StrEnum):
     SPIKED_EMDN : str
         Spiked Empirical Mixture Density Network prior.
     """
+
     CASH = auto()
     CGB = auto()
     CGB_SHARP = auto()
@@ -55,6 +56,7 @@ class LearnedBuilder(PriorBuilder):
     type : LearnedPriorType
         The type of learned prior to use.
     """
+
     def __init__(self, type: LearnedPriorType):
         """
         Initialize the LearnedBuilder.
