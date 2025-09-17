@@ -97,7 +97,8 @@ def mdn_spike_loss_with_varying_noise(
     eps: float = 1e-8,
 ):
     """
-    Compute the negative log-likelihood loss for a spike-and-slab mixture model with optional spike penalty and Beta prior.
+    Compute the negative log-likelihood loss for a spike-and-slab mixture model with optional
+    spike penalty and Beta prior.
 
     Parameters
     ----------
@@ -226,8 +227,8 @@ def spiked_emdn_posterior_means(
     Fit a Mixture Density Network (MDN) with spike and slab components to estimate the prior distribution of effects.
 
     In the EBNM problem, we observe estimates `betahat` with standard errors `sebetahat` and want to estimate
-    the prior distribution of the true effects. The prior is modeled as a mixture of Gaussians (slabs) plus a point mass at zero (spike),
-    with mixture parameters predicted by a neural network.
+    the prior distribution of the true effects. The prior is modeled as a mixture of Gaussians (slabs)
+    plus a point mass at zero (spike), with mixture parameters predicted by a neural network.
 
     Parameters
     ----------

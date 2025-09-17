@@ -23,7 +23,7 @@ jobs:
         uv run pip install jupyter nbconvert
     - name: Run all notebooks
       run: |
-        for nb in $(find . -name "examples/*.ipynb" -not -path "./.ipynb_checkpoints/*"); do
+        for nb in $(find . -path "./examples/*.ipynb" -not -path "./.ipynb_checkpoints/*"); do
           echo "Running $nb"
           uv run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=600 "$nb"
         done
