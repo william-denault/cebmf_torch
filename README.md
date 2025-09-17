@@ -2,6 +2,7 @@
 
 [![codecov](https://codecov.io/gh/william-denault/cebmf_torch/branch/main/graph/badge.svg)](https://codecov.io/gh/william-denault/cebmf_torch)
 [![unittest](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml/badge.svg)](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml)
+[![docs](https://readthedocs.org/projects/cebmf-torch/badge/?version=latest)](https://cebmf-torch.readthedocs.io/en/latest/)
 
 ## Overview
 
@@ -60,9 +61,10 @@ fit = model.fit(maxit=10)
 print(fit.L.shape, fit.F.shape, fit.tau.item())
 ```
 
+
 ## Documentation & Examples
 
-- Full documentation: [See the docs folder or online documentation if available]
+- Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
 - Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
 
 ## Notes & Tips
