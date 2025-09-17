@@ -225,11 +225,14 @@ def spiked_emdn_posterior_means(
     # Build full mixture params including the spike at 0 with prior sd=0
     mu_full = torch.cat([torch.zeros_like(mu_pred[:, :1]), mu_pred], dim=1)  # (N, K)
     sigma_full = torch.cat([torch.zeros_like(log_sigma_pred[:, :1]), torch.exp(log_sigma_pred)], dim=1)  # (N, K)
+    sigma_full = torch.cat([torch.zeros_like(log_sigma_pred[:, :1]), torch.exp(log_sigma_pred)], dim=1)  # SDs
 
     pi_np = pi_pred.cpu().numpy()
     mu_np = mu_full.cpu().numpy()
-    scale_np = sigma_full.sqrt().cpu().numpy()  # prior SDs (0 for spike)
+    scale_np = sigma_full.cpu().numpy()  # prior SDs (0 for spike)
 
+
+  
     # Posterior moments per observation
     N = len(betahat)
     post_mean = torch.empty(N, dtype=torch.float32)
