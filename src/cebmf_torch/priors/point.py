@@ -14,7 +14,7 @@ from .base import Prior, PriorBuilder
 class PointPriorType(StrEnum):
     LAPLACE = auto()
     EXP = auto()
-
+    GBINARY =auto()
 
 builder_functions: dict[PointPriorType, Callable] = {
     PointPriorType.LAPLACE: ebnm_point_laplace,
