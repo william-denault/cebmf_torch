@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [ main "4-documentation" ]
+    branches: [ main ]
   pull_request:
     branches: [ "*" ]
 
