@@ -125,21 +125,16 @@ As a summary, the EBMF approach does the following:
 3. Repeat step 2 until convergence.
 
 
-.. admonition:: TODO
-
-      Discuss sparsity and what our outputs are (posterior means)
-
-
 Key properties
 ^^^^^^^^^^^^^^
 
-1. Turns out to correspond to a variational approximation; approximate posterior by :math:`q(l, f ) = q(l)q( f )`.
-2. This establishes objective function; guarantees convergence
-3. Very flexible prior families; implementing new prior family only involves solving EBNM problem.
-4. Level of sparsity automatically tuned to data as part of fitting (no CV).
-5. Sufficiently efficient for reasonably large problems (no MCMC).
-6. If the family of prior contains a delta function, then we can learn the rank :math:`K`.
-7. Extend to :math:`K > 1` by iteratively adding/updating factors (deflation/backfitting).
+1. The method uses a variational approximation, where the posterior is factorized as :math:`q(l, f ) = q(l)q( f )`.
+2. This leads to a well-defined objective function and ensures convergence of the algorithm.
+3. The framework allows for highly flexible prior families; adding a new prior only requires solving the corresponding EBNM problem.
+4. Sparsity is automatically controlled by the data during fitting—no need for cross-validation.
+5. The algorithm is computationally efficient for large-scale problems and does not rely on MCMC.
+6. If the prior family includes a delta function at zero, the model can automatically infer the rank :math:`K`.
+7. For :math:`K > 1`, the method extends by iteratively adding or updating factors (deflation/backfitting).
 
 
 Covariate Empirical Bayes Matrix Factorization (CEBMF)
@@ -241,11 +236,15 @@ This parameterization is useful when we believe that the variance of the non-zer
 :math:`\omega` to be a small constant and learn the mean :math:`\mu` as a global parameter.
 In this case, we again learn the function :math:`\pi(z_i)` with a neural network.
 
-.. admonition:: TODO
-
-      Add the loss function we optimise here and a link to the relevant example
-
 
 References
 ----------
+
+* See this `YouTube tutorial <https://www.youtube.com/watch?v=PhNBzmTpVVg>`_ for a video explanation.
+* Non-negative matrix factorization: `Lee \& Seung 1999 <https://www.nature.com/articles/44565>`_
+* Covariate-moderated Empirical Bayes Matrix Factorization: Denault, et al. 2025. |statme-shield|
+
+.. |statme-shield| image:: https://img.shields.io/badge/stat.ME-arXiv%32505.11639-B31B1B.svg
+  :target: https://arxiv.org/abs/2505.11639 
+
 
