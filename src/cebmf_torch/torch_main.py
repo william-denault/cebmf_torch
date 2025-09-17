@@ -154,6 +154,10 @@ class cEBMF:
 
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
+        self.R = self.Y0 - self.L @ self.F.T
+        self.R.mul_(self.mask)
+
+        self.R.nan_to_num_(nan=0.0)
         self.update_tau()
 
     @torch.no_grad()
@@ -194,30 +198,49 @@ class cEBMF:
 
     @torch.no_grad()
     def _update_factors(self, k: int, tau_map: Tensor | None = None, eps: float = NUMERICAL_EPS) -> None:
-        """Update both L[:,k] and F[:,k] factors."""
+        """Orchestrates residualization. Only this method mutates self.R."""
+        mask_f = self.mask if self.mask.dtype.is_floating_point else self.mask.to(self.L.dtype)
+
+        Lk = self.L[:, k]
+        Fk = self.F[:, k]
+
+        self.R.addr_(Lk, Fk, alpha=1.0)
+        self.R.mul_(mask_f)
+
         self._update_L_factor(k, tau_map, eps)
+
+        Lk = self.L[:, k]  # updated
+        self.R.addr_(Lk, Fk, alpha=-1.0)
+        self.R.mul_(mask_f)
+
+        self.R.addr_(Lk, Fk, alpha=1.0)
+        self.R.mul_(mask_f)
+
         self._update_F_factor(k, tau_map, eps)
+
+        Fk = self.F[:, k]  # updated
+        self.R.addr_(Lk, Fk, alpha=-1.0)
+        self.R.mul_(mask_f)
 
     @torch.no_grad()
     def _update_L_factor(self, k: int, tau_map: Tensor | None, eps: float) -> None:
-        """Update L[:,k] factor and its second moments."""
-        # Compute statistics
-        Rk = self._partial_residual_masked(k)  # (N,P), zeros where missing
-        fk = self.F[:, k]  # (P,)
-        fk2 = self.F2[:, k]  # (P,)
+        """Update L[:,k] and L2[:,k]; assumes self.R already has k added back."""
+        mask_f = self.mask if self.mask.dtype.is_floating_point else self.mask.to(self.L.dtype)
+        Fk = self.F[:, k]
+        Fk2 = self.F2[:, k]
 
         if tau_map is None:
-            denom_l = (fk2.view(1, -1) * self.mask).sum(dim=1).clamp_min(eps)  # (N,)
-            num_l = Rk @ fk  # (N,)
-            se_l = torch.sqrt(1.0 / (self.tau * denom_l))
+            denom_l = mask_f @ Fk2  # (N,)
+            num_l = self.R @ Fk  # (N,)
+            se_l = torch.sqrt(1.0 / (self.tau * denom_l.clamp_min(eps)))
         else:
-            denom_l = (tau_map * (fk2.view(1, -1) * self.mask)).sum(dim=1).clamp_min(eps)  # (N,)
-            num_l = (tau_map * Rk) @ fk  # (N,)
-            se_l = torch.sqrt(1.0 / denom_l)
+            denom_l = (tau_map * mask_f) @ Fk2  # (N,)
+            num_l = torch.einsum("ij,ij,j->i", self.R, tau_map, Fk)
+            se_l = torch.sqrt(1.0 / denom_l.clamp_min(eps))
 
-        lhat = num_l / denom_l
+        lhat = num_l / denom_l.clamp_min(eps)
 
-        # Fit prior
+        # fit prior for L
         X_model = self._build_covariate_matrix(
             external_cov=self.covariate.X_l,
             self_cov_enabled=self.covariate.self_row_cov,
@@ -233,7 +256,7 @@ class cEBMF:
                 model_param=self.model_state_L[k],
             )
 
-        # Update state
+        # write back
         self.model_state_L[k] = resL.model_param
         self.L[:, k] = resL.post_mean
         self.L2[:, k] = resL.post_mean2
@@ -243,24 +266,23 @@ class cEBMF:
 
     @torch.no_grad()
     def _update_F_factor(self, k: int, tau_map: Tensor | None, eps: float) -> None:
-        """Update F[:,k] factor and its second moments."""
-        # Compute statistics (recompute Rk with updated L)
-        Rk = self._partial_residual_masked(k)
-        lk = self.L[:, k]  # (N,)
-        lk2 = self.L2[:, k]  # (N,)
+        """Update F[:,k] and F2[:,k]; assumes self.R has UPDATED L_k added back."""
+        mask_f = self.mask if self.mask.dtype.is_floating_point else self.mask.to(self.L.dtype)
+        Lk = self.L[:, k]
+        Lk2 = self.L2[:, k]
 
         if tau_map is None:
-            denom_f = (lk2.view(-1, 1) * self.mask).sum(dim=0).clamp_min(eps)  # (P,)
-            num_f = Rk.T @ lk  # (P,)
-            se_f = torch.sqrt(1.0 / (self.tau * denom_f))
+            denom_f = mask_f.T @ Lk2  # (P,)
+            num_f = self.R.T @ Lk  # (P,)
+            se_f = torch.sqrt(1.0 / (self.tau * denom_f.clamp_min(eps)))
         else:
-            denom_f = (tau_map * (lk2.view(-1, 1) * self.mask)).sum(dim=0).clamp_min(eps)  # (P,)
-            num_f = (tau_map * Rk).T @ lk  # (P,)
-            se_f = torch.sqrt(1.0 / denom_f)
+            denom_f = (tau_map * mask_f).transpose(0, 1) @ Lk2
+            num_f = torch.einsum("ij,ij,i->j", self.R, tau_map, Lk)
+            se_f = torch.sqrt(1.0 / denom_f.clamp_min(eps))
 
-        fhat = num_f / denom_f
+        fhat = num_f / denom_f.clamp_min(eps)
 
-        # Fit prior
+        # fit prior for F
         X_model = self._build_covariate_matrix(
             external_cov=self.covariate.X_f,
             self_cov_enabled=self.covariate.self_col_cov,
@@ -276,7 +298,7 @@ class cEBMF:
                 model_param=self.model_state_F[k],
             )
 
-        # Update state
+        # write back
         self.model_state_F[k] = resF.model_param
         self.F[:, k] = resF.post_mean
         self.F2[:, k] = resF.post_mean2
