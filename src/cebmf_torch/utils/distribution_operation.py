@@ -8,12 +8,41 @@ from .maths import _LOG_SQRT_2PI
 
 
 def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    """
+    Compute the log-density of a normal distribution in a numerically stable way.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor.
+    loc : torch.Tensor
+        Mean of the normal distribution.
+    scale : torch.Tensor
+        Standard deviation of the normal distribution.
+
+    Returns
+    -------
+    torch.Tensor
+        Log-density evaluated at x.
+    """
     z = (x - loc) / scale
     return -0.5 * z.pow(2) - torch.log(scale) - _LOG_SQRT_2PI
 
 
 def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
-    # stable log Φ(z)
+    """
+    Compute the log CDF of the standard normal distribution in a numerically stable way.
+
+    Parameters
+    ----------
+    z : torch.Tensor
+        Input tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        Log CDF evaluated at z.
+    """
     return torch.special.log_ndtr(z)
 
 
@@ -29,16 +58,25 @@ def convolved_logpdf_normal_torch(
     clamp: float = 1e5,
 ) -> torch.Tensor:
     """
-    Vectorized version of:
-        sd = sqrt(se^2 + scale^2)
-        logp = N(betahat | location, sd^2)
-    Shapes:
-        betahat:   (J,)
-        sebetahat: (J,)
-        location:  (K,)  or (J,K)
-        scale:     (K,)
-    Returns:
-        (J, K) tensor of log-likelihoods.
+    Compute the log-likelihood matrix for a normal prior convolved with normal noise.
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates, shape (J,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates, shape (J,).
+    location : torch.Tensor
+        Prior means, shape (K,) or (J, K).
+    scale : torch.Tensor
+        Prior standard deviations, shape (K,).
+    clamp : float, optional
+        Clamp log-likelihood values to [-clamp, clamp] for numerical stability (default: 1e5).
+
+    Returns
+    -------
+    torch.Tensor
+        Log-likelihood matrix of shape (J, K).
     """
     betahat = torch.as_tensor(betahat)
     sebetahat = torch.as_tensor(sebetahat)
@@ -74,22 +112,27 @@ def convolved_logpdf_exp_torch(
     scale: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Vectorized version of your convolved_logpdf_exp.
+    Compute the log-likelihood matrix for an exponential prior convolved with normal noise.
+
     Convention:
-      - scale[0] corresponds to the point-mass-at-zero component (unused in rate calc)
-      - scale[1:] are exponential scales; rate = 1/scale[1:].
+        - scale[0] corresponds to the point-mass-at-zero component (unused in rate calc)
+        - scale[1:] are exponential scales; rate = 1/scale[1:].
 
-    Shapes:
-      betahat:   (J,)
-      sebetahat: (J,)
-      scale:     (K,)  with K>=2, scale[0]=0 recommended.
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates, shape (J,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates, shape (J,).
+    scale : torch.Tensor
+        Prior scales, shape (K,) with K >= 2, scale[0]=0 recommended.
 
-    Returns:
-      L: (J, K) log-likelihood matrix where:
-         L[:,0] = N(betahat | 0, se^2)
-         L[:,1:] use the analytic Exp⊗Normal convolution:
-            log a + 0.5*(s a)^2 - a*x + log Φ(x/s - s a)
-         with a = rate = 1/scale[1:].
+    Returns
+    -------
+    torch.Tensor
+        Log-likelihood matrix L of shape (J, K), where:
+            L[:,0] = N(betahat | 0, se^2)
+            L[:,1:] use the analytic Exp⊗Normal convolution.
     """
     betahat = torch.as_tensor(betahat)
     sebetahat = torch.as_tensor(sebetahat)
@@ -129,8 +172,23 @@ def get_data_loglik_normal_torch(
     scale: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Torch equivalent of get_data_loglik_normal (returns (J,K) log-lik matrix).
-    Accepts location as (K,) or (J,K).
+    Compute the data log-likelihood matrix for a normal prior (batched wrapper).
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates, shape (J,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates, shape (J,).
+    location : torch.Tensor
+        Prior means, shape (K,) or (J, K).
+    scale : torch.Tensor
+        Prior standard deviations, shape (K,).
+
+    Returns
+    -------
+    torch.Tensor
+        Log-likelihood matrix of shape (J, K).
     """
     return convolved_logpdf_normal_torch(betahat, sebetahat, location, scale)
 
@@ -142,6 +200,20 @@ def get_data_loglik_exp_torch(
     scale: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Torch equivalent of get_data_loglik_exp (returns (J,K) log-lik matrix).
+    Compute the data log-likelihood matrix for an exponential prior (batched wrapper).
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates, shape (J,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates, shape (J,).
+    scale : torch.Tensor
+        Prior scales, shape (K,) with K >= 2, scale[0]=0 recommended.
+
+    Returns
+    -------
+    torch.Tensor
+        Log-likelihood matrix of shape (J, K).
     """
     return convolved_logpdf_exp_torch(betahat, sebetahat, scale)

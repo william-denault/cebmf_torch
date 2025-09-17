@@ -1,2 +1,8 @@
+myst-nb
+sphinx>=7.0.0
 sphinx-rtd-theme
 sphinx_mdinclude
+sphinx-autodoc-typehints
+numpy
+scikit-learn
+torch
