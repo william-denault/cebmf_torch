@@ -99,14 +99,14 @@ def m_step_sigma2(gamma2, mu2, targets, se):
 # Result container
 # -------------------------
 class CgbPosteriorResult:
-    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, log_lik, model_param):
+    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
         self.pi = pi  # π₀(x): spike weight
         self.mu_2 = mu_2
         self.sigma_2 = sigma_2
-        self.log_lik = log_lik
+        self.loss = loss
         self.model_param = model_param
 
 
@@ -190,6 +190,6 @@ def cgb_posterior_means(
         pi=pi1,
         mu_2=mu2.item(),
         sigma_2=sigma2_sq.sqrt().item(),
-        log_lik=total_loss,
+        loss=total_loss,
         model_param=model.state_dict(),
     )
