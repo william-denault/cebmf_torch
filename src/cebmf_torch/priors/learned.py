@@ -8,6 +8,7 @@ from cebmf_torch.cebnm.cash_solver import cash_posterior_means
 from cebmf_torch.cebnm.cov_gb_prior import cgb_posterior_means
 from cebmf_torch.cebnm.cov_sharp_gb_prior import sharp_cgb_posterior_means
 from cebmf_torch.cebnm.emdn import emdn_posterior_means
+from cebmf_torch.cebnm.spiked_emdn import spiked_emdn_posterior_means
 
 from .base import Prior, PriorBuilder
 
@@ -17,6 +18,7 @@ class LearnedPriorType(StrEnum):
     CGB = auto()
     CGB_SHARP = auto()
     EMDN = auto()
+    SPIKED_EMDN = auto()
 
 
 builder_functions: dict[LearnedPriorType, Callable] = {
@@ -24,6 +26,7 @@ builder_functions: dict[LearnedPriorType, Callable] = {
     LearnedPriorType.CGB: cgb_posterior_means,
     LearnedPriorType.CGB_SHARP: sharp_cgb_posterior_means,
     LearnedPriorType.EMDN: emdn_posterior_means,
+    LearnedPriorType.SPIKED_EMDN: spiked_emdn_posterior_means,
 }
 
 
@@ -46,7 +49,7 @@ class LearnedBuilder(PriorBuilder):
 
         # A bit annoying that the different types have different ways of handling pi0
         match self.type:
-            case LearnedPriorType.CASH:
+            case LearnedPriorType.CASH | LearnedPriorType.SPIKED_EMDN:
                 # optional: could expose from obj.pi_np
                 pi0_null = obj.pi_np[:, 0]
             case LearnedPriorType.CGB | LearnedPriorType.CGB_SHARP:
@@ -55,12 +58,12 @@ class LearnedBuilder(PriorBuilder):
             case LearnedPriorType.EMDN:
                 pi0_null = None
             case _:
-                raise ValueError(f"Unknown prior type: {self.type}")
+                raise ValueError(f"Default pi0 unknown for prior type: {self.type}")
 
         return Prior(
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,
-            loss=-float(obj.log_lik),
+            loss=float(obj.loss),
             model_param=model_param,
             pi0_null=pi0_null,
         )
