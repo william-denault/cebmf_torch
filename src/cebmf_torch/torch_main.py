@@ -1,5 +1,5 @@
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum, auto
 from typing import Protocol
 
@@ -114,7 +114,6 @@ class CovariateParams:
     self_col_cov: bool = False
 
 
-@dataclass
 class cEBMF:
     """
     Pure-PyTorch EBMF with proper NaN handling:
@@ -123,15 +122,32 @@ class cEBMF:
     - Mini-batch optimization for mixture weights inside ash().
     """
 
-    data: Tensor
-    model: ModelParams = field(default_factory=ModelParams)
-    noise: NoiseParams = field(default_factory=NoiseParams)
-    covariate: CovariateParams = field(default_factory=CovariateParams)
-    device: torch.device = field(default_factory=get_device)
+    def __init__(
+        self,
+        data: torch.Tensor,
+        K: int = 5,
+        prior_L: str = "norm",
+        prior_F: str = "norm",
+        allow_backfitting: bool = True,
+        prune_thresh: float = DEFAULT_PRUNE_THRESH,
+        noise_type: NoiseType = NoiseType.CONSTANT,
+        X_l: torch.Tensor | None = None,
+        X_f: torch.Tensor | None = None,
+        self_row_cov: bool = False,
+        self_col_cov: bool = False,
+        device: torch.device | None = None,
+    ):
+        self.data = data
+        self.device = device or get_device()
 
-    def __post_init__(self):
+        # Build config objects internally
+        self.model = ModelParams(
+            K=K, prior_L=prior_L, prior_F=prior_F, allow_backfitting=allow_backfitting, prune_thresh=prune_thresh
+        )
+        self.noise = NoiseParams(type=noise_type)
+        self.covariate = CovariateParams(X_l=X_l, X_f=X_f, self_row_cov=self_row_cov, self_col_cov=self_col_cov)
+
         self._validate_inputs()
-        self.device = self.device or get_device()
         self.Y = self.data.to(self.device).float()
         self.N, self.P = self.Y.shape
         self._initialise_priors()

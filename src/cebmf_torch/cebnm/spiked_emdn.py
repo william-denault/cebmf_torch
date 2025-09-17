@@ -126,7 +126,7 @@ class EmdnPosteriorMeanNorm:
 # -------------------------
 # Main solver
 # -------------------------
-def spiked_mdn_posterior_means(
+def spiked_emdn_posterior_means(
     X,
     betahat,
     sebetahat,
@@ -142,6 +142,36 @@ def spiked_mdn_posterior_means(
     beta_prior: tuple | None = None,  # e.g. (17., 5.) => target pi_spike ~ 0.77
     print_every=10,
 ):
+    """
+    Fit a Mixture Density Network to estimate the prior distribution of effects.
+    In the EBNM problem, we observe estimates `betahat` with standard errors `sebetahat` and want to estimate
+    the prior distribution of the true effects.
+
+    betahat ~ N(theta, sebetahat^2)
+
+    theta ~ G, where G is modeled as a mixture of Gaussians with parameters predicted by a neural network,
+    but with an additional point mass at 0 (spike + slabs).
+
+    Args:
+        :X (torch.Tensor): Covariates for each observation, shape (n_samples, n_features).
+        :betahat (torch.Tensor): Observed effect estimates, shape (n_samples,).
+        :sebetahat (torch.Tensor): Standard errors of the effect estimates, shape (n_samples,).
+        :n_epochs (int): Number of training epochs.
+        :n_layers (int): Number of hidden layers in the neural network.
+        :n_gaussians (int): Number of Gaussian components in the mixture.
+        :hidden_dim (int): Number of hidden units in each layer.
+        :batch_size (int): Batch size for training.
+        :lr (float): Learning rate for the optimizer.
+        :model_param (dict, optional): Pre-trained model parameters to initialize the network.
+        :penalty (float): >1 encourages spike; =1 neutral.
+        :beta_prior (tuple, optional): (alpha0, beta0) for Beta prior on pi_spike.
+        :print_every (int): Print training loss every this many epochs.
+
+    Returns:
+        :EmdnPosteriorMeanNorm: Container with posterior means, standard deviations, and model parameters.
+
+    """
+
     # Standardize X
     if X.ndim == 1:
         X = X.reshape(-1, 1)
