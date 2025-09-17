@@ -18,6 +18,18 @@ def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
 
 
 class PosteriorMean:
+    """
+    Container for posterior mean, second moment, and standard deviation.
+
+    Parameters
+    ----------
+    post_mean : torch.Tensor
+        Posterior mean.
+    post_mean2 : torch.Tensor
+        Posterior second moment.
+    post_sd : torch.Tensor
+        Posterior standard deviation.
+    """
     def __init__(self, post_mean, post_mean2, post_sd):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
@@ -27,14 +39,23 @@ class PosteriorMean:
 @torch.no_grad()
 def wpost_exp(x: torch.Tensor, s: torch.Tensor, w: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     """
-    Responsibilities for spike+exponential mixture prior on (theta>=0).
-    Inputs:
-      x: scalar tensor (or shape ()), observed betahat
-      s: scalar tensor (or shape ()), sebetahat
-      w: (K,) mixture weights (sum to 1), w[0] for spike at 0, w[1:] for Exp scales
-      scale: (K,) with scale[0]=0 for spike, scale[1:]>0 as Exp scales (rate = 1/scale)
-    Returns:
-      (K,) posterior responsibilities.
+    Compute responsibilities for a spike+exponential mixture prior on (theta >= 0).
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Observed betahat (scalar tensor or shape ()).
+    s : torch.Tensor
+        Standard error (scalar tensor or shape ()).
+    w : torch.Tensor
+        (K,) mixture weights (sum to 1), w[0] for spike at 0, w[1:] for Exp scales.
+    scale : torch.Tensor
+        (K,) with scale[0]=0 for spike, scale[1:]>0 as Exp scales (rate = 1/scale).
+
+    Returns
+    -------
+    torch.Tensor
+        (K,) posterior responsibilities.
     """
     # ensure tensors
     x = torch.as_tensor(x)
@@ -73,12 +94,23 @@ def posterior_mean_exp(
     scale: torch.Tensor,
 ) -> PosteriorMean:
     """
-    Torch version of your posterior_mean_exp with the same numerics/structure.
-    Shapes:
-      betahat:   (J,)
-      sebetahat: (J,)
-      log_pi:    (K,)
-      scale:     (K,) with scale[0]=0 (spike), scale[1:]>0 (Exp scales)
+    Compute posterior mean and second moment for a spike+exponential mixture prior.
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates, shape (J,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates, shape (J,).
+    log_pi : torch.Tensor
+        Log mixture weights, shape (K,).
+    scale : torch.Tensor
+        (K,) with scale[0]=0 (spike), scale[1:]>0 (Exp scales).
+
+    Returns
+    -------
+    PosteriorMean
+        Container with posterior mean, second moment, and standard deviation.
     """
     betahat = torch.as_tensor(betahat)
     sebetahat = torch.as_tensor(sebetahat, dtype=betahat.dtype, device=betahat.device)
@@ -142,7 +174,18 @@ def posterior_mean_exp(
 def apply_log_sum_exp(data_loglik: torch.Tensor, assignment_loglik: torch.Tensor) -> torch.Tensor:
     """
     Row-wise: (L + log_pi) - logsumexp(L + log_pi, axis=1).
-    Uses the provided log_sum_exp helper if desired; here we use torch.logsumexp.
+
+    Parameters
+    ----------
+    data_loglik : torch.Tensor
+        Data log-likelihood matrix (J, K).
+    assignment_loglik : torch.Tensor
+        Log mixture weights (K,).
+
+    Returns
+    -------
+    torch.Tensor
+        Log posterior assignment matrix (J, K).
     """
     combined = data_loglik + assignment_loglik.unsqueeze(0)  # (J,K)
     norm = torch.logsumexp(combined, dim=1, keepdim=True)  # (J,1)
@@ -159,8 +202,27 @@ def posterior_mean_norm(
     location: torch.Tensor | None = None,
 ) -> PosteriorMean:
     """
-    Torch version of your posterior_mean_norm.
-    location: (K,) or (J,K); if None, zeros like scale.
+    Compute posterior mean and second moment for a normal mixture prior.
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates, shape (J,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates, shape (J,).
+    log_pi : torch.Tensor
+        Log mixture weights, shape (K,).
+    data_loglik : torch.Tensor
+        Data log-likelihood matrix (J, K).
+    scale : torch.Tensor
+        Prior standard deviations, shape (K,).
+    location : torch.Tensor or None, optional
+        Prior means, shape (K,) or (J, K). If None, uses zeros like scale.
+
+    Returns
+    -------
+    PosteriorMean
+        Container with posterior mean, second moment, and standard deviation.
     """
     betahat = torch.as_tensor(betahat)
     sebetahat = torch.as_tensor(sebetahat, dtype=betahat.dtype, device=betahat.device)
@@ -224,11 +286,30 @@ def posterior_point_mass_normal(
     sigma_0: float,
 ):
     """
-    Torch version. Supports vectorized betahat / sebetahat.
+    Compute posterior mean and variance for a point-mass + normal prior.
+
     Prior: with prob pi, theta = mu0 (point mass); else theta ~ N(mu1, sigma_0^2).
     Likelihood: x ~ N(theta, se^2).
-    Returns:
-      post_mean (J,), post_var (J,)
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates (vectorized).
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates (vectorized).
+    pi : float or torch.Tensor
+        Probability of point mass at mu0.
+    mu0 : float
+        Location of the point mass.
+    mu1 : float
+        Mean of the normal component.
+    sigma_0 : float
+        Standard deviation of the normal component.
+
+    Returns
+    -------
+    tuple of torch.Tensor
+        post_mean (J,), post_var (J,)
     """
     x = torch.as_tensor(betahat)
     se = torch.as_tensor(sebetahat, dtype=x.dtype, device=x.device)

@@ -11,6 +11,16 @@ from .base import Prior, PriorBuilder
 
 
 class PointPriorType(StrEnum):
+    """
+    Enum for point prior types.
+
+    Attributes
+    ----------
+    LAPLACE : str
+        Laplace (double exponential) prior.
+    EXP : str
+        Exponential prior.
+    """
     LAPLACE = auto()
     EXP = auto()
 
@@ -22,11 +32,35 @@ builder_functions: dict[PointPriorType, Callable] = {
 
 
 class PointBuilder(PriorBuilder):
+    """
+    Builder for point priors (Laplace or Exponential).
+
+    Parameters
+    ----------
+    type : PointPriorType
+        The type of point prior to use.
+    """
     def __init__(self, type: PointPriorType):
+        """
+        Initialize the PointBuilder.
+
+        Parameters
+        ----------
+        type : PointPriorType
+            The type of point prior to use.
+        """
         self.type = type
 
     @property
     def name(self) -> str:
+        """
+        Name of the prior type.
+
+        Returns
+        -------
+        str
+            String representation of the prior type.
+        """
         return str(self.type)
 
     def fit(
@@ -36,6 +70,25 @@ class PointBuilder(PriorBuilder):
         sebetahat: Tensor,
         model_param: Any | None = None,
     ) -> Prior:
+        """
+        Fit the point prior to the data.
+
+        Parameters
+        ----------
+        X : torch.Tensor or None
+            Optional covariate matrix (not used for point priors).
+        betahat : torch.Tensor
+            Observed effect size estimates.
+        sebetahat : torch.Tensor
+            Standard errors of the effect size estimates.
+        model_param : Any, optional
+            Additional model parameters (default: None).
+
+        Returns
+        -------
+        Prior
+            Fitted prior object with posterior means and related quantities.
+        """
         obj = builder_functions[self.type](betahat, sebetahat)
         return Prior(
             post_mean=obj.post_mean,

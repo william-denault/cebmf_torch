@@ -1,5 +1,5 @@
 # ============================================================
-# Covariate Global-Bayes Prior Solver (CGB Solver, Torch-only)
+# Covariate Generalized-Binary Prior Solver (CGB Solver, Torch-only)
 # ============================================================
 
 import torch
@@ -32,6 +32,18 @@ class DensityRegressionDataset(Dataset):
 # -------------------------
 class CgbNet(nn.Module):
     def __init__(self, input_dim, hidden_dim=32, n_layers=2):
+        """
+        Initialize a Covariate Generalized-Binary (CGB) neural network.
+
+        Parameters
+        ----------
+        input_dim : int
+            Number of input features.
+        hidden_dim : int, optional
+            Number of hidden units in each layer (default: 32).
+        n_layers : int, optional
+            Number of hidden layers (default: 2).
+        """
         super().__init__()
         self.input_layer = nn.Linear(input_dim, hidden_dim)
         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
@@ -42,6 +54,23 @@ class CgbNet(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
+        """
+        Forward pass through the CGB network.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (N, input_dim).
+
+        Returns
+        -------
+        pi_1 : torch.Tensor
+            Probability of spike component for each observation.
+        pi_2 : torch.Tensor
+            Probability of slab component for each observation.
+        mu_2 : torch.Tensor
+            Global mean of the slab component.
+        """
         x = self.relu(self.input_layer(x))
         for layer in self.hidden_layers:
             x = self.relu(layer(x))
@@ -100,6 +129,28 @@ def m_step_sigma2(gamma2, mu2, targets, se):
 # -------------------------
 class CgbPosteriorResult:
     def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, log_lik, model_param):
+        """
+        Container for the results of the CGB posterior mean estimation.
+
+        Parameters
+        ----------
+        post_mean : torch.Tensor
+            Posterior means for each observation.
+        post_mean2 : torch.Tensor
+            Posterior second moments for each observation.
+        post_sd : torch.Tensor
+            Posterior standard deviations for each observation.
+        pi : torch.Tensor
+            Spike probabilities for each observation.
+        mu_2 : float
+            Global mean of the slab component.
+        sigma_2 : float
+            Global standard deviation of the slab component.
+        log_lik : float
+            Final training loss or log-likelihood.
+        model_param : dict
+            Trained model parameters (state_dict).
+        """
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -125,6 +176,37 @@ def cgb_posterior_means(
     penalty: float = 2.1,
     model_param=None,
 ):
+    """
+    Fit a Covariate Generalized-Binary (CGB) model to estimate the prior distribution of effects.
+
+    Parameters
+    ----------
+    X : torch.Tensor or np.ndarray
+        Covariates for each observation, shape (n_samples, n_features).
+    betahat : torch.Tensor or np.ndarray
+        Observed effect estimates, shape (n_samples,).
+    sebetahat : torch.Tensor or np.ndarray
+        Standard errors of the effect estimates, shape (n_samples,).
+    n_epochs : int, optional
+        Number of training epochs (default=50).
+    n_layers : int, optional
+        Number of hidden layers in the neural network (default=2).
+    hidden_dim : int, optional
+        Number of hidden units in each layer (default=32).
+    batch_size : int, optional
+        Batch size for training (default=128).
+    lr : float, optional
+        Learning rate for the optimizer (default=1e-3).
+    penalty : float, optional
+        Penalty for spike probability (default=2.1).
+    model_param : dict, optional
+        Pre-trained model parameters to initialize the network.
+
+    Returns
+    -------
+    CgbPosteriorResult
+        Container with posterior means, standard deviations, and model parameters.
+    """
     # Standardize X
     if X.ndim == 1:
         X = X.reshape(-1, 1)
