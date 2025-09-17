@@ -15,21 +15,32 @@ def optimize_pi_logL(
     seed: int | None = None,
 ) -> torch.Tensor:
     """
-    EM algorithm for optimizing mixture weights pi on the simplex given a log-likelihood matrix.
+    EM algorithm for optimizing mixture weights on the simplex given a log-likelihood matrix.
 
-    Args:
-        logL: (n, K) tensor with entries logL[j, k] = log l_{jk}.
-        penalty: Dirichlet pseudo-count alpha_1 on component 0 (or a length-K vector).
-                 In the original code, vec_pen[0] = penalty and others = 1.
-        max_iters: number of EM epochs.
-        tol: L2 tolerance on pi change for convergence.
-        verbose: print convergence message if True.
-        batch_size: if None, do full-batch; else iterate over mini-batches each epoch.
-        shuffle: whether to shuffle rows each epoch when using batches.
-        seed: RNG seed used when shuffle=True.
+    Parameters
+    ----------
+    logL : torch.Tensor
+        (n, K) tensor with entries logL[j, k] = log l_{jk}.
+    penalty : float or torch.Tensor
+        Dirichlet pseudo-count alpha_1 on component 0 (or a length-K vector).
+        In the original code, vec_pen[0] = penalty and others = 1.
+    max_iters : int, optional
+        Number of EM epochs. Default is 100.
+    tol : float, optional
+        L2 tolerance on pi change for convergence. Default is 1e-6.
+    verbose : bool, optional
+        Print convergence message if True. Default is True.
+    batch_size : int or None, optional
+        If None, do full-batch; else iterate over mini-batches each epoch. Default is None.
+    shuffle : bool, optional
+        Whether to shuffle rows each epoch when using batches. Default is False.
+    seed : int or None, optional
+        RNG seed used when shuffle=True. Default is None.
 
-    Returns:
-        pi: (K,) tensor of optimized mixture weights on the simplex.
+    Returns
+    -------
+    torch.Tensor
+        (K,) tensor of optimized mixture weights on the simplex.
     """
     assert logL.ndim == 2, "logL must be (n, K)"
     n, K = logL.shape
@@ -101,6 +112,25 @@ def optimize_pi_logL(
 
 
 def _calculate_scales(sigmaamax: float, sigmaamin: float, mult: float, device: torch.device) -> torch.Tensor:
+    """
+    Calculate a sequence of scales for mixture components.
+
+    Parameters
+    ----------
+    sigmaamax : float
+        Maximum scale value.
+    sigmaamin : float
+        Minimum scale value.
+    mult : float
+        Multiplicative step between scales.
+    device : torch.device
+        Device for the output tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        1D tensor of scales, including 0 as the first element.
+    """
     npoint = int(math.ceil(float(math.log2(sigmaamax / sigmaamin)) / math.log2(mult)))
     seq = torch.arange(-npoint, 1, device=device, dtype=torch.int64)
     return torch.cat(
@@ -112,6 +142,25 @@ def _calculate_scales(sigmaamax: float, sigmaamin: float, mult: float, device: t
 
 
 def autoselect_scales_mix_norm(betahat: torch.Tensor, sebetahat: torch.Tensor, max_class=None, mult: float = 2.0):
+    """
+    Automatically select scales for a normal mixture prior.
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates.
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates.
+    max_class : int or None, optional
+        If provided, number of mixture components (scales) to return.
+    mult : float, optional
+        Multiplicative step between scales. Default is 2.0.
+
+    Returns
+    -------
+    torch.Tensor
+        1D tensor of selected scales.
+    """
     device = betahat.device
     sigmaamin = torch.min(sebetahat) / 10.0
     if torch.all(betahat**2 < sebetahat**2):
@@ -136,6 +185,27 @@ def autoselect_scales_mix_exp(
     mult: float = 1.5,
     tt: float = 1.5,
 ):
+    """
+    Automatically select scales for an exponential mixture prior.
+
+    Parameters
+    ----------
+    betahat : torch.Tensor
+        Observed effect size estimates.
+    sebetahat : torch.Tensor
+        Standard errors of the effect size estimates.
+    max_class : int or None, optional
+        If provided, number of mixture components (scales) to return.
+    mult : float, optional
+        Multiplicative step between scales. Default is 1.5.
+    tt : float, optional
+        Scaling factor for the maximum scale. Default is 1.5.
+
+    Returns
+    -------
+    torch.Tensor
+        1D tensor of selected scales.
+    """
     device = betahat.device
     sigmaamin = torch.maximum(torch.min(sebetahat) / 10.0, torch.tensor(1e-3, device=device))
     if torch.all(betahat**2 < sebetahat**2):

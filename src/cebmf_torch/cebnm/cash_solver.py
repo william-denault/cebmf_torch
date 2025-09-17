@@ -38,30 +38,44 @@ class DensityRegressionDataset(Dataset):
 # Define the CashNet model
 class CashNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes, n_layers):
+        """
+        Initialize a neural network for CASH (Covariate Adaptive Shrinkage).
+
+        Parameters
+        ----------
+        input_dim : int
+            Number of input features.
+        hidden_dim : int
+            Number of hidden units in each layer.
+        num_classes : int
+            Number of mixture components (output classes).
+        n_layers : int
+            Number of hidden layers.
+        """
         super().__init__()
-
-        # Input layer
         self.input_layer = nn.Linear(input_dim, hidden_dim)
-
-        # Hidden layers
         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
-
-        # Output layer
         self.output_layer = nn.Linear(hidden_dim, num_classes)
-
-        # Activation functions
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
-        # Input layer
-        x = self.relu(self.input_layer(x))
+        """
+        Forward pass through the CASH network.
 
-        # Hidden layers
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (N, input_dim).
+
+        Returns
+        -------
+        torch.Tensor
+            Mixture weights for each observation, shape (N, num_classes).
+        """
+        x = self.relu(self.input_layer(x))
         for layer in self.hidden_layers:
             x = self.relu(layer(x))
-
-        # Output layer
         x = self.softmax(self.output_layer(x))
         return x
 
@@ -85,6 +99,26 @@ def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.1, epsilon=1e-10):
 # Class to store the results
 class cash_PosteriorMeanNorm:
     def __init__(self, post_mean, post_mean2, post_sd, pi_np, scale, loss=0, model_param=None):
+        """
+        Container for the results of the CASH posterior mean estimation.
+
+        Parameters
+        ----------
+        post_mean : torch.Tensor
+            Posterior means for each observation.
+        post_mean2 : torch.Tensor
+            Posterior second moments for each observation.
+        post_sd : torch.Tensor
+            Posterior standard deviations for each observation.
+        pi_np : torch.Tensor
+            Mixture weights for each observation.
+        scale : torch.Tensor
+            Mixture component scales.
+        loss : float, optional
+            Final training loss or log-likelihood.
+        model_param : dict, optional
+            Trained model parameters (state_dict).
+        """
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -108,6 +142,40 @@ def cash_posterior_means(
     model_param=None,
     penalty=1.5,
 ):
+    """
+    Fit a CASH (Covariate Adaptive Shrinkage) model and compute posterior means,
+    second moments, and standard deviations.
+
+    Parameters
+    ----------
+    X : torch.Tensor or np.ndarray
+        Covariates for each observation, shape (n_samples, n_features).
+    betahat : torch.Tensor or np.ndarray
+        Observed effect estimates, shape (n_samples,).
+    sebetahat : torch.Tensor or np.ndarray
+        Standard errors of the effect estimates, shape (n_samples,).
+    n_epochs : int, optional
+        Number of training epochs (default=20).
+    n_layers : int, optional
+        Number of hidden layers in the neural network (default=4).
+    num_classes : int, optional
+        Number of mixture components (default=20).
+    hidden_dim : int, optional
+        Number of hidden units in each layer (default=64).
+    batch_size : int, optional
+        Batch size for training (default=128).
+    lr : float, optional
+        Learning rate for the optimizer (default=0.001).
+    model_param : dict, optional
+        Pre-trained model parameters to initialize the network.
+    penalty : float, optional
+        Penalty for spike probability (default=1.5).
+
+    Returns
+    -------
+    cash_PosteriorMeanNorm
+        Container with posterior means, standard deviations, and model parameters.
+    """
     # Standardize X
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
@@ -124,7 +192,6 @@ def cash_posterior_means(
     )
     optimizer_cash = optim.Adam(model_cash.parameters(), lr=lr)
 
-    # Training loop
     # Training loop
     for epoch in range(n_epochs):
         total_cash_loss = 0
@@ -143,7 +210,6 @@ def cash_posterior_means(
 
         if (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch + 1}/{n_epochs},   Variance Loss: {total_cash_loss / len(dataloader):.4f}")
-            # After training the model, compute the posterior mean
 
     model_cash.eval()
 
