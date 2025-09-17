@@ -1,0 +1,30 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+    - name: Install dependencies
+      run: |
+        uv sync -p 3.12
+        uv run pip install --upgrade pip
+        uv run pip install jupyter nbconvert
+    - name: Run all notebooks
+      run: |
+        for nb in $(find . -path "./examples/*.ipynb" -not -path "./.ipynb_checkpoints/*"); do
+          echo "Running $nb"
+          uv run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=600 "$nb"
+        done
+    

@@ -1,26 +1,30 @@
-# cebmf_torch (Pure PyTorch)
+# cebmf_torch: Empirical Bayes Matrix Factorization in PyTorch
 
 [![codecov](https://codecov.io/gh/william-denault/cebmf_torch/branch/main/graph/badge.svg)](https://codecov.io/gh/william-denault/cebmf_torch)
 [![unittest](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml/badge.svg)](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml)
 
-A pure-PyTorch rewrite of EBMF/EBNM components:
-- No NumPy. No SciPy. No R.
-- GPU-accelerated with mini-batch EM for mixture weights.
+## Overview
 
-## Files
-- `torch_utils.py`: math helpers, truncated normal moments.
-- `torch_utils_mix.py`: scale selection for ash priors.
-- `torch_distribution_operation.py`: log-likelihood matrix builders.
-- `torch_mix_opt.py`: mini-batch optimizer for mixture weights (Adam / online EM).
-- `torch_posterior.py`: posterior mean/variance for Normal & Exponential mixtures.
-- `torch_ash.py`: `ash()` entry point (norm/exp).
-- `torch_ebnm_point_exp.py`: point-mass + exponential prior solver (autograd).
-- `torch_ebnm_point_laplace.py`: point-mass + Laplace prior solver (autograd).
-- `torch_main.py`: minimal EBMF class using ash() for L and F updates.
+**cebmf_torch** is a pure-PyTorch implementation of Empirical Bayes Matrix Factorization (EBMF) and Empirical Bayes Normal Means (EBNM) methods. It is designed for scalable, GPU-accelerated analysis of large datasets, with a focus on genomics and other high-dimensional applications. The package provides flexible prior families, efficient mini-batch EM, and full support for GPU computation.
+
+- **No NumPy. No SciPy. No R.**
+- **GPU-accelerated**: All core computations are performed in PyTorch.
+- **Flexible priors**: Easily extendable to new prior families.
+- **Mini-batch EM**: Fast optimization for large datasets.
+- **Posterior inference**: Compute posterior means and variances for all supported models.
+
+## Features
+
+- Empirical Bayes Matrix Factorization (EBMF) with flexible priors
+- Empirical Bayes Normal Means (EBNM) solvers (normal, exponential, Laplace, point-mass, etc.)
+- GPU support for all operations
+- Mini-batch EM and Adam optimizers for mixture weights
+- Analytical truncated normal moments (no SciPy dependency)
+- Easy-to-use API for both beginners and advanced users
 
 ## Installation
 
-Installation is managed with [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
+Installation is managed with [`uv`](https://docs.astral.sh/uv/getting-started/installation/), a fast Python package manager.
 
 ```bash
 # Clone the repository
@@ -30,11 +34,13 @@ cd cebmf_torch
 # Install the package and dependencies
 uv sync
 
-# Run tests
+# Run tests to verify your installation
 uv run pytest
 ```
 
-## Quick start
+## Quick Start
+
+Here's how to get started with the main functions:
 
 ```python
 import torch
@@ -54,8 +60,21 @@ fit = model.fit(maxit=10)
 print(fit.L.shape, fit.F.shape, fit.tau.item())
 ```
 
-## Notes
+## Documentation & Examples
 
-- Everything runs on whichever device your input tensors are on.
+- Full documentation: [See the docs folder or online documentation if available]
+- Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
+
+## Notes & Tips
+
+- All computations run on the device of your input tensors (CPU or GPU).
 - Mini-batch EM for `pi` is implemented via Adam on logits (recommended) or online EM.
-- Truncated normal moments are computed analytically in torch without SciPy.
+- Truncated normal moments are computed analytically in torch (no SciPy required).
+- The codebase is modular and easy to extend for new prior families or custom models.
+
+## Contributing & Support
+
+Contributions, bug reports, and feature requests are welcome! Please open an issue or pull request on GitHub.
+
+For questions or help, open an issue or contact the maintainer.
+

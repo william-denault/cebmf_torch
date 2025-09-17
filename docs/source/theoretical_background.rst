@@ -11,7 +11,7 @@ implementation. It focuses on Empirical Bayes Matrix Factorization (EBMF)
 and the closely related Empirical Bayes Normal Means (EBNM) problems that are
 used as building blocks.
 
-Empirical Bayes Nornal Means (EBNM)
+Empirical Bayes Normal Means (EBNM)
 -----------------------------------
 
 Before describing EBMF, we first describe the simpler EBNM problem.
@@ -40,13 +40,9 @@ We thus find the maximum likelihood estimate of :math:`g`:
 
 and then compute the posterior distribution :math:`p(\theta_i \mid y_i, \sigma, \hat{g})`.
 
-.. admonition:: TODO
-
-      Add a short worked example for the EBNM problem here: simulate a small
-      dataset (:math:`y_i`), estimate a prior :math:`g` (for example using a
-      mixture prior or ash), and show how to compute posterior means
-      :math:`E(\theta_i \mid y_i, \hat{g})`. See the :doc:`examples` page for
-      longer scripts that can be adapted into this section.
+This can significantly reduce the scatter between a prediction and the truth, when compared
+to using the maximum likelihood estimate :math:`\hat{\theta}_i = y_i`.
+See the :doc:`notebooks/spiked_emdn` for an example of this.
 
 
 Empirical Bayes Matrix Factorization
@@ -67,22 +63,24 @@ Given this data matrix, EBMF approximates :math:`X` by a low-rank factor
 model
 
 .. math::
-      X \approx \sum_{k=1}^K L_k F_k ^T + E,
+      X \approx \sum_{k=1}^K \ell_k f_k ^T + E,
 
-where :math:`L` (:math:`n \times K`) and :math:`F` (:math:`p \times K`) are low-rank factors and :math:`E` is noise. 
-
+where :math:`\ell_k` (:math:`n \times 1`) and :math:`f_k` (:math:`p \times 1`) are the loading and factor
+vectors for factor :math:`k`, and :math:`E` is noise. In matrix form, this can be written as
+:math:`X \approx L F^T + E`, where :math:`L` (:math:`n \times K`) and :math:`F` (:math:`p \times K`) 
+are low-rank factors and are formed from the concatenation of the :math:`K` columns of loadings and factors, respectively.
 In the EBMF factorization the matrix :math:`L_k` contains loading columns
 which describe how strongly each of the :math:`n` observations is associated with latent factor
 :math:`k`. The matrix :math:`F_k` contains factor columns which describe the
 pattern of the factor across the :math:`p` variables.
 
-Empirical Bayes approaches place priors on the columns of :math:`L_k` and :math:`F_k` and estimate prior
-hyperparameters from the data. Explicitly, if :math:`l_{k1}, \ldots, l_{kn}` are the
-:math:`n` entries of :math:`L_k`, and :math:`f_{k1}, \ldots, f_{kp}` are the
-:math:`p` entries of :math:`F_k`, then we say that
+Empirical Bayes approaches place priors on the values of :math:`\ell_k` and :math:`f_k` and estimate prior
+hyperparameters from the data. Explicitly, if :math:`\ell_{k1}, \ldots, \ell_{kn}` are the
+:math:`n` entries of :math:`\ell_k`, and :math:`f_{k1}, \ldots, f_{kp}` are the
+:math:`p` entries of :math:`f_k`, then we say that
 
 .. math::
-      l_{k1}, \ldots, l_{kn} \sim g_{k}^{l} \in \mathcal{G}^{l}, \\
+      \ell_{k1}, \ldots, \ell_{kn} \sim g_{k}^{l} \in \mathcal{G}^{l}, \\
       f_{k1}, \ldots, f_{kp} \sim g_{k}^{f} \in \mathcal{G}^{f}.
 
 where :math:`\mathcal{G}^{l}` and :math:`\mathcal{G}^{f}` are families of prior distributions
@@ -94,27 +92,27 @@ Iterative Fitting
 
 The EBMF model is typically fit using an iterative algorithm that 
 loops over the factors :math:`k = 1, \ldots, K`.
-Suppose we have an estimate of all factors except :math:`L_k` and :math:`F_k`.
+Suppose we have an estimate of all factors except :math:`\ell_k` and :math:`f_k`.
 Then we can compute the residual matrix
 
 .. math::
-      R_k = X - \sum_{j \neq k} L_j F_j^T = L_k F_k^T + E.
+      R_k = X - \sum_{j \neq k} \ell_j f_j^T = \ell_k f_k^T + E.
 
-In this case, :math:`R_k` is a noisy observation of the rank-1 matrix :math:`L_k F_k^T`.
-By right-multiplying by :math:`F_k` we obtain
+In this case, :math:`R_k` is a noisy observation of the rank-1 matrix :math:`\ell_k f_k^T`.
+By right-multiplying by :math:`f_k` we obtain
 
 .. math::
-      R_k F_k = L_k (F_k^T F_k) + E F_k.
+      R_k f_k = \ell_k (f_k^T f_k) + E f_k.
 
 and thus the variable :math:`y_i` can be defined to be
 
 .. math::
-      y_i = \left(\frac{R_k F_k}{F_k^T F_k}\right)_i = l_{ki} + e_i, \quad e_i \sim \mathcal{N}(0, s_i^2),
+      y_i = \left(\frac{R_k f_k}{f_k^T f_k}\right)_i = \ell_{ki} + e_i, \quad e_i \sim \mathcal{N}(0, s_i^2),
 
-where :math:`s_i^2` is the variance of the noise term :math:`E F_k / (F_k^T F_k)`.
+where :math:`s_i^2` is the variance of the noise term :math:`E f_k / (f_k^T f_k)`.
 This is now exactly the EBNM problem described above, and we can use an EBNM solver to estimate
-:math:`g_k^l` and the posterior distribution of :math:`l_{ki}`.
-The way of estimating :math:`F_k` is completely analogous.
+:math:`g_k^l` and the posterior distribution of :math:`\ell_{ki}`.
+The way of estimating :math:`f_k` is completely analogous.
 
 
 As a summary, the EBMF approach does the following:
@@ -127,32 +125,126 @@ As a summary, the EBMF approach does the following:
 3. Repeat step 2 until convergence.
 
 
-.. admonition:: TODO
-
-      Discuss sparsity and choice of prior families here.
-
-
 Key properties
 ^^^^^^^^^^^^^^
 
-1. Turns out to correspond to a variational approximation; approximate posterior by :math:`q(l, f ) = q(l)q( f )`.
-2. This establishes objective function; guarantees convergence
-3. Very flexible prior families; implementing new prior family only involves solving EBNM problem.
-4. Level of sparsity automatically tuned to data as part of fitting (no CV).
-5. Sufficiently efficient for reasonably large problems (no MCMC).
-6. If the family of prior contains a delta function, then we can learn the rank :math:`K`.
-7. Extend to :math:`K > 1` by iteratively adding/updating factors (deflation/backfitting).
+1. The method uses a variational approximation, where the posterior is factorized as :math:`q(l, f ) = q(l)q( f )`.
+2. This leads to a well-defined objective function and ensures convergence of the algorithm.
+3. The framework allows for highly flexible prior families; adding a new prior only requires solving the corresponding EBNM problem.
+4. Sparsity is automatically controlled by the data during fitting—no need for cross-validation.
+5. The algorithm is computationally efficient for large-scale problems and does not rely on MCMC.
+6. If the prior family includes a delta function at zero, the model can automatically infer the rank :math:`K`.
+7. For :math:`K > 1`, the method extends by iteratively adding or updating factors (deflation/backfitting).
 
 
 Covariate Empirical Bayes Matrix Factorization (CEBMF)
 ------------------------------------------------------
 
-.. admonition:: TODO
+In many applications, we have additional covariate information about the rows and/or columns of the data matrix :math:`X`.
+For example, if our data matrix contains information about the height, weight etc. of individuals, 
+then we may also have information about their age, gender, or other demographic factors, which provides
+additional context that may help in the matrix factorization.
+We call this problem Covariate Empirical Bayes Matrix Factorization (CEBMF).
 
-      Add a section here describing how covariates can be incorporated into the
-      EBMF model.
+In this case, the parameters of our prior distributions on the factors can depend on the covariates.
+For example, if we had a simple Gaussian prior on the loadings, we could let the variance depend on the covariates:
+
+.. math::
+      l_{k1}, \ldots, l_{kn} \sim \mathcal{N}(0, \sigma_k^2(z_i)), \quad i = 1, \ldots, n.
+
+where :math:`z_i` is the covariate vector for observation :math:`i` and :math:`\sigma_k^2(\cdot)` is some function
+that maps covariates to variances. This could be the output of a neural network, or some simpler function such as a linear model.
+This problem now has the additional challenge of estimating the function :math:`\sigma_k^2(\cdot)` from the data.
+
+In the code, we define the covariates for :math:`L` to be :code:`X_l` and for :math:`F` to be :code:`X_f`.
+
+
+Prior families
+--------------
+
+We make use of many prior families in the code, which we define below.
+
+ASH (Adaptive Shrinkage)
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the simplest example, we assume that the prior is a mixture of a point mass at zero and a mixture of zero-mean Gaussians
+
+.. math::
+      g(\cdot,) = \pi_0 \delta_0 (\cdot) + \sum_{j=1}^J \pi_j \mathcal{N}(\cdot, 0, \sigma_j^2),
+
+where :math:`\pi_j` are the mixture weights and :math:`\sigma_j^2` are a fixed grid of variances.
+Here we learn the parameters :math:`\{\pi_j\}`, but the variances are fixed.
+
+CASH (Covariate Adaptive Shrinkage)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ASH model can be extended to allow the mixture weights to depend on covariates :math:`z`,
+
+.. math::
+      g(\cdot, z ) = \pi_0 (z) \delta_0 (\cdot) + \sum_{j=1}^J \pi_j (z) \mathcal{N}(\cdot, 0, \sigma_j^2),
+
+where :math:`\pi_j(z)` are the mixture weights that depend on covariates :math:`z` and :math:`\sigma_j^2` are a fixed grid of variances.
+Here we learn the functions :math:`\{\pi_j(z)\}` by fitting neural networks, but the variances are fixed.
+
+EMDN (Empirical Mixture Density Network)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Instead of restricting ourselves to a mixture of zero-mean Gaussians with known variance, 
+we can use a more flexible prior family where the entire prior distribution depends on covariates :math:`z` 
+through a Mixture Density Network (MDN)
+
+.. math::
+      g(\cdot, z_i) = \sum_{j=1}^J \pi_j(z_i) \mathcal{N}(\cdot, \mu_j(z_i), \sigma_j^2(z_i)),
+
+where :math:`\pi_j(z_i)` are the mixture weights, :math:`\mu_j(z_i)` are the means, 
+and :math:`\sigma_j^2(z_i)` are the variances of the mixture components.
+
+Spiked-EMDN (Spiked Empirical Mixture Density Network)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The EMDN model can be expanded by including a point mass at zero in the mixture.
+
+.. math::
+      g(\cdot, z_i) = \pi_0(z_i) \delta_0(\cdot) + \sum_{j=1}^J \pi_j(z_i) \mathcal{N}(\cdot, \mu_j(z_i), \sigma_j^2(z_i)).
+
+Although this is a special case of the EMDN model with one of the components having
+zero variance, it is numerically more stable to treat it separately.
+
+
+CGB (Covariate Generalized Binary)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Spiked-EMDN model can be simplified to a two-component mixture of a point mass at zero and a single Gaussian
+
+.. math::
+      g(\cdot, z_i) = \pi(z_i) \delta_0(\cdot) + (1 - \pi(z_i)) \mathcal{N}(\cdot, \mu, \sigma^2).
+
+In this case we learn the function :math:`\pi(z_i)` with a neural network, but simplify our task
+by treating :math:`\mu` and :math:`\sigma^2` as independent of :math:`z_i` and learning them as global parameters.
+This model is useful when we believe that there are two fundamental populations in the data, and we
+want to learn the probability that each observation belongs to one of these populations.
+
+Sharp_CGB (Sharp Covariate Generalized Binary)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The CBG model can be further simplified by relating the mean and variance of the Gaussian component to be
+
+.. math::
+      \sigma = \omega \vert \mu \vert.
+
+This parameterization is useful when we believe that the variance of the non-zero component. We fix
+:math:`\omega` to be a small constant and learn the mean :math:`\mu` as a global parameter.
+In this case, we again learn the function :math:`\pi(z_i)` with a neural network.
 
 
 References
 ----------
+
+* See this `YouTube tutorial <https://www.youtube.com/watch?v=PhNBzmTpVVg>`_ for a video explanation.
+* Non-negative matrix factorization: `Lee \& Seung 1999 <https://www.nature.com/articles/44565>`_
+* Covariate-moderated Empirical Bayes Matrix Factorization: Denault, et al. 2025. |statme-shield|
+
+.. |statme-shield| image:: https://img.shields.io/badge/stat.ME-arXiv%32505.11639-B31B1B.svg
+  :target: https://arxiv.org/abs/2505.11639 
+
 

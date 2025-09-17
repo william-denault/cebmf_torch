@@ -15,13 +15,27 @@ from cebmf_torch.utils.maths import (
 
 def logg_laplace_convolved_with_normal(x: Tensor, s: Tensor, a: Tensor) -> Tensor:
     """
-    log p(x | theta ~ Laplace(0, 1/a), noise ~ N(0, s^2)) as a function of x.
+    Compute log p(x | theta ~ Laplace(0, 1/a), noise ~ N(0, s^2)) as a function of x.
 
     Closed form:
         log(a/2) + 0.5*(s*a)^2
         + log( Φ((x - s^2 a)/s) * e^{-a x} + Φ(-(x + s^2 a)/s) * e^{a x} )
 
-    Implemented in log-space with logaddexp.
+    Implemented in log-space with logaddexp for numerical stability.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Observed data.
+    s : torch.Tensor
+        Standard deviation of the noise.
+    a : torch.Tensor
+        Laplace scale parameter (1/a).
+
+    Returns
+    -------
+    torch.Tensor
+        Log-likelihood values for each observation.
     """
     s = torch.clamp(s, min=1e-12)
     z1 = (x - (s * s) * a) / s
@@ -44,6 +58,26 @@ class EBNMLaplaceResult:
     a: float
     mu: float
     log_lik: float
+    """
+    Container for the results of the point-Laplace EBNM posterior estimation.
+
+    Attributes
+    ----------
+    post_mean : torch.Tensor
+        Posterior means for each observation.
+    post_mean2 : torch.Tensor
+        Posterior second moments for each observation.
+    post_sd : torch.Tensor
+        Posterior standard deviations for each observation.
+    pi0 : float
+        Estimated mixture weight for the Laplace branch.
+    a : float
+        Estimated Laplace scale parameter.
+    mu : float
+        Estimated mode (mu).
+    log_lik : float
+        Final log-likelihood value.
+    """
 
 
 def ebnm_point_laplace(
@@ -59,6 +93,47 @@ def ebnm_point_laplace(
     eps: float = 1e-12,
     pen_pi0=1,
 ) -> EBNMLaplaceResult:
+    """
+    Fit a point-Laplace Empirical Bayes Normal Means (EBNM) model using PyTorch.
+
+    This implementation uses stability tricks:
+      - clamps log a to [log(a_min), log(a_max)]
+      - L2 penalty on log a
+      - thresholds pi0 to spike-only if below tresh_pi0
+      - robust LBFGS closure with NaN/Inf guards
+
+    The prior on θ is: (1 - pi0) δ_μ + pi0 * Laplace(μ, 1/a), with support θ ∈ ℝ.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Observed data.
+    s : torch.Tensor
+        Standard errors of the observed data.
+    par_init : tuple or None, optional
+        Initial values for (w_logit, log_a, mu). If None, defaults are used.
+    fix_par : tuple of bool, optional
+        Which parameters to fix during optimization (default: (False, False, True)).
+    max_iter : int, optional
+        Maximum number of LBFGS iterations (default: 50).
+    tol : float, optional
+        Tolerance for optimizer (default: 1e-3).
+    a_bounds : tuple, optional
+        Bounds for the Laplace scale parameter a (default: (1e-2, 1e2)).
+    loga_l2 : float, optional
+        L2 penalty on log a (default: 1e-2).
+    tresh_pi0 : float, optional
+        Threshold for pi0 below which the solution is set to spike-only (default: 1e-3).
+    eps : float, optional
+        Small value to avoid numerical issues (default: 1e-12).
+    pen_pi0 : float, optional
+        Penalty on pi0 (default: 1).
+
+    Returns
+    -------
+    EBNMLaplaceResult
+        Container with posterior means, standard deviations, and model parameters.
+    """
     device, dtype = x.device, x.dtype
     x = x.to(dtype)
     s = torch.clamp(s.to(dtype), min=1e-6)
