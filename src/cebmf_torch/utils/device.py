@@ -1,7 +1,6 @@
 import torch
 
 
-
 def get_device(prefer_gpu: bool = True) -> torch.device:
     """Get the best available device.
 
@@ -20,7 +19,6 @@ def get_device(prefer_gpu: bool = True) -> torch.device:
         return torch.device("cpu")
 
     if torch.cuda.is_available():
-
         return torch.device("cuda")
     elif torch.backends.mps.is_available():
         return torch.device("mps")
