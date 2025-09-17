@@ -31,6 +31,20 @@ class DensityRegressionDataset(Dataset):
 # -------------------------
 class MDN(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_gaussians, n_layers=4):
+        """
+        Initialize a Mixture Density Network (MDN) with spike and slab components.
+
+        Parameters
+        ----------
+        input_dim : int
+            Number of input features.
+        hidden_dim : int
+            Number of hidden units in each layer.
+        n_gaussians : int
+            Number of Gaussian components (must be >= 2 for spike + at least one slab).
+        n_layers : int, optional
+            Number of hidden layers (default is 4).
+        """
         super().__init__()
         assert n_gaussians >= 2, "Need at least 1 spike + 1 slab."
         self.fc_in = nn.Linear(input_dim, hidden_dim)
@@ -41,6 +55,23 @@ class MDN(nn.Module):
         self.point_mass = 0.0
 
     def forward(self, x):
+        """
+        Forward pass through the MDN.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (N, input_dim).
+
+        Returns
+        -------
+        pi : torch.Tensor
+            Mixture weights for spike and slabs, shape (N, K).
+        mu : torch.Tensor
+            Means for slab components, shape (N, K-1).
+        log_sigma : torch.Tensor
+            Log standard deviations for slab components, shape (N, K-1).
+        """
         x = torch.relu(self.fc_in(x))
         for layer in self.hidden_layers:
             x = torch.relu(layer(x))
@@ -65,6 +96,33 @@ def mdn_spike_loss_with_varying_noise(
     beta_prior: tuple | None = None,
     eps: float = 1e-8,
 ):
+    """
+    Compute the negative log-likelihood loss for a spike-and-slab mixture model with optional spike penalty and Beta prior.
+
+    Parameters
+    ----------
+    pi : torch.Tensor
+        Mixture weights for spike and slabs, shape (N, K).
+    mu : torch.Tensor
+        Means for slab components, shape (N, K-1).
+    log_sigma : torch.Tensor
+        Log standard deviations for slab components, shape (N, K-1).
+    betahat : torch.Tensor
+        Observed effect estimates, shape (N,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect estimates, shape (N,).
+    penalty : float, optional
+        >1 encourages spike; =1 neutral (default is 1.0).
+    beta_prior : tuple, optional
+        (alpha0, beta0) for Beta prior on pi_spike.
+    eps : float, optional
+        Small value to avoid log(0) (default is 1e-8).
+
+    Returns
+    -------
+    torch.Tensor
+        The computed loss (scalar).
+    """
     # Spike likelihood: mean=0, total var = se^2
     var_spike = sebetahat**2  # (N,)
     logp_spike = -0.5 * ((betahat**2) / var_spike + torch.log(2 * torch.pi * var_spike))  # (N,)
@@ -113,6 +171,28 @@ class EmdnPosteriorMeanNorm:
         loss=0,
         model_param=None,
     ):
+        """
+        Container for the results of the spiked EMDN posterior mean estimation.
+
+        Parameters
+        ----------
+        post_mean : torch.Tensor
+            Posterior means for each observation.
+        post_mean2 : torch.Tensor
+            Posterior second moments for each observation.
+        post_sd : torch.Tensor
+            Posterior standard deviations for each observation.
+        location : np.ndarray
+            Mixture component means for each observation.
+        pi_np : np.ndarray
+            Mixture weights for each observation.
+        scale : np.ndarray
+            Mixture component standard deviations for each observation.
+        loss : float, optional
+            Final training loss.
+        model_param : dict, optional
+            Trained model parameters (state_dict).
+        """
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -143,33 +223,45 @@ def spiked_emdn_posterior_means(
     print_every=10,
 ):
     """
-    Fit a Mixture Density Network to estimate the prior distribution of effects.
+    Fit a Mixture Density Network (MDN) with spike and slab components to estimate the prior distribution of effects.
+
     In the EBNM problem, we observe estimates `betahat` with standard errors `sebetahat` and want to estimate
-    the prior distribution of the true effects.
+    the prior distribution of the true effects. The prior is modeled as a mixture of Gaussians (slabs) plus a point mass at zero (spike),
+    with mixture parameters predicted by a neural network.
 
-    betahat ~ N(theta, sebetahat^2)
+    Parameters
+    ----------
+    X : torch.Tensor or np.ndarray
+        Covariates for each observation, shape (n_samples, n_features).
+    betahat : torch.Tensor or np.ndarray
+        Observed effect estimates, shape (n_samples,).
+    sebetahat : torch.Tensor or np.ndarray
+        Standard errors of the effect estimates, shape (n_samples,).
+    n_epochs : int, optional
+        Number of training epochs (default=50).
+    n_layers : int, optional
+        Number of hidden layers in the neural network (default=4).
+    n_gaussians : int, optional
+        Number of Gaussian components in the mixture (default=5).
+    hidden_dim : int, optional
+        Number of hidden units in each layer (default=64).
+    batch_size : int, optional
+        Batch size for training (default=512).
+    lr : float, optional
+        Learning rate for the optimizer (default=1e-3).
+    model_param : dict, optional
+        Pre-trained model parameters to initialize the network.
+    penalty : float, optional
+        >1 encourages spike; =1 neutral (default=1.0).
+    beta_prior : tuple, optional
+        (alpha0, beta0) for Beta prior on pi_spike.
+    print_every : int, optional
+        Print training loss every this many epochs (default=10).
 
-    theta ~ G, where G is modeled as a mixture of Gaussians with parameters predicted by a neural network,
-    but with an additional point mass at 0 (spike + slabs).
-
-    Args:
-        :X (torch.Tensor): Covariates for each observation, shape (n_samples, n_features).
-        :betahat (torch.Tensor): Observed effect estimates, shape (n_samples,).
-        :sebetahat (torch.Tensor): Standard errors of the effect estimates, shape (n_samples,).
-        :n_epochs (int): Number of training epochs.
-        :n_layers (int): Number of hidden layers in the neural network.
-        :n_gaussians (int): Number of Gaussian components in the mixture.
-        :hidden_dim (int): Number of hidden units in each layer.
-        :batch_size (int): Batch size for training.
-        :lr (float): Learning rate for the optimizer.
-        :model_param (dict, optional): Pre-trained model parameters to initialize the network.
-        :penalty (float): >1 encourages spike; =1 neutral.
-        :beta_prior (tuple, optional): (alpha0, beta0) for Beta prior on pi_spike.
-        :print_every (int): Print training loss every this many epochs.
-
-    Returns:
-        :EmdnPosteriorMeanNorm: Container with posterior means, standard deviations, and model parameters.
-
+    Returns
+    -------
+    EmdnPosteriorMeanNorm
+        Container with posterior means, standard deviations, and model parameters.
     """
 
     # Standardize X

@@ -14,6 +14,22 @@ from .base import Prior, PriorBuilder
 
 
 class LearnedPriorType(StrEnum):
+    """
+    Enum for learned prior types.
+
+    Attributes
+    ----------
+    CASH : str
+        Covariate-assisted spike-and-slab prior.
+    CGB : str
+        Covariate Generalized-binary prior.
+    CGB_SHARP : str
+        Covariate sharp Generalized-binary prior.
+    EMDN : str
+        Empirical Mixture Density Network prior.
+    SPIKED_EMDN : str
+        Spiked Empirical Mixture Density Network prior.
+    """
     CASH = auto()
     CGB = auto()
     CGB_SHARP = auto()
@@ -31,11 +47,35 @@ builder_functions: dict[LearnedPriorType, Callable] = {
 
 
 class LearnedBuilder(PriorBuilder):
+    """
+    Builder for learned priors (e.g., CASH, CGB, EMDN).
+
+    Parameters
+    ----------
+    type : LearnedPriorType
+        The type of learned prior to use.
+    """
     def __init__(self, type: LearnedPriorType):
+        """
+        Initialize the LearnedBuilder.
+
+        Parameters
+        ----------
+        type : LearnedPriorType
+            The type of learned prior to use.
+        """
         self.type = type
 
     @property
     def name(self) -> str:
+        """
+        Name of the prior type.
+
+        Returns
+        -------
+        str
+            String representation of the prior type.
+        """
         return str(self.type)
 
     def fit(
@@ -45,6 +85,30 @@ class LearnedBuilder(PriorBuilder):
         sebetahat: Tensor,
         model_param: Any | None = None,
     ) -> Prior:
+        """
+        Fit the learned prior to the data.
+
+        Parameters
+        ----------
+        X : torch.Tensor or None
+            Covariate matrix (may be required for some learned priors).
+        betahat : torch.Tensor
+            Observed effect size estimates.
+        sebetahat : torch.Tensor
+            Standard errors of the effect size estimates.
+        model_param : Any, optional
+            Additional model parameters (default: None).
+
+        Returns
+        -------
+        Prior
+            Fitted prior object with posterior means and related quantities.
+
+        Raises
+        ------
+        ValueError
+            If the prior type is unknown or unsupported.
+        """
         obj = builder_functions[self.type](X, betahat, sebetahat, model_param=model_param)
 
         # A bit annoying that the different types have different ways of handling pi0
