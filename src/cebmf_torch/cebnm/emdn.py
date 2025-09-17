@@ -175,7 +175,8 @@ def emdn_posterior_means(
     Fit a Mixture Density Network (MDN) to estimate the prior distribution of effects.
 
     In the EBNM problem, we observe estimates `betahat` with standard errors `sebetahat` and want to estimate
-    the prior distribution of the true effects. The prior is modeled as a mixture of Gaussians with parameters predicted by a neural network.
+    the prior distribution of the true effects. The prior is modeled as a mixture of Gaussians with parameters
+    predicted by a neural network.
 
     Parameters
     ----------

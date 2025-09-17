@@ -143,7 +143,8 @@ def cash_posterior_means(
     penalty=1.5,
 ):
     """
-    Fit a CASH (Covariate Adaptive Shrinkage) model and compute posterior means, second moments, and standard deviations.
+    Fit a CASH (Covariate Adaptive Shrinkage) model and compute posterior means,
+    second moments, and standard deviations.
 
     Parameters
     ----------
