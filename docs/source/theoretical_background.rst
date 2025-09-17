@@ -42,7 +42,7 @@ and then compute the posterior distribution :math:`p(\theta_i \mid y_i, \sigma, 
 
 .. admonition:: TODO
 
-      Link to relevant example. See the :doc:`examples`
+      Link to relevant example. Explain why this is a good idea. Maybe figure here. See the :doc:`examples`
 
 
 Empirical Bayes Matrix Factorization
