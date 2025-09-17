@@ -30,6 +30,7 @@ class PosteriorMean:
     post_sd : torch.Tensor
         Posterior standard deviation.
     """
+
     def __init__(self, post_mean, post_mean2, post_sd):
         self.post_mean = post_mean
         self.post_mean2 = post_mean2

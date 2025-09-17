@@ -13,6 +13,7 @@ class PriorRegistry:
     registry : dict[str, PriorBuilder]
         Mapping from prior name to builder instance.
     """
+
     registry: dict[str, PriorBuilder] = {}
 
     @classmethod
