@@ -15,6 +15,7 @@ build:
     # golang: "1.20"
   jobs:
     post_build:
+      - mkdir -p docs/source/notebooks/
       - cp -r examples/*.ipynb docs/source/notebooks/
 
 # Build documentation in the "docs/" directory with Sphinx
