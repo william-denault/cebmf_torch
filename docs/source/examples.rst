@@ -250,12 +250,15 @@ Common Issues
     model.device = device
 
 
-Example notebooks
+Detailed examples
 -----------------
 
+Below we include more detailed examples of applying the methods in this package
+to a variety of tasks and datasets. These examples are also available as Jupyter
+notebooks in the `examples/` directory of the source code.
 
 .. toctree::
    :maxdepth: 1
 
-   notebooks/example1.ipynb
-   notebooks/example2.ipynb
+   notebooks/spiked_emdn.ipynb
+   notebooks/model_RNA_ATAC.ipynb
