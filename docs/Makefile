@@ -30,10 +30,10 @@ copy-notebooks:
 
 .PHONY: help Makefile
 
-html: copy-notebooks apidoc
+html: copy-notebooks #apidoc
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-htmlhelp: copy-notebooks apidoc
+htmlhelp: copy-notebooks #apidoc
 	@$(SPHINXBUILD) -M htmlhelp "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 
