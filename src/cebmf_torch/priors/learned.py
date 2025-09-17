@@ -52,9 +52,12 @@ class LearnedBuilder(PriorBuilder):
             case LearnedPriorType.CASH | LearnedPriorType.SPIKED_EMDN:
                 # optional: could expose from obj.pi_np
                 pi0_null = obj.pi_np[:, 0]
-            case LearnedPriorType.CGB | LearnedPriorType.CGB_SHARP:
+            case LearnedPriorType.CGB  :
                 # π₀(x) from the covariate model
                 pi0_null = obj.pi
+            case  LearnedPriorType.CGB_SHARP:
+                # π₀(x) from the covariate model
+                pi0_null = obj.pi0
             case LearnedPriorType.EMDN:
                 pi0_null = None
             case _:
