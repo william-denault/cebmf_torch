@@ -104,8 +104,8 @@ def emdn_posterior_means(
 
     betahat ~ N(theta, sebetahat^2)
 
-    theta ~ G, where G is modeled as a mixture of Gaussians with parameters predicted by a neural network. 
-    
+    theta ~ G, where G is modeled as a mixture of Gaussians with parameters predicted by a neural network.
+
     Args:
         :X (torch.Tensor): Covariates for each observation, shape (n_samples, n_features).
         :betahat (torch.Tensor): Observed effect estimates, shape (n_samples,).
@@ -120,7 +120,7 @@ def emdn_posterior_means(
 
     Returns:
         :EmdnPosteriorMeanNorm: Container with posterior means, standard deviations, and model parameters.
-    
+
     """
 
     # Standardize X
