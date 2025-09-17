@@ -29,6 +29,20 @@ class DensityRegressionDataset(Dataset):
 # -------------------------
 class MDN(nn.Module):
     def __init__(self, input_dim, hidden_dim, n_gaussians, n_layers=4):
+        """
+        Initialize a Mixture Density Network (MDN).
+
+        Parameters
+        ----------
+        input_dim : int
+            Number of input features.
+        hidden_dim : int
+            Number of hidden units in each layer.
+        n_gaussians : int
+            Number of Gaussian components in the mixture.
+        n_layers : int, optional
+            Number of hidden layers (default is 4).
+        """
         super().__init__()
         self.fc_in = nn.Linear(input_dim, hidden_dim)
         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
@@ -37,6 +51,23 @@ class MDN(nn.Module):
         self.log_sigma = nn.Linear(hidden_dim, n_gaussians)
 
     def forward(self, x):
+        """
+        Forward pass through the MDN.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (N, input_dim).
+
+        Returns
+        -------
+        pi : torch.Tensor
+            Mixture weights, shape (N, K).
+        mu : torch.Tensor
+            Means for each component, shape (N, K).
+        log_sigma : torch.Tensor
+            Log standard deviations for each component, shape (N, K).
+        """
         x = torch.relu(self.fc_in(x))
         for layer in self.hidden_layers:
             x = torch.relu(layer(x))
@@ -50,6 +81,27 @@ class MDN(nn.Module):
 # Loss function
 # -------------------------
 def mdn_loss_with_varying_noise(pi, mu, log_sigma, betahat, sebetahat):
+    """
+    Compute the negative log-likelihood loss for a mixture density network with varying noise.
+
+    Parameters
+    ----------
+    pi : torch.Tensor
+        Mixture weights, shape (N, K).
+    mu : torch.Tensor
+        Means for each component, shape (N, K).
+    log_sigma : torch.Tensor
+        Log standard deviations for each component, shape (N, K).
+    betahat : torch.Tensor
+        Observed effect estimates, shape (N,).
+    sebetahat : torch.Tensor
+        Standard errors of the effect estimates, shape (N,).
+
+    Returns
+    -------
+    torch.Tensor
+        The computed loss (scalar).
+    """
     sigma = torch.exp(log_sigma)
     total_sigma = torch.sqrt(sigma**2 + sebetahat.unsqueeze(1) ** 2)
     dist = torch.distributions.Normal(mu, total_sigma)
@@ -72,6 +124,28 @@ class EmdnPosteriorMeanNorm:
         loss=0,
         model_param=None,
     ):
+        """
+        Container for the results of the EMDN posterior mean estimation.
+
+        Parameters
+        ----------
+        post_mean : torch.Tensor
+            Posterior means for each observation.
+        post_mean2 : torch.Tensor
+            Posterior second moments for each observation.
+        post_sd : torch.Tensor
+            Posterior standard deviations for each observation.
+        location : np.ndarray or torch.Tensor
+            Mixture component means for each observation.
+        pi_np : np.ndarray or torch.Tensor
+            Mixture weights for each observation.
+        scale : np.ndarray or torch.Tensor
+            Mixture component standard deviations for each observation.
+        loss : float, optional
+            Final training loss.
+        model_param : dict, optional
+            Trained model parameters (state_dict).
+        """
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -98,29 +172,39 @@ def emdn_posterior_means(
     model_param=None,
 ):
     """
-    Fit a Mixture Density Network to estimate the prior distribution of effects.
+    Fit a Mixture Density Network (MDN) to estimate the prior distribution of effects.
+
     In the EBNM problem, we observe estimates `betahat` with standard errors `sebetahat` and want to estimate
-    the prior distribution of the true effects.
+    the prior distribution of the true effects. The prior is modeled as a mixture of Gaussians with parameters
+    predicted by a neural network.
 
-    betahat ~ N(theta, sebetahat^2)
+    Parameters
+    ----------
+    X : torch.Tensor or np.ndarray
+        Covariates for each observation, shape (n_samples, n_features).
+    betahat : torch.Tensor or np.ndarray
+        Observed effect estimates, shape (n_samples,).
+    sebetahat : torch.Tensor or np.ndarray
+        Standard errors of the effect estimates, shape (n_samples,).
+    n_epochs : int, optional
+        Number of training epochs (default=50).
+    n_layers : int, optional
+        Number of hidden layers in the neural network (default=4).
+    n_gaussians : int, optional
+        Number of Gaussian components in the mixture (default=5).
+    hidden_dim : int, optional
+        Number of hidden units in each layer (default=64).
+    batch_size : int, optional
+        Batch size for training (default=512).
+    lr : float, optional
+        Learning rate for the optimizer (default=1e-3).
+    model_param : dict, optional
+        Pre-trained model parameters to initialize the network.
 
-    theta ~ G, where G is modeled as a mixture of Gaussians with parameters predicted by a neural network.
-
-    Args:
-        :X (torch.Tensor): Covariates for each observation, shape (n_samples, n_features).
-        :betahat (torch.Tensor): Observed effect estimates, shape (n_samples,).
-        :sebetahat (torch.Tensor): Standard errors of the effect estimates, shape (n_samples,).
-        :n_epochs (int): Number of training epochs.
-        :n_layers (int): Number of hidden layers in the neural network.
-        :n_gaussians (int): Number of Gaussian components in the mixture.
-        :hidden_dim (int): Number of hidden units in each layer.
-        :batch_size (int): Batch size for training.
-        :lr (float): Learning rate for the optimizer.
-        :model_param (dict, optional): Pre-trained model parameters to initialize the network.
-
-    Returns:
-        :EmdnPosteriorMeanNorm: Container with posterior means, standard deviations, and model parameters.
-
+    Returns
+    -------
+    EmdnPosteriorMeanNorm
+        Container with posterior means, standard deviations, and model parameters.
     """
 
     # Standardize X

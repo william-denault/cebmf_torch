@@ -7,7 +7,24 @@ from torch import Tensor
 
 @dataclass
 class Prior:
-    """Result from fitting a prior distribution."""
+    """
+    Result from fitting a prior distribution.
+
+    Attributes
+    ----------
+    post_mean : torch.Tensor
+        Posterior means for each observation.
+    post_mean2 : torch.Tensor
+        Posterior second moments for each observation.
+    loss : float
+        Final training loss or log-likelihood.
+    model_param : Any or None, optional
+        Trained model parameters (state_dict) or other metadata.
+    pi0_null : torch.Tensor, float, or None, optional
+        Null component probability (if applicable).
+    pi_slab : torch.Tensor, float, or None, optional
+        Slab component probability (if applicable).
+    """
 
     post_mean: Tensor
     post_mean2: Tensor
@@ -18,7 +35,9 @@ class Prior:
 
 
 class PriorBuilder(ABC):
-    """Base class for all prior distributions."""
+    """
+    Base class for all prior distributions.
+    """
 
     @abstractmethod
     def fit(
@@ -28,23 +47,38 @@ class PriorBuilder(ABC):
         sebetahat: Tensor,
         model_param: Any | None = None,
     ) -> Prior:
-        """Fit the prior and return posterior estimates.
+        """
+        Fit the prior and return posterior estimates.
 
-        Args:
-            X: Covariate matrix (can be None for non-covariate priors)
-            betahat: Effect size estimates
-            sebetahat: Standard errors of effect sizes
-            model_param: Additional model parameters (for warm starts)
+        Parameters
+        ----------
+        X : torch.Tensor or None
+            Covariate matrix (can be None for non-covariate priors).
+        betahat : torch.Tensor
+            Effect size estimates.
+        sebetahat : torch.Tensor
+            Standard errors of effect sizes.
+        model_param : Any or None, optional
+            Additional model parameters (for warm starts).
 
-        Returns:
-            PriorResult with posterior means, second moments, and metadata
+        Returns
+        -------
+        Prior
+            Result object with posterior means, second moments, and metadata.
         """
         pass
 
     @property
     @abstractmethod
     def name(self) -> str:
-        """Return a string identifier for this prior."""
+        """
+        Return a string identifier for this prior.
+
+        Returns
+        -------
+        str
+            String identifier for the prior.
+        """
         pass
 
     def __repr__(self) -> str:

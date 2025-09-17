@@ -11,29 +11,117 @@ _LOG_SQRT_2PI = 0.5 * _LOG_2PI
 
 
 def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
-    # log N(x | loc, scale)
+    """
+    Compute the log-density of a normal distribution.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor.
+    loc : torch.Tensor
+        Mean of the normal distribution.
+    scale : torch.Tensor
+        Standard deviation of the normal distribution.
+
+    Returns
+    -------
+    torch.Tensor
+        Log-density evaluated at x.
+    """
     z = (x - loc) / (scale + 1e-32)
     return -0.5 * torch.log(torch.tensor(_TWOPI, device=x.device)) - torch.log(scale + 1e-32) - 0.5 * z * z
 
 
 def norm_cdf(x: Tensor) -> Tensor:
-    # standard normal CDF using torch.distributions
+    """
+    Compute the standard normal cumulative distribution function (CDF).
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        CDF evaluated at x.
+    """
     return torch.distributions.Normal(0.0, 1.0).cdf(x)
 
 
 def norm_pdf(x: Tensor) -> Tensor:
+    """
+    Compute the standard normal probability density function (PDF).
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        PDF evaluated at x.
+    """
     return torch.exp(-0.5 * x * x) / _SQRT_2PI
 
 
 def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
+    """
+    Compute the log of the sum of exponentials of input elements along a given dimension.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor.
+    dim : int, optional
+        Dimension along which to operate. Default is -1.
+    keepdim : bool, optional
+        Whether the output tensor has dim retained or not. Default is False.
+
+    Returns
+    -------
+    torch.Tensor
+        Result of log-sum-exp operation.
+    """
     return torch.logsumexp(x, dim=dim, keepdim=keepdim)
 
 
 def safe_log(x: Tensor, eps: float = _EPS) -> Tensor:
+    """
+    Compute the logarithm of x with clamping for numerical stability.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor.
+    eps : float, optional
+        Minimum value to clamp x to. Default is 1e-12.
+
+    Returns
+    -------
+    torch.Tensor
+        Logarithm of clamped x.
+    """
     return torch.log(torch.clamp(x, min=eps))
 
 
 def softmax(x: Tensor, dim: int = -1) -> Tensor:
+    """
+    Compute the softmax of input tensor along the specified dimension.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor.
+    dim : int, optional
+        Dimension along which softmax will be computed. Default is -1.
+
+    Returns
+    -------
+    torch.Tensor
+        Softmax of the input tensor.
+    """
     return torch.softmax(x, dim=dim)
 
 
@@ -41,31 +129,96 @@ def softmax(x: Tensor, dim: int = -1) -> Tensor:
 # helpers
 # ------------------------
 def logphi(z: torch.Tensor) -> torch.Tensor:
-    """log pdf φ(z) = exp(-z^2/2)/√(2π)."""
+    """
+    Compute the log of the standard normal PDF φ(z) = exp(-z^2/2)/√(2π).
+
+    Parameters
+    ----------
+    z : torch.Tensor
+        Input tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        Log PDF evaluated at z.
+    """
     return -0.5 * z.pow(2) - _LOG_SQRT_2PI
 
 
 def logPhi(z: torch.Tensor) -> torch.Tensor:
-    """Stable log Φ(z)."""
+    """
+    Compute the stable log CDF of the standard normal distribution Φ(z).
+
+    Parameters
+    ----------
+    z : torch.Tensor
+        Input tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        Log CDF evaluated at z.
+    """
     return torch.special.log_ndtr(z)
 
 
 def logscale_sub(logx: torch.Tensor, logy: torch.Tensor) -> torch.Tensor:
     """
-    Compute log(exp(logx) - exp(logy)) stably.
+    Compute log(exp(logx) - exp(logy)) in a numerically stable way.
+
     Requires logx >= logy.
+
+    Parameters
+    ----------
+    logx : torch.Tensor
+        Logarithm of x.
+    logy : torch.Tensor
+        Logarithm of y.
+
+    Returns
+    -------
+    torch.Tensor
+        Logarithm of (exp(logx) - exp(logy)).
     """
     max_log = torch.maximum(logx, logy)
     return max_log + torch.log(torch.exp(logx - max_log) - torch.exp(logy - max_log))
 
 
 def logscale_add(logx: Tensor, logy: Tensor) -> Tensor:
-    """Stable log(exp(logx) + exp(logy))."""
+    """
+    Compute log(exp(logx) + exp(logy)) in a numerically stable way.
+
+    Parameters
+    ----------
+    logx : torch.Tensor
+        Logarithm of x.
+    logy : torch.Tensor
+        Logarithm of y.
+
+    Returns
+    -------
+    torch.Tensor
+        Logarithm of (exp(logx) + exp(logy)).
+    """
     return torch.logaddexp(logx, logy)
 
 
 def do_truncnorm_argchecks(a: torch.Tensor, b: torch.Tensor):
-    """Clamp and sanity check bounds."""
+    """
+    Clamp and sanity check bounds for truncated normal arguments.
+
+    Parameters
+    ----------
+    a : torch.Tensor
+        Lower bound(s).
+    b : torch.Tensor
+        Upper bound(s).
+
+    Returns
+    -------
+    tuple of torch.Tensor
+        (a, b) after checks.
+    """
     # If a >= b, invalid; we just return as-is
     return a, b
 
@@ -73,7 +226,23 @@ def do_truncnorm_argchecks(a: torch.Tensor, b: torch.Tensor):
 def safe_tensor_to_float(
     value: torch.Tensor | float | None, null_value: float = float("-inf"), reduction: str = "min"
 ) -> float:
-    """Convert tensor/float/None to float with safe handling."""
+    """
+    Convert tensor, float, or None to float with safe handling.
+
+    Parameters
+    ----------
+    value : torch.Tensor, float, or None
+        Value to convert.
+    null_value : float, optional
+        Value to return if input is None or empty. Default is -inf.
+    reduction : str, optional
+        Reduction to apply if input is a tensor ("min" or "max"). Default is "min".
+
+    Returns
+    -------
+    float
+        Converted float value.
+    """
     if value is None:
         return null_value
     if isinstance(value, torch.Tensor):
@@ -93,6 +262,25 @@ def safe_tensor_to_float(
 
 
 def my_etruncnorm(a, b, mean=0.0, sd=1.0):
+    """
+    Compute E[Z | a < Z < b] for Z ~ N(mean, sd^2), the mean of a truncated normal.
+
+    Parameters
+    ----------
+    a : float or torch.Tensor
+        Lower truncation bound.
+    b : float or torch.Tensor
+        Upper truncation bound.
+    mean : float or torch.Tensor, optional
+        Mean of the normal distribution. Default is 0.0.
+    sd : float or torch.Tensor, optional
+        Standard deviation of the normal distribution. Default is 1.0.
+
+    Returns
+    -------
+    torch.Tensor
+        Mean of the truncated normal distribution.
+    """
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
     mean = torch.as_tensor(mean, dtype=torch.float64)
     sd = torch.as_tensor(sd, dtype=torch.float64)
@@ -140,6 +328,25 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
 
 
 def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
+    """
+    Compute E[Z^2 | a < Z < b] for Z ~ N(mean, sd^2), the second moment of a truncated normal.
+
+    Parameters
+    ----------
+    a : float or torch.Tensor
+        Lower truncation bound.
+    b : float or torch.Tensor
+        Upper truncation bound.
+    mean : float or torch.Tensor, optional
+        Mean of the normal distribution. Default is 0.0.
+    sd : float or torch.Tensor, optional
+        Standard deviation of the normal distribution. Default is 1.0.
+
+    Returns
+    -------
+    torch.Tensor
+        Second moment of the truncated normal distribution.
+    """
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
     mean = torch.as_tensor(mean, dtype=torch.float64)
     sd = torch.as_tensor(sd, dtype=torch.float64)

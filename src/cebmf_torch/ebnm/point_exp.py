@@ -24,10 +24,26 @@ def _loglik_exp_convolved(xc: Tensor, s: Tensor, a: Tensor) -> Tensor:
 
 def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Tensor, Tensor]:
     """
-    Moments for the Exp branch using the tilted Normal:
-    Z ~ N(m_tilt, s^2) truncated to [0, +inf),
+    Compute the first and second moments for the Exp branch using the tilted Normal.
+
+    The random variable Z ~ N(m_tilt, s^2) truncated to [0, +inf),
     where m_tilt = xc - s^2 * a.
-    Returns (E[Z], E[Z^2]).
+
+    Parameters
+    ----------
+    xc : torch.Tensor
+        Centered data (x - mu).
+    s : torch.Tensor
+        Standard deviation of the observation noise.
+    a : torch.Tensor
+        Exponential rate parameter.
+
+    Returns
+    -------
+    EZ : torch.Tensor
+        First moment E[Z].
+    EZ2 : torch.Tensor
+        Second moment E[Z^2].
     """
     m_tilt = xc - (s * s) * a
     zero = torch.zeros_like(xc)
@@ -53,6 +69,26 @@ class EBNMPointExp:
         log_lik: float,
         mode: float,
     ):
+        """
+        Container for the results of the point-exponential EBNM posterior estimation.
+
+        Parameters
+        ----------
+        post_mean : torch.Tensor
+            Posterior means for each observation.
+        post_mean2 : torch.Tensor
+            Posterior second moments for each observation.
+        post_sd : torch.Tensor
+            Posterior standard deviations for each observation.
+        scale : float
+            Estimated exponential scale parameter (a).
+        pi0 : float
+            Estimated mixture weight for the Exp branch.
+        log_lik : float
+            Final log-likelihood value.
+        mode : float
+            Estimated mode (mu).
+        """
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -79,12 +115,43 @@ def ebnm_point_exp(
     eps: float = 1e-12,
 ) -> EBNMPointExp:
     """
-    Torch-only point-exponential EBNM with the same stability tricks as your point-Laplace:
+    Fit a point-exponential Empirical Bayes Normal Means (EBNM) model using PyTorch.
+
+    This implementation uses stability tricks similar to the point-Laplace model:
       - clamps log a to [log(a_min), log(a_max)]
       - L2 penalty on log a
       - thresholds pi0 to spike-only if below tresh_pi0
       - robust LBFGS closure with NaN/Inf guards
-    Prior on θ: (1 - pi0) δ_μ + pi0 [μ + Exp(a)], support θ ≥ μ.
+
+    The prior on θ is: (1 - pi0) δ_μ + pi0 [μ + Exp(a)], with support θ ≥ μ.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Observed data.
+    s : torch.Tensor
+        Standard errors of the observed data.
+    par_init : tuple or None, optional
+        Initial values for (alpha, log_a, mu). If None, defaults are used.
+    fix_par : tuple of bool, optional
+        Which parameters to fix during optimization (default: (False, False, True)).
+    max_iter : int, optional
+        Maximum number of LBFGS iterations (default: 20).
+    tol : float, optional
+        Tolerance for optimizer (default: 1e-6).
+    a_bounds : tuple, optional
+        Bounds for the exponential scale parameter a (default: (1e-2, 1e2)).
+    loga_l2 : float, optional
+        L2 penalty on log a (default: 1e-4).
+    tresh_pi0 : float, optional
+        Threshold for pi0 below which the solution is set to spike-only (default: 1e-3).
+    eps : float, optional
+        Small value to avoid numerical issues (default: 1e-12).
+
+    Returns
+    -------
+    EBNMPointExp
+        Container with posterior means, standard deviations, and model parameters.
     """
     device, dtype = x.device, x.dtype
     x = x.to(dtype)
