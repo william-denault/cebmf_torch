@@ -151,7 +151,7 @@ def spiked_emdn_posterior_means(
 
     theta ~ G, where G is modeled as a mixture of Gaussians with parameters predicted by a neural network,
     but with an additional point mass at 0 (spike + slabs).
-    
+
     Args:
         :X (torch.Tensor): Covariates for each observation, shape (n_samples, n_features).
         :betahat (torch.Tensor): Observed effect estimates, shape (n_samples,).
@@ -169,7 +169,7 @@ def spiked_emdn_posterior_means(
 
     Returns:
         :EmdnPosteriorMeanNorm: Container with posterior means, standard deviations, and model parameters.
-    
+
     """
 
     # Standardize X
