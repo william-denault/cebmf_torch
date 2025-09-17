@@ -4,10 +4,12 @@
 [![unittest](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml/badge.svg)](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml)
 
 A pure-PyTorch rewrite of EBMF/EBNM components:
+
 - No NumPy. No SciPy. No R.
 - GPU-accelerated with mini-batch EM for mixture weights.
 
 ## Files
+
 - `torch_utils.py`: math helpers, truncated normal moments.
 - `torch_utils_mix.py`: scale selection for ash priors.
 - `torch_distribution_operation.py`: log-likelihood matrix builders.
@@ -33,6 +35,27 @@ uv sync
 # Run tests
 uv run pytest
 ```
+
+### Docker (GPU Support)
+
+For GPU development and deployment:
+
+```bash
+# Build the Docker image
+docker build -t cebmf_torch:gpu-minimal .
+
+# Run with GPU support (requires NVIDIA Container Toolkit)
+docker run --gpus all -it cebmf_torch:gpu-minimal
+
+# For development with code mounting
+docker run --gpus all -it -v $(pwd)/src:/app/src -v $(pwd)/tests:/app/tests cebmf_torch:gpu-minimal /bin/bash
+```
+
+The Docker image includes:
+
+- CUDA 13.0.1 runtime for GPU acceleration
+- Python 3.12 with all dependencies
+- Development tools (pytest, etc.)
 
 ## Quick start
 
