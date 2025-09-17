@@ -18,20 +18,35 @@ DEFAULT_PRUNE_THRESH = 1 - 1e-3
 
 # Initialization strategies
 class InitialisationStrategy(Protocol):
-    """Protocol for factor initialization strategies."""
+    """
+    Protocol for factor initialization strategies.
+
+    Methods
+    -------
+    __call__(Y, N, P, K, device)
+        Initialize L and F matrices.
+    """
 
     def __call__(self, Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
         """
         Initialize L and F matrices.
 
-        Args:
-            Y: Input data tensor (N, P)
-            N: Number of rows
-            P: Number of columns
-            K: Number of factors
-            device: Target device
+        Parameters
+        ----------
+        Y : Tensor
+            Input data tensor (N, P)
+        N : int
+            Number of rows
+        P : int
+            Number of columns
+        K : int
+            Number of factors
+        device : torch.device
+            Target device
 
-        Returns:
+        Returns
+        -------
+        tuple of Tensor
             Tuple of (L, F) tensors
         """
         ...
@@ -39,7 +54,27 @@ class InitialisationStrategy(Protocol):
 
 @torch.no_grad()
 def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
-    """SVD-based initialization strategy."""
+    """
+    SVD-based initialization strategy for factor matrices.
+
+    Parameters
+    ----------
+    Y : Tensor
+        Input data tensor (N, P)
+    N : int
+        Number of rows
+    P : int
+        Number of columns
+    K : int
+        Number of factors
+    device : torch.device
+        Target device
+
+    Returns
+    -------
+    tuple of Tensor
+        Tuple of (L, F) tensors
+    """
     Y_for_init = _impute_nan(Y)
     U, S, Vh = torch.linalg.svd(Y_for_init, full_matrices=False)
     K_actual = min(K, S.shape[0])
@@ -56,7 +91,27 @@ def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> t
 
 @torch.no_grad()
 def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
-    """Random initialization strategy."""
+    """
+    Random initialization strategy for factor matrices.
+
+    Parameters
+    ----------
+    Y : Tensor
+        Input data tensor (N, P)
+    N : int
+        Number of rows
+    P : int
+        Number of columns
+    K : int
+        Number of factors
+    device : torch.device
+        Target device
+
+    Returns
+    -------
+    tuple of Tensor
+        Tuple of (L, F) tensors
+    """
     L = torch.randn(N, K, device=device) * RANDOM_INIT_SCALE
     F = torch.randn(P, K, device=device) * RANDOM_INIT_SCALE
     return L, F
@@ -64,7 +119,27 @@ def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -
 
 @torch.no_grad()
 def zero_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
-    """Zero initialization strategy."""
+    """
+    Zero initialization strategy for factor matrices.
+
+    Parameters
+    ----------
+    Y : Tensor
+        Input data tensor (N, P)
+    N : int
+        Number of rows
+    P : int
+        Number of columns
+    K : int
+        Number of factors
+    device : torch.device
+        Target device
+
+    Returns
+    -------
+    tuple of Tensor
+        Tuple of (L, F) tensors
+    """
     L = torch.zeros(N, K, device=device)
     F = torch.zeros(P, K, device=device)
     return L, F
@@ -80,6 +155,20 @@ INIT_STRATEGIES = {
 
 @dataclass
 class CEBMFResult:
+    """
+    Container for cEBMF results.
+
+    Attributes
+    ----------
+    L : Tensor
+        Left factor matrix.
+    F : Tensor
+        Right factor matrix.
+    tau : Tensor
+        Noise precision(s).
+    history_obj : list
+        History of objective values.
+    """
     L: Tensor
     F: Tensor
     tau: Tensor
@@ -116,10 +205,14 @@ class CovariateParams:
 
 class cEBMF:
     """
-    Pure-PyTorch EBMF with proper NaN handling:
+    Pure-PyTorch Empirical Bayes Matrix Factorization (EBMF) with NaN handling.
+
+    Features
+    --------
     - Observed-mask weighting in lhat/fhat and their standard errors.
-    - Constant noise precision (scalar tau).
+    - Constant or structured noise precision (scalar or per-row/column tau).
     - Mini-batch optimization for mixture weights inside ash().
+    - Modular prior and covariate support.
     """
 
     def __init__(
@@ -155,6 +248,19 @@ class cEBMF:
 
     @torch.no_grad()
     def fit(self, maxit: int = 50):
+        """
+        Fit the cEBMF model for a specified number of iterations.
+
+        Parameters
+        ----------
+        maxit : int, optional
+            Number of iterations to run. Default is 50.
+
+        Returns
+        -------
+        CEBMFResult
+            Result container with fitted factors, noise, and objective history.
+        """
         self.initialise_factors()
         for _ in range(maxit):
             self.iter_once()
@@ -162,6 +268,14 @@ class cEBMF:
 
     @torch.no_grad()
     def initialise_factors(self, method: str = "svd"):
+        """
+        Initialize factor matrices using the specified method.
+
+        Parameters
+        ----------
+        method : str, optional
+            Initialization method ('svd', 'random', or 'zero'). Default is 'svd'.
+        """
         if method not in INIT_STRATEGIES:
             raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
 
@@ -178,6 +292,9 @@ class cEBMF:
 
     @torch.no_grad()
     def iter_once(self):
+        """
+        Perform one iteration of the cEBMF update (update all factors and noise).
+        """
         tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
             self._update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
@@ -189,6 +306,8 @@ class cEBMF:
     @torch.no_grad()
     def update_tau(self):
         """
+        Update the noise precision parameter(s) according to the noise model.
+
         Matches NumPy behavior:
         - 'constant'   -> scalar tau; also provides tau_map (N,P) if you need it
         - 'row_wise'   -> tau_row (N,), tau_map broadcast to (N,P)
@@ -504,17 +623,31 @@ def normal_means_loglik(
     eps: float = NUMERICAL_EPS,
 ) -> torch.Tensor:
     """
-    Expected normal-means log-likelihood:
-      E_q[ log N(x | theta, s^2) ] with q giving Et, Et2.
+    Compute the expected normal-means log-likelihood.
 
-    Args:
-      x, s, Et, Et2 : broadcastable tensors (same shape after broadcast).
-      mask          : optional bool mask; True = include entry.
-      reduce        : 'sum' (default), 'mean', or 'none' (per-element with NaNs for excluded).
-      eps           : numerical floor for variance.
+    E_q[ log N(x | theta, s^2) ] with q giving Et, Et2.
 
-    Returns:
-      Scalar if reduce in {'sum','mean'}, else elementwise tensor.
+    Parameters
+    ----------
+    x : torch.Tensor
+        Observed data (broadcastable with s, Et, Et2).
+    s : torch.Tensor
+        Standard errors (broadcastable).
+    Et : torch.Tensor
+        Posterior means (broadcastable).
+    Et2 : torch.Tensor
+        Posterior second moments (broadcastable).
+    mask : torch.Tensor or None, optional
+        Optional bool mask; True = include entry.
+    reduce : str, optional
+        'sum' (default), 'mean', or 'none' (per-element with NaNs for excluded).
+    eps : float, optional
+        Numerical floor for variance.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar if reduce in {'sum','mean'}, else elementwise tensor.
     """
     # Ensure common dtype/device via broadcasting
     x, s, Et, Et2 = torch.broadcast_tensors(x, s, Et, Et2)
@@ -551,7 +684,19 @@ def normal_means_loglik(
 
 @torch.no_grad()
 def _impute_nan(Y: Tensor) -> Tensor:
-    # Column-mean imputation in pure torch (for SVD init only)
+    """
+    Column-mean imputation for NaNs in a tensor (for SVD init only).
+
+    Parameters
+    ----------
+    Y : Tensor
+        Input data tensor with possible NaNs.
+
+    Returns
+    -------
+    Tensor
+        Imputed tensor with NaNs replaced by column means.
+    """
     mask = ~torch.isnan(Y)
     if not mask.any():
         return Y
