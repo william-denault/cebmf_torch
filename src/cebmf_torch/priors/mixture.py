@@ -19,6 +19,7 @@ class MixturePriorType(StrEnum):
     EXP : str
         Exponential mixture prior.
     """
+
     NORM = auto()
     EXP = auto()
 
@@ -32,6 +33,7 @@ class ASHBuilder(PriorBuilder):
     type : MixturePriorType
         The type of mixture prior to use.
     """
+
     def __init__(self, type: MixturePriorType):
         """
         Initialize the ASHBuilder.

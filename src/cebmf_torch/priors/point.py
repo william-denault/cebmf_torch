@@ -21,6 +21,7 @@ class PointPriorType(StrEnum):
     EXP : str
         Exponential prior.
     """
+
     LAPLACE = auto()
     EXP = auto()
 
@@ -40,6 +41,7 @@ class PointBuilder(PriorBuilder):
     type : PointPriorType
         The type of point prior to use.
     """
+
     def __init__(self, type: PointPriorType):
         """
         Initialize the PointBuilder.
