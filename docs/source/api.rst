@@ -1,7 +1,7 @@
 API Reference
 =============
 
-This section documents the API for `cebmf_torch`.
+This section documents the API for :code:`cebmf_torch`.
 
 Main Package
 ------------
@@ -9,6 +9,7 @@ Main Package
 .. automodule:: cebmf_torch
    :members:
    :undoc-members:
+   :no-index:
 
 Core Classes
 ------------

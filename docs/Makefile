@@ -17,11 +17,6 @@ MODULE_DIR   = ../src/cebmf_torch
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-# Generate API docs
-apidoc:
-	rm -r $(SOURCEDIR)/api_files || true
-	$(SPHINX_APIDOC) -f -o $(SOURCEDIR)/api_files $(MODULE_DIR)
-
 # Copy notebooks into source/notebooks before building
 copy-notebooks:
 	mkdir -p $(SOURCEDIR)/notebooks
@@ -30,10 +25,10 @@ copy-notebooks:
 
 .PHONY: help Makefile
 
-html: copy-notebooks #apidoc
+html: copy-notebooks
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-htmlhelp: copy-notebooks #apidoc
+htmlhelp: copy-notebooks
 	@$(SPHINXBUILD) -M htmlhelp "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 
