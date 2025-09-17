@@ -169,6 +169,7 @@ class CEBMFResult:
     history_obj : list
         History of objective values.
     """
+
     L: Tensor
     F: Tensor
     tau: Tensor
