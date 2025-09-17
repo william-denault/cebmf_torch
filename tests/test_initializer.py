@@ -86,7 +86,7 @@ def test_device_handling():
 
     # Test default device
     model1 = cEBMF(data=Y, K=3)
-    assert model1.device.type in ["cpu", "cuda"]
+    assert model1.device.type in ["cpu", "cuda", "mps"]
 
     # Test explicit device
     device = torch.device("cpu")
