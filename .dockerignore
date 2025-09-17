@@ -1,0 +1,15 @@
+# Python cache and bytecode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Testing cache
+.pytest_cache
+
+# Linting cache
+.ruff_cache
+
+# Coverage files
+.coverage
+.coverage.*
