@@ -1,16 +1,13 @@
 # Use minimal CUDA runtime image
 FROM nvidia/cuda:13.0.1-runtime-ubuntu24.04
 
-# Install Python 3.12 and system dependencies
+# Install minimal system dependencies and let uv handle Python
 RUN apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-dev \
-    python3.12-venv \
-    python3-pip \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/* \
-    && ln -s /usr/bin/python3.12 /usr/bin/python
+    && apt-get clean \
+    && rm -rf /tmp/*
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -18,14 +15,16 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Set working directory
 WORKDIR /app
 
-# Copy project files
+# Copy dependency files first for better layer caching
 COPY pyproject.toml uv.lock ./
+
+# Install dependencies first (uv will install Python 3.12 automatically)
+RUN uv sync --frozen
+
+# Copy source code after dependencies
 COPY src/ src/
 COPY tests/ tests/
 COPY README.md ./
-
-# Install dependencies and the package
-RUN uv sync --frozen
 
 # Create a non-root user
 RUN useradd --create-home --shell /bin/bash app && \
