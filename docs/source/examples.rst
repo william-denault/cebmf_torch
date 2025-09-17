@@ -248,3 +248,17 @@ Common Issues
     # Fix device mismatches
     Y = Y.to(device)
     model.device = device
+
+
+Detailed examples
+-----------------
+
+Below we include more detailed examples of applying the methods in this package
+to a variety of tasks and datasets. These examples are also available as Jupyter
+notebooks in the `examples/` directory of the source code.
+
+.. toctree::
+   :maxdepth: 1
+
+   notebooks/spiked_emdn.ipynb
+   notebooks/model_RNA_ATAC.ipynb
