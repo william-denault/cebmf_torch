@@ -1,5 +1,19 @@
-# Use uv's Python 3.12 Debian image
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+# Use minimal CUDA runtime image
+FROM nvidia/cuda:13.0.1-runtime-ubuntu24.04
+
+# Install Python 3.12 and system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.12 \
+    python3.12-dev \
+    python3.12-venv \
+    python3-pip \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/bin/python3.12 /usr/bin/python
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Set working directory
 WORKDIR /app
