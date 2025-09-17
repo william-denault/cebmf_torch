@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 
-from cebmf_torch.ebnm.point_exp import ebnm_point_exp
+# Updated to use clean imports from new API
+from cebmf_torch import ebnm_point_exp
 
 
 def test_optimize_pe_like():
