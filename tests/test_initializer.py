@@ -31,47 +31,49 @@ def test_all_parameters():
     all_prior = PRIOR_REGISTRY.list_priors()
 
     kwargs = {
-        'norm': {'penalty': 2.0, 'shuffle': True},
-        'exp': {'max_iter': 20, 'tol': 1e-4},
-        'laplace': {'max_iter': 20, 'tol': 1e-4},
-        'cash': {'n_epochs': 10,
-                  'n_layers': 3,
-                  'num_classes': 10,
-                  'hidden_dim': 32,
-                  'batch_size': 64,
-                  'lr': 0.01,
-                  'penalty': 1.8},
-        'cgb': {'n_epochs': 25,
-                'n_layers': 3,
-                'hidden_dim': 64,
-                'batch_size': 256,
-                'lr': 1e-2,
-                'penalty': 2.56},
-        'cgb_sharp': {'n_epochs': 25,
-                'n_layers': 3,
-                'hidden_dim': 64,
-                'batch_size': 256,
-                'lr': 1e-2,
-                'penalty': 2.56,
-                'eps': 1e-4},
-        'emdn': {'n_epochs': 25,
-                 'n_layers': 2,
-                 'n_gaussians': 3,
-                 'hidden_dim': 32,
-                 'batch_size': 256,},
-        'spiked_emdn': {'n_epochs': 25,
-                 'n_layers': 2,
-                 'n_gaussians': 3,
-                 'hidden_dim': 32,
-                 'batch_size': 256,
-                 'penalty': 3.14},
+        "norm": {"penalty": 2.0, "shuffle": True},
+        "exp": {"max_iter": 20, "tol": 1e-4},
+        "laplace": {"max_iter": 20, "tol": 1e-4},
+        "cash": {
+            "n_epochs": 10,
+            "n_layers": 3,
+            "num_classes": 10,
+            "hidden_dim": 32,
+            "batch_size": 64,
+            "lr": 0.01,
+            "penalty": 1.8,
+        },
+        "cgb": {"n_epochs": 25, "n_layers": 3, "hidden_dim": 64, "batch_size": 256, "lr": 1e-2, "penalty": 2.56},
+        "cgb_sharp": {
+            "n_epochs": 25,
+            "n_layers": 3,
+            "hidden_dim": 64,
+            "batch_size": 256,
+            "lr": 1e-2,
+            "penalty": 2.56,
+            "eps": 1e-4,
+        },
+        "emdn": {
+            "n_epochs": 25,
+            "n_layers": 2,
+            "n_gaussians": 3,
+            "hidden_dim": 32,
+            "batch_size": 256,
+        },
+        "spiked_emdn": {
+            "n_epochs": 25,
+            "n_layers": 2,
+            "n_gaussians": 3,
+            "hidden_dim": 32,
+            "batch_size": 256,
+            "penalty": 3.14,
+        },
     }
     for p in all_prior:
         if p not in kwargs:
             kwargs[p] = {}
 
     for prior_L, prior_F in itertools.product(all_prior, repeat=2):
-
         L_kwargs = kwargs[prior_L]
         F_kwargs = kwargs[prior_F]
 
