@@ -92,7 +92,7 @@ def mdn_spike_loss_with_varying_noise(
     betahat,
     sebetahat,
     *,
-    penalty: float = 1.0,
+    penalty: float = 1.5,
     beta_prior: tuple | None = None,
     eps: float = 1e-8,
 ):
@@ -113,7 +113,7 @@ def mdn_spike_loss_with_varying_noise(
     sebetahat : torch.Tensor
         Standard errors of the effect estimates, shape (N,).
     penalty : float, optional
-        >1 encourages spike; =1 neutral (default is 1.0).
+        >1 encourages spike; =1 neutral (default is 1.5).
     beta_prior : tuple, optional
         (alpha0, beta0) for Beta prior on pi_spike.
     eps : float, optional
@@ -219,7 +219,7 @@ def spiked_emdn_posterior_means(
     lr=1e-3,
     model_param=None,
     *,
-    penalty: float = 1.0,  # >1 encourages spike; =1 neutral
+    penalty: float = 1.5,  # >1 encourages spike; =1 neutral
     beta_prior: tuple | None = None,  # e.g. (17., 5.) => target pi_spike ~ 0.77
     print_every=10,
 ):
@@ -253,7 +253,7 @@ def spiked_emdn_posterior_means(
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
     penalty : float, optional
-        >1 encourages spike; =1 neutral (default=1.0).
+        >1 encourages spike; =1 neutral (default=1.5).
     beta_prior : tuple, optional
         (alpha0, beta0) for Beta prior on pi_spike.
     print_every : int, optional
