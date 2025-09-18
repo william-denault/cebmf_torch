@@ -15,6 +15,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Set working directory
 WORKDIR /app
 
+# Create a non-root user
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app
+USER app
+
 # Copy dependency files first for better layer caching
 COPY pyproject.toml uv.lock ./
 
@@ -25,11 +30,6 @@ RUN uv sync --frozen
 COPY src/ src/
 COPY tests/ tests/
 COPY README.md ./
-
-# Create a non-root user
-RUN useradd --create-home --shell /bin/bash app && \
-    chown -R app:app /app
-USER app
 
 # Default command
 CMD ["uv", "run", "python", "-c", "import cebmf_torch; print('cebmf_torch loaded successfully')"]
