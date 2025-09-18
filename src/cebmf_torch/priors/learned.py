@@ -57,7 +57,7 @@ class LearnedBuilder(PriorBuilder):
         The type of learned prior to use.
     """
 
-    def __init__(self, type: LearnedPriorType):
+    def __init__(self, type: LearnedPriorType, **kwargs: Any) -> None:
         """
         Initialize the LearnedBuilder.
 
@@ -65,8 +65,22 @@ class LearnedBuilder(PriorBuilder):
         ----------
         type : LearnedPriorType
             The type of learned prior to use.
+        **kwargs : Any
+            Additional keyword arguments specific to the prior type.
         """
         self.type = type
+        self.kwargs = kwargs
+
+    def set_kwargs(self, **new_kwargs: Any) -> None:
+        """
+        Overwrite the keyword arguments for the builder.
+
+        Parameters
+        ----------
+        **new_kwargs : Any
+            New keyword arguments to set, replacing the old ones.
+        """
+        self.kwargs = new_kwargs
 
     @property
     def name(self) -> str:
@@ -111,7 +125,7 @@ class LearnedBuilder(PriorBuilder):
         ValueError
             If the prior type is unknown or unsupported.
         """
-        obj = builder_functions[self.type](X, betahat, sebetahat, model_param=model_param)
+        obj = builder_functions[self.type](X, betahat, sebetahat, model_param=model_param, **self.kwargs)
 
         # A bit annoying that the different types have different ways of handling pi0
         match self.type:
