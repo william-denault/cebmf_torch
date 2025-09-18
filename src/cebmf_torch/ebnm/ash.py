@@ -30,7 +30,7 @@ class PriorType(StrEnum):
 @dataclass
 class AshConfig:
     mult: float = math.sqrt(2.0)
-    penalty: float = 1.5
+    penalty: float = 10.
     verbose: bool = True
     threshold_loglikelihood: float = -300.0
     mode: float = 0.0  # only for PriorType.NORM
@@ -144,7 +144,7 @@ def ash(
     s: torch.Tensor,
     prior: PriorType = PriorType.NORM,
     mult: float = math.sqrt(2.0),
-    penalty: float = 1.5,
+    penalty: float = 10.,
     verbose: bool = True,
     threshold_loglikelihood: float = -300.0,
     mode: float = 0.0,
@@ -170,7 +170,7 @@ def ash(
     mult : float, optional
         Multiplier for scale grid (default: sqrt(2.0)).
     penalty : float, optional
-        Penalty for mixture weights (default: 1.5).
+        Penalty for mixture weights (default: 10.0).
     verbose : bool, optional
         Verbosity flag (default: True).
     threshold_loglikelihood : float, optional
