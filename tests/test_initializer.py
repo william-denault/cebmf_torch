@@ -25,6 +25,9 @@ def test_all_parameters():
     X_l = torch.randn(15, 3)
     X_f = torch.randn(8, 2)
 
+    L_kwargs = {'penalty': 2.0, 'shuffle': True}
+    F_kwargs = {'max_iter': 20, 'tol': 1e-4}
+
     model = cEBMF(
         data=Y,
         K=5,
@@ -35,9 +38,12 @@ def test_all_parameters():
         noise_type=NoiseType.ROW_WISE,
         X_l=X_l,
         X_f=X_f,
+        prior_L_kwargs=L_kwargs,
+        prior_F_kwargs=F_kwargs,
         self_row_cov=True,
         self_col_cov=True,
     )
+    model.initialise_factors()
 
     # Check model params
     assert model.model.K == 5
@@ -54,6 +60,12 @@ def test_all_parameters():
     assert torch.equal(model.covariate.X_f, X_f)
     assert model.covariate.self_row_cov is True
     assert model.covariate.self_col_cov is True
+
+    # Check prior kwargs
+    for key, value in L_kwargs.items():
+        assert model.prior_L_fn.kwargs[key] == value
+    for key, value in F_kwargs.items():
+        assert model.prior_F_fn.kwargs[key] == value
 
 
 def test_defaults():
