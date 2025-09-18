@@ -25,8 +25,8 @@ def test_all_parameters():
     X_l = torch.randn(15, 3)
     X_f = torch.randn(8, 2)
 
-    L_kwargs = {'penalty': 2.0, 'shuffle': True}
-    F_kwargs = {'max_iter': 20, 'tol': 1e-4}
+    L_kwargs = {"penalty": 2.0, "shuffle": True}
+    F_kwargs = {"max_iter": 20, "tol": 1e-4}
 
     model = cEBMF(
         data=Y,
