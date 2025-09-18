@@ -16,7 +16,11 @@ def test_rank1_iter_and_obj():
     X = np.outer(u, v) + rng.normal(0, 0.1, (n, p))
 
     Y = torch.tensor(X, dtype=torch.float32)
-    m = cEBMF(Y)
+    m = cEBMF(
+        Y,
+        prior_L_kwargs={},
+        prior_F_kwargs={},
+    )
     m.initialise_factors("svd")
     rmse((m.L @ m.F.T).cpu().numpy(), np.outer(u, v))
     for _ in range(100):
