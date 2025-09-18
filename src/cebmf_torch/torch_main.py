@@ -222,8 +222,8 @@ class cEBMF:
         K: int = 5,
         prior_L: str = "norm",
         prior_F: str = "norm",
-        prior_L_kwargs: dict = {},
-        prior_F_kwargs: dict = {},
+        prior_L_kwargs: dict | None = None,
+        prior_F_kwargs: dict | None = None,
         allow_backfitting: bool = True,
         prune_thresh: float = DEFAULT_PRUNE_THRESH,
         noise_type: NoiseType = NoiseType.CONSTANT,
@@ -242,6 +242,11 @@ class cEBMF:
         )
         self.noise = NoiseParams(type=noise_type)
         self.covariate = CovariateParams(X_l=X_l, X_f=X_f, self_row_cov=self_row_cov, self_col_cov=self_col_cov)
+
+        if prior_L_kwargs is None:
+            prior_L_kwargs = {}
+        if prior_F_kwargs is None:
+            prior_F_kwargs = {}
 
         self._validate_inputs()
         self.Y = self.data.to(self.device).float()
