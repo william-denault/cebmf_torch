@@ -21,15 +21,15 @@ RUN useradd --create-home --shell /bin/bash app && \
 USER app
 
 # Copy dependency files first for better layer caching
-COPY pyproject.toml uv.lock ./
+COPY --chown=app:app pyproject.toml uv.lock ./
 
 # Install dependencies first (uv will install Python 3.12 automatically)
 RUN uv sync --frozen
 
 # Copy source code after dependencies
-COPY src/ src/
-COPY tests/ tests/
-COPY README.md ./
+COPY --chown=app:app src/ src/
+COPY --chown=app:app tests/ tests/
+COPY --chown=app:app README.md ./
 
 # Default command
 CMD ["uv", "run", "python", "-c", "import cebmf_torch; print('cebmf_torch loaded successfully')"]
