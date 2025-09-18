@@ -222,6 +222,8 @@ class cEBMF:
         K: int = 5,
         prior_L: str = "norm",
         prior_F: str = "norm",
+        prior_L_kwargs: dict = {},
+        prior_F_kwargs: dict = {},
         allow_backfitting: bool = True,
         prune_thresh: float = DEFAULT_PRUNE_THRESH,
         noise_type: NoiseType = NoiseType.CONSTANT,
@@ -244,7 +246,7 @@ class cEBMF:
         self._validate_inputs()
         self.Y = self.data.to(self.device).float()
         self.N, self.P = self.Y.shape
-        self._initialise_priors()
+        self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
 
     @torch.no_grad()
@@ -512,9 +514,11 @@ class cEBMF:
         # More validation...
 
     @torch.no_grad()
-    def _initialise_priors(self):
+    def _initialise_priors(self, prior_L_kwargs: dict, prior_F_kwargs: dict) -> None:
         self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.model.prior_L)
+        self.prior_L_fn.set_kwargs(**prior_L_kwargs)
         self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.model.prior_F)
+        self.prior_F_fn.set_kwargs(**prior_F_kwargs)
         self.model_state_L = [None] * self.model.K
         self.model_state_F = [None] * self.model.K
 
