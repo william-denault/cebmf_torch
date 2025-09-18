@@ -82,7 +82,7 @@ class CgbNet(nn.Module):
 # -------------------------
 # Loss (mixture NLL, stable)
 # -------------------------
-def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.1, eps=1e-8):
+def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8):
     var1 = se**2
     var2 = sigma2_sq + se**2
 
@@ -174,7 +174,7 @@ def sharp_cgb_posterior_means(
     batch_size=128,
     ratio=0.01,
     lr=1e-3,
-    penalty: float = 2.1,
+    penalty: float = 1.5,
     model_param=None,
     eps=1e-3,
 ):
@@ -202,7 +202,7 @@ def sharp_cgb_posterior_means(
     lr : float, optional
         Learning rate for the optimizer (default=1e-3).
     penalty : float, optional
-        Penalty for spike probability (default=2.1).
+        Penalty for spike probability (default=1.5).
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
     eps : float, optional
