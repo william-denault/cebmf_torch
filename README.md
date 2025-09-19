@@ -39,6 +39,9 @@ uv sync
 uv run pytest
 ```
 
+If you wish to not use uv for some reason, then it is also possible to pip
+install the package by replacing `uv sync` with `pip install .`.
+
 ### Docker (GPU Support)
 
 Use the public docker image
@@ -88,7 +91,8 @@ print(fit.L.shape, fit.F.shape, fit.tau.item())
 
 - Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
 - Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
-  - To run the example notebooks, first add some additional dependencies with `uv sync --group examples`
+  - To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
+  (or `pip install ".[examples]"` if using `pip`). 
 
 ## Notes & Tips
 

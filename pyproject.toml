@@ -58,3 +58,22 @@ ignore = []
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# For pip users
+[project.optional-dependencies]
+dev = [
+    "matplotlib>=3.9.4",
+    "numpy>=2.3.3",
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.13.0",
+]
+examples = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.6",
+    "seaborn>=0.13.2",
+    "torchvision>=0.23.0",
+    "tqdm>=4.67.1",
+    "transformers>=4.56.1",
+    "uni>=0.1",
+]
