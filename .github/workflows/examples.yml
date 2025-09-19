@@ -1,0 +1,31 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main "test_examples"]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Install dependencies
+      run: uv sync -p ${{ matrix.python-version }}
+
+    - name: Generate docs examples
+      run: uv run -p ${{ matrix.python-version }} python tests/generate_doc_examples_test.py
+
+    - name: Run tests on these examples
+      run: uv run -p ${{ matrix.python-version }} pytest tests/doc_examples_test.py
