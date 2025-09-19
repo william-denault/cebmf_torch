@@ -20,7 +20,7 @@ dependencies = [
     "numpy>=2.0.2",
     "scikit-learn>=1.6.1",
     "torch>=2.0",
-    "tqdm"
+    "tqdm",
 ]
 
 [dependency-groups]
@@ -29,6 +29,11 @@ dev = [
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.13.0",
+]
+examples = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.6",
+    "seaborn>=0.13.2",
 ]
 [tool.ruff]
 line-length = 119
