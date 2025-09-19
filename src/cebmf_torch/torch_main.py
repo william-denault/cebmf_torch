@@ -157,10 +157,10 @@ class cEBMF:
             self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
 
         if L is None and F is not None:
-            warn("Provided F without L; ignoring F and using svd for initialization.")
+            warn("Provided F without L; ignoring F and using svd for initialization.", stacklevel=2)
             _use_strategy("svd")
         elif L is not None and F is None:
-            warn("Provided L without F; ignoring L and using svd for initialization.")
+            warn("Provided L without F; ignoring L and using svd for initialization.", stacklevel=2)
             _use_strategy("svd")
         elif L is not None and F is not None:
             self.L, self.F = user_provided_factors(L, F, self.N, self.P, self.model.K, self.device)
