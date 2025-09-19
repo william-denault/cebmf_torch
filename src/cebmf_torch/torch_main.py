@@ -140,7 +140,7 @@ class cEBMF:
     @torch.no_grad()
     def initialise_factors(self, method: str = "svd", *, L: Tensor | None = None, F: Tensor | None = None):
         """
-        Initialize factor matrices using the specified method.
+        Initialize factor matrices using the specified method, or user-provided initial factors.
 
         Parameters
         ----------
