@@ -57,7 +57,7 @@ The cEBMF interface is designed to be straightforward:
     model = cEBMF(data=Y, K=3, X_l=row_covariates, X_f=col_covariates)
     
     # Different noise models
-    from cebmf_torch.torch_main import NoiseType
+    from cebmf_torch.cebmf import NoiseType
     model = cEBMF(data=Y, K=5, noise_type=NoiseType.ROW_WISE)
 
 Empirical Bayes Normal Means (EBNM)
