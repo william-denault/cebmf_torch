@@ -3,8 +3,8 @@ import itertools
 import torch
 
 from cebmf_torch import cEBMF
+from cebmf_torch.cebmf import NoiseType
 from cebmf_torch.priors import PRIOR_REGISTRY
-from cebmf_torch.torch_main import NoiseType
 
 
 def test_simple_init():
