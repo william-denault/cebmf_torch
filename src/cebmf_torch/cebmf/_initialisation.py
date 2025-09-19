@@ -40,6 +40,7 @@ class InitialisationStrategy(Protocol):
         """
         ...
 
+
 @torch.no_grad()
 def _impute_nan(Y: Tensor) -> Tensor:
     """
