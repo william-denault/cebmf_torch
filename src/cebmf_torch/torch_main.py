@@ -1,156 +1,19 @@
 import math
 from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Protocol
+from warnings import warn
 
 import torch
 from torch import Tensor
 
+from cebmf_torch.cebmf._initialisation import INIT_STRATEGIES, user_provided_factors
 from cebmf_torch.priors import PRIOR_REGISTRY
 from cebmf_torch.utils.device import get_device
 from cebmf_torch.utils.maths import safe_tensor_to_float
 
 # Add at top of file after imports:
 NUMERICAL_EPS = 1e-12
-RANDOM_INIT_SCALE = 0.01
 DEFAULT_PRUNE_THRESH = 1 - 1e-3
-
-
-# Initialization strategies
-class InitialisationStrategy(Protocol):
-    """
-    Protocol for factor initialization strategies.
-
-    Methods
-    -------
-    __call__(Y, N, P, K, device)
-        Initialize L and F matrices.
-    """
-
-    def __call__(self, Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
-        """
-        Initialize L and F matrices.
-
-        Parameters
-        ----------
-        Y : Tensor
-            Input data tensor (N, P)
-        N : int
-            Number of rows
-        P : int
-            Number of columns
-        K : int
-            Number of factors
-        device : torch.device
-            Target device
-
-        Returns
-        -------
-        tuple of Tensor
-            Tuple of (L, F) tensors
-        """
-        ...
-
-
-@torch.no_grad()
-def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
-    """
-    SVD-based initialization strategy for factor matrices.
-
-    Parameters
-    ----------
-    Y : Tensor
-        Input data tensor (N, P)
-    N : int
-        Number of rows
-    P : int
-        Number of columns
-    K : int
-        Number of factors
-    device : torch.device
-        Target device
-
-    Returns
-    -------
-    tuple of Tensor
-        Tuple of (L, F) tensors
-    """
-    Y_for_init = _impute_nan(Y)
-    U, S, Vh = torch.linalg.svd(Y_for_init, full_matrices=False)
-    K_actual = min(K, S.shape[0])
-    L = (U[:, :K_actual] * S[:K_actual]).contiguous()
-    F = Vh[:K_actual, :].T.contiguous()
-
-    # Pad with zeros if K > rank
-    if K_actual < K:
-        L = torch.cat([L, torch.zeros(N, K - K_actual, device=device)], dim=1)
-        F = torch.cat([F, torch.zeros(P, K - K_actual, device=device)], dim=1)
-
-    return L, F
-
-
-@torch.no_grad()
-def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
-    """
-    Random initialization strategy for factor matrices.
-
-    Parameters
-    ----------
-    Y : Tensor
-        Input data tensor (N, P)
-    N : int
-        Number of rows
-    P : int
-        Number of columns
-    K : int
-        Number of factors
-    device : torch.device
-        Target device
-
-    Returns
-    -------
-    tuple of Tensor
-        Tuple of (L, F) tensors
-    """
-    L = torch.randn(N, K, device=device) * RANDOM_INIT_SCALE
-    F = torch.randn(P, K, device=device) * RANDOM_INIT_SCALE
-    return L, F
-
-
-@torch.no_grad()
-def zero_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
-    """
-    Zero initialization strategy for factor matrices.
-
-    Parameters
-    ----------
-    Y : Tensor
-        Input data tensor (N, P)
-    N : int
-        Number of rows
-    P : int
-        Number of columns
-    K : int
-        Number of factors
-    device : torch.device
-        Target device
-
-    Returns
-    -------
-    tuple of Tensor
-        Tuple of (L, F) tensors
-    """
-    L = torch.zeros(N, K, device=device)
-    F = torch.zeros(P, K, device=device)
-    return L, F
-
-
-# Registry for initialization strategies
-INIT_STRATEGIES = {
-    "svd": svd_initialise,
-    "random": random_initialise,
-    "zero": zero_initialise,
-}
 
 
 @dataclass
@@ -275,20 +138,37 @@ class cEBMF:
         return CEBMFResult(self.L, self.F, self.tau, self.obj)
 
     @torch.no_grad()
-    def initialise_factors(self, method: str = "svd"):
+    def initialise_factors(self, method: str = "svd", *, L: Tensor | None = None, F: Tensor | None = None):
         """
-        Initialize factor matrices using the specified method.
+        Initialize factor matrices using the specified method, or user-provided initial factors.
 
         Parameters
         ----------
-        method : str, optional
-            Initialization method ('svd', 'random', or 'zero'). Default is 'svd'.
+        method : str
+            Initialization method ('svd', 'random', or 'zero'). Default is 'svd'. Ignored if L and F are provided.
+        L : Tensor or None, optional
+            User-provided initial factor matrix (N, K).  Ignored if F not also provided.
+        F : Tensor or None, optional
+            User-provided initial factor matrix (P, K).  Ignored if L not also provided.
         """
-        if method not in INIT_STRATEGIES:
-            raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
 
-        initialise_fn = INIT_STRATEGIES[method]
-        self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
+        def _use_strategy(method: str):
+            initialise_fn = INIT_STRATEGIES[method]
+            self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
+
+        if L is None and F is not None:
+            warn("Provided F without L; ignoring F and using svd for initialization.", stacklevel=2)
+            _use_strategy("svd")
+        elif L is not None and F is None:
+            warn("Provided L without F; ignoring L and using svd for initialization.", stacklevel=2)
+            _use_strategy("svd")
+        elif L is not None and F is not None:
+            self.L, self.F = user_provided_factors(L, F, self.N, self.P, self.model.K, self.device)
+
+        elif method not in INIT_STRATEGIES:
+            raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
+        else:
+            _use_strategy(method)
 
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
@@ -690,28 +570,3 @@ def normal_means_loglik(
         return out
     else:
         raise ValueError("reduce must be 'sum', 'mean', or 'none'")
-
-
-@torch.no_grad()
-def _impute_nan(Y: Tensor) -> Tensor:
-    """
-    Column-mean imputation for NaNs in a tensor (for SVD init only).
-
-    Parameters
-    ----------
-    Y : Tensor
-        Input data tensor with possible NaNs.
-
-    Returns
-    -------
-    Tensor
-        Imputed tensor with NaNs replaced by column means.
-    """
-    mask = ~torch.isnan(Y)
-    if not mask.any():
-        return Y
-    col_means = torch.nanmean(Y, dim=0)
-    Y_imp = Y.clone()
-    idx = torch.where(~mask)
-    Y_imp[idx] = col_means[idx[1]]
-    return Y_imp
