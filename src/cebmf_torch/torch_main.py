@@ -163,7 +163,7 @@ class cEBMF:
             warn("Provided L without F; ignoring L and using svd for initialization.")
             _use_strategy("svd")
         elif L is not None and F is not None:
-            user_provided_factors(L, F, self.N, self.P, self.model.K, self.device)
+            self.L, self.F = user_provided_factors(L, F, self.N, self.P, self.model.K, self.device)
 
         elif method not in INIT_STRATEGIES:
             raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
