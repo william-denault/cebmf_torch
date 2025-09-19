@@ -74,8 +74,8 @@ from cebmf_torch import ash, cEBMF
 n = 10000
 betahat = torch.randn(n, device='cuda' if torch.cuda.is_available() else 'cpu')
 se = torch.full((n,), 0.5, device=betahat.device)
-res = ash(betahat, se, prior='norm', method='adam', steps=200, batch_size=8192)
-print(res.pi, res.scale)
+res = ash(betahat, se, prior='norm', batch_size=8192)
+print(res.pi0, res.scale)
 
 # Example: EBMF on a small matrix
 Y = torch.randn(500, 200, device=betahat.device)
