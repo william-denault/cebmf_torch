@@ -6,7 +6,7 @@ from warnings import warn
 import torch
 from torch import Tensor
 
-from cebmf_torch.cebmf._initialisation import INIT_STRATEGIES
+from cebmf_torch.cebmf._initialisation import INIT_STRATEGIES, user_provided_factors
 from cebmf_torch.priors import PRIOR_REGISTRY
 from cebmf_torch.utils.device import get_device
 from cebmf_torch.utils.maths import safe_tensor_to_float
@@ -152,28 +152,23 @@ class cEBMF:
             User-provided initial factor matrix (P, K).  Ignored if L not also provided.
         """
 
-        def _use_strategy():
+        def _use_strategy(method: str):
             initialise_fn = INIT_STRATEGIES[method]
             self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
 
         if L is None and F is not None:
             warn("Provided F without L; ignoring F and using svd for initialization.")
-            _use_strategy()
+            _use_strategy("svd")
         elif L is not None and F is None:
             warn("Provided L without F; ignoring L and using svd for initialization.")
-            _use_strategy()
+            _use_strategy("svd")
         elif L is not None and F is not None:
-            if L.shape != (self.N, self.model.K):
-                raise ValueError(f"Provided L has shape {L.shape}, expected ({self.N}, {self.model.K})")
-            if F.shape != (self.P, self.model.K):
-                raise ValueError(f"Provided F has shape {F.shape}, expected ({self.P}, {self.model.K})")
-            self.L = L.to(self.device).float()
-            self.F = F.to(self.device).float()
+            user_provided_factors(L, F, self.N, self.P, self.model.K, self.device)
 
         elif method not in INIT_STRATEGIES:
             raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
         else:
-            _use_strategy()
+            _use_strategy(method)
 
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
