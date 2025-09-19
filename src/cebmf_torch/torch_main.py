@@ -1,6 +1,7 @@
 import math
 from dataclasses import dataclass
 from enum import StrEnum, auto
+from warnings import warn
 
 import torch
 from torch import Tensor
@@ -137,20 +138,42 @@ class cEBMF:
         return CEBMFResult(self.L, self.F, self.tau, self.obj)
 
     @torch.no_grad()
-    def initialise_factors(self, method: str = "svd"):
+    def initialise_factors(self, method: str = "svd", *, L: Tensor | None = None, F: Tensor | None = None):
         """
         Initialize factor matrices using the specified method.
 
         Parameters
         ----------
-        method : str, optional
-            Initialization method ('svd', 'random', or 'zero'). Default is 'svd'.
+        method : str
+            Initialization method ('svd', 'random', or 'zero'). Default is 'svd'. Ignored if L and F are provided.
+        L : Tensor or None, optional
+            User-provided initial factor matrix (N, K).  Ignored if F not also provided.
+        F : Tensor or None, optional
+            User-provided initial factor matrix (P, K).  Ignored if L not also provided.
         """
-        if method not in INIT_STRATEGIES:
-            raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
 
-        initialise_fn = INIT_STRATEGIES[method]
-        self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
+        def _use_strategy():
+            initialise_fn = INIT_STRATEGIES[method]
+            self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
+
+        if L is None and F is not None:
+            warn("Provided F without L; ignoring F and using svd for initialization.")
+            _use_strategy()
+        elif L is not None and F is None:
+            warn("Provided L without F; ignoring L and using svd for initialization.")
+            _use_strategy()
+        elif L is not None and F is not None:
+            if L.shape != (self.N, self.model.K):
+                raise ValueError(f"Provided L has shape {L.shape}, expected ({self.N}, {self.model.K})")
+            if F.shape != (self.P, self.model.K):
+                raise ValueError(f"Provided F has shape {F.shape}, expected ({self.P}, {self.model.K})")
+            self.L = L.to(self.device).float()
+            self.F = F.to(self.device).float()
+
+        elif method not in INIT_STRATEGIES:
+            raise ValueError(f"Unknown initialization method '{method}'. Available: {list(INIT_STRATEGIES.keys())}")
+        else:
+            _use_strategy()
 
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
