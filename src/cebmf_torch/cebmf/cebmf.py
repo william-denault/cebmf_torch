@@ -117,6 +117,8 @@ class cEBMF:
         self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
 
+        self._factors_initialised = False
+
     @torch.no_grad()
     def fit(self, maxit: int = 50):
         """
@@ -132,7 +134,9 @@ class cEBMF:
         CEBMFResult
             Result container with fitted factors, noise, and objective history.
         """
-        self.initialise_factors()
+        if not self._factors_initialised:
+            warn("Factors not initialized; using SVD initialization.", stacklevel=2)
+            self.initialise_factors()
         for _ in range(maxit):
             self.iter_once()
         return CEBMFResult(self.L, self.F, self.tau, self.obj)
@@ -177,6 +181,8 @@ class cEBMF:
 
         self.R.nan_to_num_(nan=0.0)
         self.update_tau()
+
+        self._factors_initialised = True
 
     @torch.no_grad()
     def iter_once(self):

@@ -1,5 +1,6 @@
 import itertools
 
+import pytest
 import torch
 
 from cebmf_torch import cEBMF
@@ -175,6 +176,28 @@ def test_basic_functionality():
 
     # Test fit method
     result = model.fit(maxit=2)
+    # Note: K might be pruned during fitting, so check that shapes are consistent
+    assert result.L.shape[0] == 20  # rows should match
+    assert result.F.shape[0] == 15  # columns should match
+    assert result.L.shape[1] == result.F.shape[1]  # factors should have same K
+    assert isinstance(result.tau, torch.Tensor)
+
+
+def test_basic_functionality_no_initialisation():
+    """Test that the initialized model works correctly."""
+    Y = torch.randn(20, 15)
+
+    # Initialize model
+    model = cEBMF(data=Y, K=3, prior_L="norm", prior_F="norm")
+
+    # Test that basic functionality works
+    assert model._factors_initialised is False
+    assert model.L.shape == (20, 3)
+    assert model.F.shape == (15, 3)
+
+    # Test fit method
+    with pytest.warns(UserWarning, match="Factors not initialized"):
+        result = model.fit(maxit=2)
     # Note: K might be pruned during fitting, so check that shapes are consistent
     assert result.L.shape[0] == 20  # rows should match
     assert result.F.shape[0] == 15  # columns should match
