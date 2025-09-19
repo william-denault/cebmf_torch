@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from cebmf_torch import cEBMF
 from cebmf_torch.cebmf._initialisation import random_initialise, svd_initialise, user_provided_factors, zero_initialise
 
 
@@ -74,3 +75,61 @@ def test_svd_initialise(Y: torch.Tensor, N: int, P: int, K: int) -> None:
     L, F = svd_initialise(Y, N, P, K, device)
     assert L.shape == (N, K), "L shape incorrect"
     assert F.shape == (P, K), "F shape incorrect"
+
+
+def test_cEBMF_initialise_factors_with_default_strategy(Y: torch.Tensor, K: int) -> None:
+    cebmf = cEBMF(Y, K, device=torch.device("cpu"))
+    cebmf.initialise_factors()
+    assert cebmf.L is not None, "L should be initialized"
+    assert cebmf.F is not None, "F should be initialized"
+    expected_L, expected_F = svd_initialise(Y, cebmf.N, cebmf.P, K, cebmf.device)
+    assert torch.allclose(cebmf.L, expected_L), "L not initialized as expected with svd"
+    assert torch.allclose(cebmf.F, expected_F), "F not initialized as expected with svd"
+
+
+def test_cEBMF_initialise_with_user_factors(Y: torch.Tensor, N: int, P: int, K: int) -> None:
+    device = torch.device("cpu")
+    L_user = torch.randn(N, K, device=device)
+    F_user = torch.randn(P, K, device=device)
+
+    cebmf = cEBMF(Y, K, device=device)
+    cebmf.initialise_factors(L=L_user, F=F_user)
+
+    assert cebmf.L is not None, "L should be initialized"
+    assert cebmf.F is not None, "F should be initialized"
+    assert torch.allclose(cebmf.L, L_user), "L matrix not correctly set from user input"
+    assert torch.allclose(cebmf.F, F_user), "F matrix not correctly set from user input"
+
+
+def test_cEBMF_initialise_with_only_L(Y: torch.Tensor, N: int, P: int, K: int) -> None:
+    device = torch.device("cpu")
+    L_user = torch.randn(N, K, device=device)
+
+    cebmf = cEBMF(Y, K, device=device)
+    with pytest.warns(UserWarning, match="Provided L without F"):
+        cebmf.initialise_factors(L=L_user)
+
+    # test fallback to svd
+    expected_L, expected_F = svd_initialise(Y, N, P, K, device)
+    assert torch.allclose(cebmf.L, expected_L), "L not initialized as expected with svd"
+    assert torch.allclose(cebmf.F, expected_F), "F not initialized as expected with svd"
+
+
+def test_cEBMF_initialise_with_only_F(Y: torch.Tensor, N: int, P: int, K: int) -> None:
+    device = torch.device("cpu")
+    F_user = torch.randn(P, K, device=device)
+
+    cebmf = cEBMF(Y, K, device=device)
+    with pytest.warns(UserWarning, match="Provided F without L"):
+        cebmf.initialise_factors(F=F_user)
+
+    # test fallback to svd
+    expected_L, expected_F = svd_initialise(Y, N, P, K, device)
+    assert torch.allclose(cebmf.L, expected_L), "L not initialized as expected with svd"
+    assert torch.allclose(cebmf.F, expected_F), "F not initialized as expected with svd"
+
+
+def test_cEBMF_initialise_with_unknown_strategy(Y: torch.Tensor, K: int) -> None:
+    cebmf = cEBMF(Y, K, device=torch.device("cpu"))
+    with pytest.raises(ValueError, match="Unknown initialization method 'unknown_strategy'"):
+        cebmf.initialise_factors(method="unknown_strategy")
