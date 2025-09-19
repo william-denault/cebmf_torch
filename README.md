@@ -41,17 +41,16 @@ uv run pytest
 
 ### Docker (GPU Support)
 
-For GPU development and deployment:
+Use the public docker image
 
 ```bash
-# Build the Docker image
-docker build -t cebmf_torch:gpu-minimal .
+docker pull ghcr.io/william-denault/cebmf_torch:latest
+```
 
-# Run with GPU support (requires NVIDIA Container Toolkit)
-docker run --gpus all -it cebmf_torch:gpu-minimal
+or clone the repo and build the image yourself
 
-# For development with code mounting
-docker run --gpus all -it -v $(pwd)/src:/app/src -v $(pwd)/tests:/app/tests cebmf_torch:gpu-minimal /bin/bash
+```
+docker build .
 ```
 
 The Docker image includes:
