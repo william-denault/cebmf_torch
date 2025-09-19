@@ -165,3 +165,34 @@ INIT_STRATEGIES = {
     "random": random_initialise,
     "zero": zero_initialise,
 }
+
+
+def user_provided_factors(L: Tensor, F: Tensor, N: int, P: int, K: int, device: torch.device) -> tuple[Tensor, Tensor]:
+    """
+    Use user-provided factor matrices.
+
+    Parameters
+    ----------
+    L : Tensor
+        User-provided L matrix (N, K)
+    F : Tensor
+        User-provided F matrix (P, K)
+    N : int
+        Number of rows of L (for validation)
+    P : int
+        Number of rows of F (for validation)
+    K : int
+        Number of factors i.e. columns of L and F (for validation)
+    device : torch.device
+        Target device
+
+    Returns
+    -------
+    tuple of Tensor
+        Tuple of (L, F) tensors on the specified device.
+    """
+    if L.shape != (N, K):
+        raise ValueError(f"Provided L has shape {L.shape}, expected ({N}, {K})")
+    if F.shape != (P, K):
+        raise ValueError(f"Provided F has shape {F.shape}, expected ({P}, {K})")
+    return L.to(device), F.to(device)
