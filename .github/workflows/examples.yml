@@ -2,7 +2,7 @@ name: Examples Test
 
 on:
   push:
-    branches: [ main "test_examples"]
+    branches: [ main ]
   pull_request:
     branches: [ "*" ]
 
