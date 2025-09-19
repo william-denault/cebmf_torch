@@ -17,10 +17,18 @@ authors = [
   { name = "Thomas Monahan"}
 ]
 dependencies = [
+    "ipykernel>=6.30.1",
+    "matplotlib>=3.10.6",
+    "notebook>=7.4.5",
     "numpy>=2.0.2",
+    "pandas>=2.3.2",
+    "pip>=25.2",
     "scikit-learn>=1.6.1",
     "torch>=2.0",
-    "tqdm"
+    "torchvision>=0.23.0",
+    "tqdm>=4.67.1",
+    "transformers>=4.56.1",
+    "uni>=0.1",
 ]
 
 [dependency-groups]

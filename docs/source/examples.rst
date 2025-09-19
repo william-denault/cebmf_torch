@@ -278,3 +278,4 @@ notebooks in the `examples/` directory of the source code.
 
    notebooks/spiked_emdn.ipynb
    notebooks/model_RNA_ATAC.ipynb
+   notebooks/cEBMF_with_CLIP.ipynb
