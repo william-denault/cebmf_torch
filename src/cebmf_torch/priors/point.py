@@ -42,7 +42,7 @@ class PointBuilder(PriorBuilder):
         The type of point prior to use.
     """
 
-    def __init__(self, type: PointPriorType):
+    def __init__(self, type: PointPriorType, **kwargs: Any) -> None:
         """
         Initialize the PointBuilder.
 
@@ -50,8 +50,22 @@ class PointBuilder(PriorBuilder):
         ----------
         type : PointPriorType
             The type of point prior to use.
+        **kwargs : Any
+            Additional keyword arguments specific to the prior type.
         """
         self.type = type
+        self.kwargs = kwargs
+
+    def set_kwargs(self, **new_kwargs: Any) -> None:
+        """
+        Overwrite the keyword arguments for the builder.
+
+        Parameters
+        ----------
+        **new_kwargs : Any
+            New keyword arguments to set, replacing the old ones.
+        """
+        self.kwargs = new_kwargs
 
     @property
     def name(self) -> str:
@@ -91,7 +105,7 @@ class PointBuilder(PriorBuilder):
         Prior
             Fitted prior object with posterior means and related quantities.
         """
-        obj = builder_functions[self.type](betahat, sebetahat)
+        obj = builder_functions[self.type](betahat, sebetahat, **self.kwargs)
         return Prior(
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,
