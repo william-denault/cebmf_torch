@@ -5,10 +5,10 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
+from cebmf_torch.utils.standard_scaler import standard_scale
 
 
 # -------------------------
@@ -210,8 +210,7 @@ def cgb_posterior_means(
     # Standardize X
     if X.ndim == 1:
         X = X.reshape(-1, 1)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = standard_scale(X)
 
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)

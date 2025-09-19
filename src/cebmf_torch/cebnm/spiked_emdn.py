@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 from cebmf_torch.utils.posterior import posterior_mean_norm
+from cebmf_torch.utils.standard_scaler import standard_scale
 
 
 # -------------------------
@@ -268,8 +268,7 @@ def spiked_emdn_posterior_means(
     # Standardize X
     if X.ndim == 1:
         X = X.reshape(-1, 1)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = standard_scale(X)
 
     # Data
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
