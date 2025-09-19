@@ -1,6 +1,9 @@
+import itertools
+
 import torch
 
 from cebmf_torch import cEBMF
+from cebmf_torch.priors import PRIOR_REGISTRY
 from cebmf_torch.torch_main import NoiseType
 
 
@@ -25,35 +28,93 @@ def test_all_parameters():
     X_l = torch.randn(15, 3)
     X_f = torch.randn(8, 2)
 
-    model = cEBMF(
-        data=Y,
-        K=5,
-        prior_L="norm",
-        prior_F="exp",
-        allow_backfitting=False,
-        prune_thresh=0.1,
-        noise_type=NoiseType.ROW_WISE,
-        X_l=X_l,
-        X_f=X_f,
-        self_row_cov=True,
-        self_col_cov=True,
-    )
+    all_prior = PRIOR_REGISTRY.list_priors()
 
-    # Check model params
-    assert model.model.K == 5
-    assert model.model.prior_L == "norm"
-    assert model.model.prior_F == "exp"
-    assert model.model.allow_backfitting is False
-    assert model.model.prune_thresh == 0.1
+    kwargs = {
+        "norm": {"penalty": 2.0, "shuffle": True},
+        "exp": {"max_iter": 20, "tol": 1e-4},
+        "laplace": {"max_iter": 20, "tol": 1e-4},
+        "cash": {
+            "n_epochs": 10,
+            "n_layers": 3,
+            "num_classes": 10,
+            "hidden_dim": 32,
+            "batch_size": 64,
+            "lr": 0.01,
+            "penalty": 1.8,
+        },
+        "cgb": {"n_epochs": 25, "n_layers": 3, "hidden_dim": 64, "batch_size": 256, "lr": 1e-2, "penalty": 2.56},
+        "cgb_sharp": {
+            "n_epochs": 25,
+            "n_layers": 3,
+            "hidden_dim": 64,
+            "batch_size": 256,
+            "lr": 1e-2,
+            "penalty": 2.56,
+            "eps": 1e-4,
+        },
+        "emdn": {
+            "n_epochs": 25,
+            "n_layers": 2,
+            "n_gaussians": 3,
+            "hidden_dim": 32,
+            "batch_size": 256,
+        },
+        "spiked_emdn": {
+            "n_epochs": 25,
+            "n_layers": 2,
+            "n_gaussians": 3,
+            "hidden_dim": 32,
+            "batch_size": 256,
+            "penalty": 3.14,
+        },
+    }
+    for p in all_prior:
+        if p not in kwargs:
+            kwargs[p] = {}
 
-    # Check noise params
-    assert model.noise.type == NoiseType.ROW_WISE
+    for prior_L, prior_F in itertools.product(all_prior, repeat=2):
+        L_kwargs = kwargs[prior_L]
+        F_kwargs = kwargs[prior_F]
 
-    # Check covariate params
-    assert torch.equal(model.covariate.X_l, X_l)
-    assert torch.equal(model.covariate.X_f, X_f)
-    assert model.covariate.self_row_cov is True
-    assert model.covariate.self_col_cov is True
+        model = cEBMF(
+            data=Y,
+            K=5,
+            prior_L=prior_L,
+            prior_F=prior_F,
+            allow_backfitting=False,
+            prune_thresh=0.1,
+            noise_type=NoiseType.ROW_WISE,
+            X_l=X_l,
+            X_f=X_f,
+            prior_L_kwargs=L_kwargs,
+            prior_F_kwargs=F_kwargs,
+            self_row_cov=True,
+            self_col_cov=True,
+        )
+        model.initialise_factors()
+
+        # Check model params
+        assert model.model.K == 5
+        assert model.model.prior_L == prior_L
+        assert model.model.prior_F == prior_F
+        assert model.model.allow_backfitting is False
+        assert model.model.prune_thresh == 0.1
+
+        # Check noise params
+        assert model.noise.type == NoiseType.ROW_WISE
+
+        # Check covariate params
+        assert torch.equal(model.covariate.X_l, X_l)
+        assert torch.equal(model.covariate.X_f, X_f)
+        assert model.covariate.self_row_cov is True
+        assert model.covariate.self_col_cov is True
+
+        # Check prior kwargs
+        for key, value in L_kwargs.items():
+            assert model.prior_L_fn.kwargs[key] == value
+        for key, value in F_kwargs.items():
+            assert model.prior_F_fn.kwargs[key] == value
 
 
 def test_defaults():
@@ -86,7 +147,7 @@ def test_device_handling():
 
     # Test default device
     model1 = cEBMF(data=Y, K=3)
-    assert model1.device.type in ["cpu", "cuda"]
+    assert model1.device.type in ["cpu", "cuda", "mps"]
 
     # Test explicit device
     device = torch.device("cpu")

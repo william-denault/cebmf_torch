@@ -39,9 +39,32 @@ uv sync
 uv run pytest
 ```
 
+### Docker (GPU Support)
+
+For GPU development and deployment:
+
+```bash
+# Build the Docker image
+docker build -t cebmf_torch:gpu-minimal .
+
+# Run with GPU support (requires NVIDIA Container Toolkit)
+docker run --gpus all -it cebmf_torch:gpu-minimal
+
+# For development with code mounting
+docker run --gpus all -it -v $(pwd)/src:/app/src -v $(pwd)/tests:/app/tests cebmf_torch:gpu-minimal /bin/bash
+```
+
+The Docker image includes:
+
+- CUDA 13.0.1 runtime for GPU acceleration
+- Python 3.12 with all dependencies
+- Development tools (pytest, etc.)
+
+
 ## Quick Start
 
 Here's how to get started with the main functions:
+
 
 ```python
 import torch
