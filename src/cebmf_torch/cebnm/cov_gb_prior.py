@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, Dataset
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
 from cebmf_torch.utils.standard_scaler import standard_scale
 
+
 # -------------------------
 # Dataset
 # -------------------------

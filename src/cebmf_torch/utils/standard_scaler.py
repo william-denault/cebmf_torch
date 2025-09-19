@@ -1,9 +1,10 @@
 import torch
 
+
 def standard_scale(X: torch.Tensor) -> torch.Tensor:
     """
     Standardize features by removing the mean and scaling to unit variance.
-    
+
     Parameters
     ----------
     X : torch.Tensor, shape (n_samples, n_features)
