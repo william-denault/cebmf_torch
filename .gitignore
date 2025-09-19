@@ -148,3 +148,4 @@ Thumbs.db
 *__pycache__*
 
 docs/source/notebooks
+tests/doc_examples_test.py

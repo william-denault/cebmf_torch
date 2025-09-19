@@ -38,7 +38,14 @@ The cEBMF interface is designed to be straightforward:
 
 .. code-block:: python
 
+    import torch
     from cebmf_torch import cEBMF
+
+    # Generate synthetic data
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    Y = torch.randn(500, 200, device=device)
+    row_covariates = torch.randn(500, 3, device=device)
+    col_covariates = torch.randn(200, 2, device=device)
     
     # Basic usage with defaults
     model = cEBMF(data=Y)  # Uses K=5, normal priors
@@ -91,7 +98,7 @@ Point-mass + Exponential Prior
     result = ebnm_point_exp(x, s)
     
     print(f"Posterior means: {result.post_mean}")
-    print(f"Null probability: {result.pi0_null}")
+    print(f"Null probability: {result.pi0}")
 
 Advanced Usage
 --------------
@@ -178,9 +185,10 @@ Memory-Efficient Processing
     
     # Large dataset processing with batching
     n = 100000
-    betahat = torch.randn(n, device='cuda')
-    se = torch.full((n,), 0.5, device='cuda')
-    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    betahat = torch.randn(n, device=device)
+    se = torch.full((n,), 0.5, device=device)
+
     # Use smaller batch size for memory efficiency
     result = ash(
         betahat, se, 
@@ -240,6 +248,14 @@ Common Issues
 4. **Device mismatches**: Ensure all tensors are on the same device
 
 .. code-block:: python
+
+    import torch
+    from cebmf_torch import cEBMF
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    Y = torch.randn(300, 200)
+    model = cEBMF(data=Y, K=5)
 
     # Debug device issues
     print(f"Data device: {Y.device}")
