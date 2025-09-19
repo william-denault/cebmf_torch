@@ -157,7 +157,6 @@ name = "cebmf-torch"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "numpy" },
     { name = "scikit-learn" },
     { name = "torch" },
     { name = "tqdm" },
@@ -166,6 +165,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "matplotlib" },
+    { name = "numpy" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -178,7 +178,6 @@ examples = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=2.0.2" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "torch", specifier = ">=2.0" },
     { name = "tqdm" },
@@ -187,6 +186,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "matplotlib", specifier = ">=3.9.4" },
+    { name = "numpy", specifier = ">=2.3.3" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "ruff", specifier = ">=0.13.0" },
