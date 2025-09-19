@@ -4,7 +4,6 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
@@ -12,6 +11,7 @@ from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torc
 # Import utils.py directly
 from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
 from cebmf_torch.utils.posterior import posterior_mean_norm
+from cebmf_torch.utils.standard_scaler import standard_scale
 
 
 # Define dataset class that includes observation noise
@@ -177,8 +177,7 @@ def cash_posterior_means(
         Container with posterior means, standard deviations, and model parameters.
     """
     # Standardize X
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = standard_scale(X)
     scale = autoselect_scales_mix_norm(betahat=betahat, sebetahat=sebetahat, max_class=num_classes)
     # Create dataset and dataloader
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
