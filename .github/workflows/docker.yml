@@ -47,4 +47,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/cebmf_torch:${{ github.sha }}
-            ${{ github.ref == 'refs/heads/main' && 'ghcr.io/${{ github.repository_owner }}/cebmf_torch:latest' || '' }}
+            ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}/cebmf_torch:latest', github.repository_owner) || '' }}
