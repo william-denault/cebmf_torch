@@ -9,16 +9,16 @@ from cebmf_torch.utils.standard_scaler import standard_scale
 
 
 # -------------------------
-# Dataset
+# Dataset (expects tensors already on correct device/dtype)
 # -------------------------
 class DensityRegressionDataset(Dataset):
-    def __init__(self, X, betahat, sebetahat):
-        self.X = torch.as_tensor(X, dtype=torch.float32)
-        self.betahat = torch.as_tensor(betahat, dtype=torch.float32)
-        self.sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32)
+    def __init__(self, X: torch.Tensor, betahat: torch.Tensor, sebetahat: torch.Tensor):
+        self.X = X
+        self.betahat = betahat
+        self.sebetahat = sebetahat
 
     def __len__(self):
-        return len(self.X)
+        return self.X.shape[0]
 
     def __getitem__(self, idx):
         return self.X[idx], self.betahat[idx], self.sebetahat[idx]
@@ -157,7 +157,7 @@ class EmdnPosteriorMeanNorm:
 
 
 # -------------------------
-# Main solver
+# Main solver (GPU-native)
 # -------------------------
 def emdn_posterior_means(
     X,
@@ -170,6 +170,7 @@ def emdn_posterior_means(
     batch_size=512,
     lr=1e-3,
     model_param=None,
+    device: torch.device | None = None,
 ):
     """
     Fit a Mixture Density Network (MDN) to estimate the prior distribution of effects.
@@ -200,78 +201,90 @@ def emdn_posterior_means(
         Learning rate for the optimizer (default=1e-3).
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
+    device : torch.device, optional
+        Target device for tensors/models. Defaults to CUDA if available, else CPU.
 
     Returns
     -------
     EmdnPosteriorMeanNorm
         Container with posterior means, standard deviations, and model parameters.
     """
+    # ---- device
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Standardize X
+    # ---- tensors on device
+    X = torch.as_tensor(X, dtype=torch.float32, device=device)
     if X.ndim == 1:
         X = X.reshape(-1, 1)
+    betahat = torch.as_tensor(betahat, dtype=torch.float32, device=device)
+    sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32, device=device)
+
+    # ---- standardize on device
     X_scaled = standard_scale(X)
 
-    # Dataset + DataLoader
+    # ---- dataset / loader (CUDA tensors => num_workers=0)
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-    # Init model
+    # ---- model / optimizer on device
     model = MDN(
         input_dim=X_scaled.shape[1],
         hidden_dim=hidden_dim,
         n_gaussians=n_gaussians,
         n_layers=n_layers,
-    )
+    ).to(device)
     if model_param is not None:
         model.load_state_dict(model_param)
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    # Training loop
+    # ---- training
+    running_loss = 0.0
     for epoch in range(n_epochs):
         model.train()
-        running_loss = 0.0
+        epoch_loss = 0.0
         for inputs, targets, noise_std in dataloader:
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             pi, mu, log_sigma = model(inputs)
             loss = mdn_loss_with_varying_noise(pi, mu, log_sigma, targets, noise_std)
             loss.backward()
             optimizer.step()
-            running_loss += loss.item()
+            epoch_loss += loss.item()
+        running_loss = epoch_loss
         if (epoch + 1) % 10 == 0:
-            print(f"[EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {running_loss / len(dataloader):.4f}")
+            print(f"[EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {epoch_loss / max(1, len(dataloader)):.4f}")
 
-    # Prediction for all data
+    # ---- prediction for all data (no grad)
     model.eval()
-    full_loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
+    full_loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False, num_workers=0)
     with torch.no_grad():
         for X_batch, _, _ in full_loader:
             pi, mu, log_sigma = model(X_batch)
+        sigma = torch.exp(log_sigma)  # (N, K)
 
-    # Posterior means per observation
-    J = len(betahat)
-    post_mean = torch.empty(J, dtype=torch.float32)
-    post_mean2 = torch.empty(J, dtype=torch.float32)
-    post_sd = torch.empty(J, dtype=torch.float32)
+        # Posterior means per observation
+        J = betahat.shape[0]
+        post_mean = torch.empty(J, dtype=torch.float32, device=device)
+        post_mean2 = torch.empty(J, dtype=torch.float32, device=device)
+        post_sd = torch.empty(J, dtype=torch.float32, device=device)
 
-    for i in range(len(betahat)):
-        data_loglik = get_data_loglik_normal_torch(
-            betahat=betahat[i : (i + 1)],
-            sebetahat=sebetahat[i : (i + 1)],
-            location=mu[i, :],
-            scale=torch.exp(log_sigma)[i, :],
-        )
-        result = posterior_mean_norm(
-            betahat=betahat[i : (i + 1)],
-            sebetahat=sebetahat[i : (i + 1)],
-            log_pi=torch.log(pi[i, :]),
-            data_loglik=data_loglik,
-            location=mu[i, :],
-            scale=torch.exp(log_sigma)[i, :],
-        )
-        post_mean[i] = result.post_mean
-        post_mean2[i] = result.post_mean2
-        post_sd[i] = result.post_sd
+        for i in range(J):
+            data_loglik = get_data_loglik_normal_torch(
+                betahat=betahat[i : i + 1],
+                sebetahat=sebetahat[i : i + 1],
+                location=mu[i, :],
+                scale=sigma[i, :],
+            )
+            result = posterior_mean_norm(
+                betahat=betahat[i : i + 1],
+                sebetahat=sebetahat[i : i + 1],
+                log_pi=torch.log(pi[i, :].clamp_min(1e-300)),
+                data_loglik=data_loglik,
+                location=mu[i, :],
+                scale=sigma[i, :],
+            )
+            post_mean[i] = result.post_mean
+            post_mean2[i] = result.post_mean2
+            post_sd[i] = result.post_sd
 
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
@@ -279,7 +292,7 @@ def emdn_posterior_means(
         post_sd=post_sd,
         location=mu,
         pi_np=pi,
-        scale=torch.exp(log_sigma),
+        scale=sigma,
         loss=running_loss,
         model_param=model.state_dict(),
     )
