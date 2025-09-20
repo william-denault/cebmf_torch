@@ -4,8 +4,18 @@ import torch
 
 from .maths import _LOG_SQRT_2PI
 
-# ===== numerically-stable primitives =====
 
+def _const_like(c, ref: torch.Tensor) -> torch.Tensor:
+    """
+    Ensure a scalar/0-d tensor constant `c` matches the dtype/device of `ref`.
+    """
+    if isinstance(c, torch.Tensor):
+        return c.to(device=ref.device, dtype=ref.dtype)
+    # assume Python scalar
+    return torch.tensor(c, device=ref.device, dtype=ref.dtype)
+
+
+# ===== numerically-stable primitives =====
 
 def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     """
@@ -26,7 +36,9 @@ def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> t
         Log-density evaluated at x.
     """
     z = (x - loc) / scale
-    return -0.5 * z.pow(2) - torch.log(scale) - _LOG_SQRT_2PI
+    # make sure constant is on the right device/dtype
+    log_sqrt_2pi = _const_like(_LOG_SQRT_2PI, scale)
+    return -0.5 * z.pow(2) - torch.log(scale) - log_sqrt_2pi
 
 
 def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
@@ -47,7 +59,6 @@ def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
 
 
 # ===== convolved log-pdfs =====
-
 
 @torch.no_grad()
 def convolved_logpdf_normal_torch(
@@ -78,18 +89,18 @@ def convolved_logpdf_normal_torch(
     torch.Tensor
         Log-likelihood matrix of shape (J, K).
     """
-    betahat = torch.as_tensor(betahat)
-    sebetahat = torch.as_tensor(sebetahat)
-    scale = torch.as_tensor(scale)
-    location = torch.as_tensor(location)
+    betahat   = torch.as_tensor(betahat)
+    sebetahat = torch.as_tensor(sebetahat, dtype=betahat.dtype, device=betahat.device)
+    scale     = torch.as_tensor(scale,     dtype=betahat.dtype, device=betahat.device)
+    location  = torch.as_tensor(location,  dtype=betahat.dtype, device=betahat.device)
 
     J = betahat.shape[0]
     K = scale.shape[0]
 
     # Broadcast sd_jk = sqrt(se_j^2 + scale_k^2)
     se2 = sebetahat.pow(2).unsqueeze(1)  # (J,1)
-    sc2 = scale.pow(2).unsqueeze(0)  # (1,K)
-    sd = torch.sqrt(se2 + sc2)  # (J,K)
+    sc2 = scale.pow(2).unsqueeze(0)      # (1,K)
+    sd  = torch.sqrt(se2 + sc2)          # (J,K)
 
     if location.ndim == 1:
         loc = location.unsqueeze(0).expand(J, K)  # (J,K)
@@ -134,9 +145,9 @@ def convolved_logpdf_exp_torch(
             L[:,0] = N(betahat | 0, se^2)
             L[:,1:] use the analytic Exp⊗Normal convolution.
     """
-    betahat = torch.as_tensor(betahat)
-    sebetahat = torch.as_tensor(sebetahat)
-    scale = torch.as_tensor(scale)
+    betahat   = torch.as_tensor(betahat)
+    sebetahat = torch.as_tensor(sebetahat, dtype=betahat.dtype, device=betahat.device)
+    scale     = torch.as_tensor(scale,     dtype=betahat.dtype, device=betahat.device)
 
     J = betahat.shape[0]
     K = scale.shape[0]
@@ -147,22 +158,21 @@ def convolved_logpdf_exp_torch(
     out0 = _logpdf_normal(betahat, torch.zeros_like(betahat), sebetahat)  # (J,)
 
     # k>=1: rates and broadcasted formula
-    rate = 1.0 / scale[1:]  # (K-1,)
-    s = sebetahat.unsqueeze(1)  # (J,1)
-    x = betahat.unsqueeze(1)  # (J,1)
-    a = rate.unsqueeze(0)  # (1,K-1)
+    rate = 1.0 / scale[1:]         # (K-1,)
+    s    = sebetahat.unsqueeze(1)  # (J,1)
+    x    = betahat.unsqueeze(1)    # (J,1)
+    a    = rate.unsqueeze(0)       # (1,K-1)
 
     lg = torch.log(a) + 0.5 * (s * a).pow(2) - a * x + _logcdf_normal(x / s - s * a)  # (J,K-1)
 
     # Concatenate first column
-    L = torch.empty((J, K), dtype=torch.get_default_dtype(), device=betahat.device)
-    L[:, 0] = out0
+    L = torch.empty((J, K), dtype=betahat.dtype, device=betahat.device)
+    L[:, 0]  = out0
     L[:, 1:] = lg
     return L
 
 
 # ===== batched wrappers (API parity) =====
-
 
 @torch.no_grad()
 def get_data_loglik_normal_torch(
