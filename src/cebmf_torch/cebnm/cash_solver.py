@@ -1,41 +1,28 @@
-# Define dataset class that includes observation noise
-
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
-
-# Import utils.py directly
 from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
 from cebmf_torch.utils.posterior import posterior_mean_norm
 from cebmf_torch.utils.standard_scaler import standard_scale
 
 
-# Define dataset class that includes observation noise
+# ---- Dataset: assumes tensors already on correct device/dtype
 class DensityRegressionDataset(Dataset):
-    def __init__(self, X, betahat, sebetahat):
-        self.X = torch.as_tensor(X, dtype=torch.float32)
-        self.betahat = torch.as_tensor(betahat, dtype=torch.float32)
-        self.sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32)
+    def __init__(self, X: torch.Tensor, betahat: torch.Tensor, sebetahat: torch.Tensor):
+        self.X = X
+        self.betahat = betahat
+        self.sebetahat = sebetahat
 
     def __len__(self):
-        return len(self.X)
+        return self.X.shape[0]
 
     def __getitem__(self, idx):
-        return (
-            self.X[idx],
-            self.betahat[idx],
-            self.sebetahat[idx],
-        )  # Return the noise_std (sebetahat) as well
+        return self.X[idx], self.betahat[idx], self.sebetahat[idx]
 
 
-# Define the MeanNet model
-
-
-# Define the CashNet model
 class CashNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes, n_layers):
         """
@@ -76,18 +63,17 @@ class CashNet(nn.Module):
         x = self.relu(self.input_layer(x))
         for layer in self.hidden_layers:
             x = self.relu(layer(x))
-        x = self.softmax(self.output_layer(x))
-        return x
-
+        return self.softmax(self.output_layer(x))
 
 # Custom loss function
 def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
-    L_batch = torch.exp(marginal_log_lik)
-    inner_sum = torch.sum(pred_pi * L_batch, dim=1)
+    L_batch = torch.exp(marginal_log_lik)                 # (B, K)
+    inner_sum = torch.sum(pred_pi * L_batch, dim=1)       # (B,)
     inner_sum = torch.clamp(inner_sum, min=epsilon)
-    first_sum = torch.sum(torch.log(inner_sum))
+    first_sum = torch.sum(torch.log(inner_sum))           # scalar
 
     if penalty > 1:
+        # penalize the (assumed) spike component's total mass in the batch
         pi_clamped = torch.clamp(torch.sum(pred_pi[:, 0]), min=epsilon)
         penalized_log_likelihood_value = first_sum + (penalty - 1) * torch.log(pi_clamped)
     else:
@@ -96,7 +82,6 @@ def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
     return -penalized_log_likelihood_value
 
 
-# Class to store the results
 class cash_PosteriorMeanNorm:
     def __init__(self, post_mean, post_mean2, post_sd, pi_np, scale, loss=0, model_param=None):
         """
@@ -118,7 +103,7 @@ class cash_PosteriorMeanNorm:
             Final training loss or log-likelihood.
         model_param : dict, optional
             Trained model parameters (state_dict).
-        """
+        """        
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -127,8 +112,11 @@ class cash_PosteriorMeanNorm:
         self.scale = scale
         self.model_param = model_param
 
+# Class to store the results
+ 
 
-# Main function to train the model and compute posterior means, mean^2, and standard deviations
+
+
 def cash_posterior_means(
     X,
     betahat,
@@ -141,8 +129,11 @@ def cash_posterior_means(
     lr=0.001,
     model_param=None,
     penalty=1.5,
+    device: torch.device | None = None,
 ):
     """
+    GPU-native CASH training and posterior computation.
+     
     Fit a CASH (Covariate Adaptive Shrinkage) model and compute posterior means,
     second moments, and standard deviations.
 
@@ -176,74 +167,95 @@ def cash_posterior_means(
     cash_PosteriorMeanNorm
         Container with posterior means, standard deviations, and model parameters.
     """
-    # Standardize X
-    X_scaled = standard_scale(X)
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # ---- to tensors on device
+    X = torch.as_tensor(X, dtype=torch.float32, device=device)
+    if X.ndim == 1:
+        X = X.reshape(-1, 1)
+    betahat = torch.as_tensor(betahat, dtype=torch.float32, device=device)
+    sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32, device=device)
+
+    # ---- standardize on device
+    X_scaled = standard_scale(X)  # your function returns just scaled tensor
+
+    # ---- mixture scales (ensure tensor on device)
     scale = autoselect_scales_mix_norm(betahat=betahat, sebetahat=sebetahat, max_class=num_classes)
-    # Create dataset and dataloader
+    if not isinstance(scale, torch.Tensor):
+        scale = torch.as_tensor(scale, dtype=torch.float32, device=device)
+    else:
+        scale = scale.to(device=device, dtype=torch.float32)
+
+    # ---- dataset / loader (CUDA tensors => num_workers must be 0)
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+
+    # ---- model / optimizer on device
     input_dim = X_scaled.shape[1]
-    model_cash = CashNet(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        num_classes=num_classes,
-        n_layers=n_layers,
-    )
+    model_cash = CashNet(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes, n_layers=n_layers).to(device)
+    if model_param is not None:
+        model_cash.load_state_dict(model_param)
     optimizer_cash = optim.Adam(model_cash.parameters(), lr=lr)
 
-    # Training loop
+    # ---- training
+    total_cash_loss = 0.0
     for epoch in range(n_epochs):
-        total_cash_loss = 0
-
+        epoch_loss = 0.0
         for inputs, targets, noise_std in dataloader:
+            # Compute (log)likelihood for this batch and current global scales
             batch_loglik = get_data_loglik_normal_torch(
                 betahat=targets, sebetahat=noise_std, location=0 * scale, scale=scale
             )
             optimizer_cash.zero_grad()
             outputs = model_cash(inputs)
-
             cash_loss = pen_loglik_loss(pred_pi=outputs, marginal_log_lik=batch_loglik, penalty=penalty)
             cash_loss.backward()
             optimizer_cash.step()
-            total_cash_loss += cash_loss.item()
+            epoch_loss += cash_loss.item()
 
+        total_cash_loss = epoch_loss
         if (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch + 1}/{n_epochs},   Variance Loss: {total_cash_loss / len(dataloader):.4f}")
+            print(f"[CASH] Epoch {epoch + 1}/{n_epochs} | Loss: {epoch_loss / max(1, len(dataloader)):.4f}")
 
+    # ---- full-batch inference (no grad)
     model_cash.eval()
+    with torch.no_grad():
+        train_loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False, num_workers=0)
+        for X_batch, _, _ in train_loader:
+            all_pi_values = model_cash(X_batch)  # (N, K)
+        data_loglik = get_data_loglik_normal_torch(
+            betahat=betahat, sebetahat=sebetahat, location=0 * scale, scale=scale
+        )  # (N, K)
 
-    train_loader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
-    for X_batch, _, _ in train_loader:
-        all_pi_values = model_cash(X_batch)
+        # Allocate outputs on device
+        J = betahat.shape[0]
+        post_mean = torch.empty(J, dtype=torch.float32, device=device)
+        post_mean2 = torch.empty(J, dtype=torch.float32, device=device)
+        post_sd = torch.empty(J, dtype=torch.float32, device=device)
 
-    # Initialize arrays to store the results
-    J = len(betahat)
-    post_mean = torch.empty(J, dtype=torch.float32)
-    post_mean2 = torch.empty(J, dtype=torch.float32)
-    post_sd = torch.empty(J, dtype=torch.float32)
-    data_loglik = get_data_loglik_normal_torch(betahat=betahat, sebetahat=sebetahat, location=0 * scale, scale=scale)
-    # Estimate posterior means for each observation
-
-    for i in range(len(betahat)):
-        log_pi_i = torch.log(torch.clamp(all_pi_values[i, :], min=1e-300))
-        result = posterior_mean_norm(
-            betahat=betahat[i : (i + 1)],
-            sebetahat=sebetahat[i : (i + 1)],
-            log_pi=log_pi_i,
-            data_loglik=data_loglik[i, :],
-            location=[0],
-            scale=scale,  # Assuming this is available from earlier in your code
-        )
-        post_mean[i] = result.post_mean  # <-- take scalar
-        post_mean2[i] = result.post_mean2
-        post_sd[i] = result.post_sd
+        # Per-observation posterior (kept as-is; can be vectorized later)
+        eps = 1e-300
+        for i in range(J):
+            log_pi_i = torch.log(torch.clamp(all_pi_values[i, :], min=eps))
+            res_i = posterior_mean_norm(
+                betahat=betahat[i : i + 1],
+                sebetahat=sebetahat[i : i + 1],
+                log_pi=log_pi_i,
+                data_loglik=data_loglik[i, :],
+                location=[0],    # your routine expects this form
+                scale=scale,
+            )
+            post_mean[i] = res_i.post_mean
+            post_mean2[i] = res_i.post_mean2
+            post_sd[i] = res_i.post_sd
 
     return cash_PosteriorMeanNorm(
-        post_mean,
-        post_mean2,
-        post_sd,
-        pi_np=all_pi_values,
+        post_mean=post_mean,
+        post_mean2=post_mean2,
+        post_sd=post_sd,
+        pi_np=all_pi_values,      # (N, K) on device
         loss=total_cash_loss,
-        scale=scale,
-        model_param=model_param,
-    )
+        scale=scale,              # (K,) on device
+        model_param=model_cash.state_dict(),
+    ) 
+ 
