@@ -49,7 +49,8 @@ def _optimize_mixture_weights(L: torch.Tensor, config: AshConfig) -> torch.Tenso
         shuffle=config.shuffle,
         seed=config.seed,
     )
-    return torch.log(torch.clamp(pi0, min=1e-32))
+    eps = torch.tensor(1e-32, device=L.device, dtype=L.dtype)
+    return torch.log(torch.clamp(pi0, min=eps.item()))
 
 
 def _ash_normal(
@@ -119,11 +120,13 @@ class ASHResult:
         """Factory method to create ASHResult from data."""
         scale, log_pi0, L, pm_obj = ash_optimisers[prior](x, s, config)
         pi0 = torch.exp(log_pi0)
-        Lc = torch.maximum(
-            L,
-            torch.tensor(config.threshold_loglikelihood, dtype=L.dtype, device=L.device),
-        )
-        log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
+
+        # clamp threshold as device/dtype-aware tensor
+        threshold = torch.tensor(config.threshold_loglikelihood, dtype=L.dtype, device=L.device)
+        Lc = torch.maximum(L, threshold)
+
+        eps = torch.tensor(1e-300, dtype=L.dtype, device=L.device)
+        log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=eps.item())).unsqueeze(0), dim=1)
         log_lik = float(log_lik_rows.sum().item())
         return cls(
             post_mean=pm_obj.post_mean,
@@ -189,12 +192,12 @@ def ash(
     ASHResult
         Result object containing posterior summaries and model parameters.
     """
-
-    # choose optimizer mode (EM by default here)
     if prior not in ash_optimisers:
         raise ValueError("prior must be either 'norm' or 'exp'.")
 
-    s.clamp_(min=1e-12)
+    # keep on-device and numerically safe
+    s = torch.as_tensor(s, dtype=x.dtype, device=x.device).clamp_(min=1e-12)
+
     config = AshConfig(
         mult=mult,
         penalty=penalty,
@@ -205,4 +208,4 @@ def ash(
         shuffle=shuffle,
         seed=seed,
     )
-    return ASHResult.from_data(x, s, prior, config)
+    return ASHResult.from_data(torch.as_tensor(x, dtype=x.dtype, device=x.device), s, prior, config)

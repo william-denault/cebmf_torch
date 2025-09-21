@@ -19,3 +19,5 @@ def standard_scale(X: torch.Tensor) -> torch.Tensor:
     std = X.std(dim=0, unbiased=False, keepdim=True)  # population std like sklearn
     std = torch.where(std == 0, torch.ones_like(std), std)  # avoid division by zero
     return (X - mean) / std
+
+ 

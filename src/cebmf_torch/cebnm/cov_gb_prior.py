@@ -16,9 +16,9 @@ from cebmf_torch.utils.standard_scaler import standard_scale
 # -------------------------
 class DensityRegressionDataset(Dataset):
     def __init__(self, X, betahat, sebetahat):
-        self.X = torch.as_tensor(X, dtype=torch.float32)
-        self.betahat = torch.as_tensor(betahat, dtype=torch.float32)
-        self.sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32)
+        self.X = X
+        self.betahat = betahat
+        self.sebetahat = sebetahat
 
     def __len__(self):
         return len(self.X)
@@ -28,6 +28,10 @@ class DensityRegressionDataset(Dataset):
 
 
 # -------------------------
+
+
+
+
 # MDN Model: π₂(x) + global μ₂
 # -------------------------
 class CgbNet(nn.Module):
@@ -175,6 +179,7 @@ def cgb_posterior_means(
     lr=1e-3,
     penalty: float = 1.5,
     model_param=None,
+    device: torch.device | None = None,
 ):
     """
     Fit a Covariate Generalized-Binary (CGB) model to estimate the prior distribution of effects.
@@ -207,36 +212,41 @@ def cgb_posterior_means(
     CgbPosteriorResult
         Container with posterior means, standard deviations, and model parameters.
     """
-    # Standardize X
+
+
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # ---- to tensor on device
+    X = torch.as_tensor(X, dtype=torch.float32, device=device)
+    betahat = torch.as_tensor(betahat, dtype=torch.float32, device=device)
+    sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32, device=device)
+
     if X.ndim == 1:
         X = X.reshape(-1, 1)
-    X_scaled = standard_scale(X)
 
+    # ---- scale on device
+    X_scaled  = standard_scale(X)  # stays on device
+
+    # ---- dataset / loader (GPU tensors, keep num_workers=0)
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-    # Init model
-    model = CgbNet(input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers)
+    # ---- model / optimizer on device
+    model = CgbNet(input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers).to(device)
     if model_param is not None:
         model.load_state_dict(model_param)
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    sigma2_sq = torch.tensor(1.0, dtype=torch.float32)  # slab variance
+    sigma2_sq = torch.tensor(1.0, dtype=torch.float32, device=device)
 
-    # Training
+    # ---- training
     for epoch in range(n_epochs):
         total_loss = 0.0
-        for xb, xhat, se in dataloader:
+        for xb, xhat, se in dataloader:  # already device tensors
             pi1, pi2, mu2 = model(xb)
-
-            # E-step
             gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
-
-            # M-step
             with torch.no_grad():
                 sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se)
-
-            # Loss + update
             loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
             optimizer.zero_grad()
             loss.backward()
@@ -244,19 +254,18 @@ def cgb_posterior_means(
             total_loss += loss.item()
 
         if (epoch + 1) % 10 == 0:
-            print(
-                f"[CGB] Epoch {epoch + 1}/{n_epochs}, Loss={total_loss / len(dataloader):.4f}, "
-                f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}"
-            )
+            print(f"[CGB] Epoch {epoch + 1}/{n_epochs}, "
+                  f"Loss={total_loss / len(dataloader):.4f}, "
+                  f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}")
 
-    # Posterior inference
+    # ---- posterior inference
     model.eval()
     with torch.no_grad():
         pi1, pi2, mu2 = model(dataset.X)
         post_mean, post_var = posterior_point_mass_normal(
             betahat=dataset.betahat,
             sebetahat=dataset.sebetahat,
-            pi=pi1,  # spike prob
+            pi=pi1,
             mu0=0.0,
             mu1=mu2.item(),
             sigma_0=sigma2_sq.sqrt().item(),
@@ -274,3 +283,7 @@ def cgb_posterior_means(
         loss=total_loss,
         model_param=model.state_dict(),
     )
+
+
+
+    
