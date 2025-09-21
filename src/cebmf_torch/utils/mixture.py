@@ -46,8 +46,7 @@ def optimize_pi_logL(
     n, K = logL.shape
     device = logL.device
     dtype = logL.dtype
-    if logL.device.type == "cpu" and torch.cuda.is_available():
-        logL = logL.cuda()
+
     # Initialize pi ∝ exp(-k)
     k = torch.arange(K, device=device, dtype=dtype)
     pi = torch.exp(-k)
@@ -61,7 +60,7 @@ def optimize_pi_logL(
         vec_pen = torch.ones(K, device=device, dtype=dtype)
         vec_pen[0] = penalty
 
-    eps = 1e-12
+    eps = torch.tensor(1e-12, device=device, dtype=dtype)
 
     # batching helper
     if batch_size is None or batch_size >= n:
@@ -79,27 +78,27 @@ def optimize_pi_logL(
         n_k = torch.zeros(K, device=device, dtype=dtype)
 
         if shuffle and batch_size < n:
-            perm = torch.randperm(n, generator=g, device=device)
-            idx_all = perm
+            idx_all = torch.randperm(n, generator=g, device=device)
         else:
             idx_all = indices
+
+        # compute log_pi once per EM iteration (constant across batches)
+        log_pi = torch.log(pi + eps)  # (K,)
 
         for start in range(0, n, batch_size):
             idx = idx_all[start : start + batch_size]
             Lb = logL[idx]  # (B, K)
 
             # E-step: responsibilities r_{jk} ∝ pi_k * exp(logL_{jk})
-            log_pi = torch.log(pi + eps)  # (K,)
-            log_r = Lb + log_pi.unsqueeze(0)  # (B, K)
+            log_r = Lb + log_pi.unsqueeze(0)                 # (B, K)
             log_norm = torch.logsumexp(log_r, dim=1, keepdim=True)  # (B,1)
-            r = torch.exp(log_r - log_norm)  # (B, K)
+            r = torch.exp(log_r - log_norm)                  # (B, K)
 
             # accumulate expected counts
             n_k += r.sum(dim=0)  # (K,)
 
         # M-step with Dirichlet prior α (as pseudo-counts)
-        n_k = n_k + (vec_pen - 1.0)
-        n_k = torch.clamp(n_k, min=eps)
+        n_k = torch.clamp(n_k + (vec_pen - 1.0), min=eps.item())
         pi = n_k / n_k.sum()
 
         # convergence check
@@ -111,7 +110,13 @@ def optimize_pi_logL(
     return pi
 
 
-def _calculate_scales(sigmaamax: float, sigmaamin: float, mult: float, device: torch.device) -> torch.Tensor:
+def _calculate_scales(
+    sigmaamax: float,
+    sigmaamin: float,
+    mult: float,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> torch.Tensor:
     """
     Calculate a sequence of scales for mixture components.
 
@@ -135,8 +140,8 @@ def _calculate_scales(sigmaamax: float, sigmaamin: float, mult: float, device: t
     seq = torch.arange(-npoint, 1, device=device, dtype=torch.int64)
     return torch.cat(
         [
-            torch.tensor([0.0], device=device),
-            (1.0 / mult) ** (-seq.float()) * sigmaamax,
+            torch.tensor([0.0], device=device, dtype=dtype),
+            (1.0 / mult) ** (-seq.to(dtype=torch.float64)).to(dtype) * torch.tensor(sigmaamax, device=device, dtype=dtype),
         ]
     )
 
@@ -162,6 +167,8 @@ def autoselect_scales_mix_norm(betahat: torch.Tensor, sebetahat: torch.Tensor, m
         1D tensor of selected scales.
     """
     device = betahat.device
+    dtype = betahat.dtype
+
     sigmaamin = torch.min(sebetahat) / 10.0
     if torch.all(betahat**2 < sebetahat**2):
         sigmaamax = 8.0 * sigmaamin
@@ -169,12 +176,13 @@ def autoselect_scales_mix_norm(betahat: torch.Tensor, sebetahat: torch.Tensor, m
         sigmaamax = 2.0 * torch.sqrt(torch.max(betahat**2 - sebetahat**2))
 
     if mult == 0:
-        return torch.tensor([0.0, sigmaamax / 2.0], device=device)
+        return torch.stack([torch.tensor(0.0, device=device, dtype=dtype),
+                            (sigmaamax / 2.0).to(dtype)], dim=0)
 
-    scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device)
+    scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device, dtype)
     if max_class is not None:
         if scales.numel() != max_class:
-            scales = torch.linspace(torch.min(scales), torch.max(scales), steps=max_class, device=device)
+            scales = torch.linspace(scales.min(), scales.max(), steps=max_class, device=device, dtype=dtype)
     return scales
 
 
@@ -207,19 +215,22 @@ def autoselect_scales_mix_exp(
         1D tensor of selected scales.
     """
     device = betahat.device
-    sigmaamin = torch.maximum(torch.min(sebetahat) / 10.0, torch.tensor(1e-3, device=device))
+    dtype = betahat.dtype
+
+    sigmaamin = torch.maximum(torch.min(sebetahat) / 10.0, torch.tensor(1e-3, device=device, dtype=dtype))
     if torch.all(betahat**2 < sebetahat**2):
         sigmaamax = 8.0 * sigmaamin
     else:
         sigmaamax = tt * torch.sqrt(torch.max(betahat**2))
 
     if mult == 0:
-        return torch.tensor([0.0, sigmaamax / 2.0], device=device)
+        return torch.stack([torch.tensor(0.0, device=device, dtype=dtype),
+                            (sigmaamax / 2.0).to(dtype)], dim=0)
 
-    scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device)
+    scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device, dtype)
     if max_class is not None:
         if scales.numel() != max_class:
-            scales = torch.linspace(torch.min(scales), torch.max(scales), steps=max_class, device=device)
-            if scales.numel() >= 3 and scales[2] < 1e-2:
-                scales[2:] = scales[2:] + 1e-2
+            scales = torch.linspace(scales.min(), scales.max(), steps=max_class, device=device, dtype=dtype)
+            if scales.numel() >= 3 and scales[2] < torch.tensor(1e-2, device=device, dtype=dtype):
+                scales[2:] = scales[2:] + torch.tensor(1e-2, device=device, dtype=dtype)
     return scales

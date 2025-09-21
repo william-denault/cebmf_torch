@@ -6,20 +6,26 @@ from torch import Tensor
 
 from cebmf_torch.utils.maths import _LOG_SQRT_2PI, logPhi, my_e2truncnorm, my_etruncnorm
 
+
+def _const_like(x: Tensor, val) -> Tensor:
+    """Create a scalar tensor `val` on x's device/dtype."""
+    return torch.as_tensor(val, device=x.device, dtype=x.dtype)
+
+
 # =========================
 # Core pieces
 # =========================
 
-
 def _loglik_spike(xc: Tensor, s: Tensor) -> Tensor:
     # log N(xc | 0, s^2)
-    return -0.5 * (xc / s) ** 2 - torch.log(s) - _LOG_SQRT_2PI
+    c = _LOG_SQRT_2PI if isinstance(_LOG_SQRT_2PI, torch.Tensor) else _const_like(s, _LOG_SQRT_2PI)
+    return -_const_like(s, 0.5) * (xc / s) ** 2 - torch.log(s) - c
 
 
 def _loglik_exp_convolved(xc: Tensor, s: Tensor, a: Tensor) -> Tensor:
     # lg = log a + (s a)^2 / 2 - a * xc + log Φ(xc/s - s a), θ_c ≥ 0
     z = xc / s - s * a
-    return torch.log(a / 1.0) + 0.5 * (s * a) ** 2 - a * xc + logPhi(z)
+    return torch.log(a) + _const_like(xc, 0.5) * (s * a) ** 2 - a * xc + logPhi(z)
 
 
 def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Tensor, Tensor]:
@@ -47,16 +53,15 @@ def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Ten
     """
     m_tilt = xc - (s * s) * a
     zero = torch.zeros_like(xc)
-    inf = torch.full_like(xc, float("inf"))
-    EZ = my_etruncnorm(zero, inf, m_tilt, s)
-    EZ2 = my_e2truncnorm(zero, inf, m_tilt, s)
+    pinf = torch.full_like(xc, float("inf"))
+    EZ = my_etruncnorm(zero, pinf, m_tilt, s)
+    EZ2 = my_e2truncnorm(zero, pinf, m_tilt, s)
     return EZ, EZ2
 
 
 # =========================
 # Public EBNM interface
 # =========================
-
 
 class EBNMPointExp:
     def __init__(
@@ -154,25 +159,16 @@ def ebnm_point_exp(
         Container with posterior means, standard deviations, and model parameters.
     """
     device, dtype = x.device, x.dtype
-    x = x.to(dtype)
-    s = torch.clamp(s.to(dtype), min=1e-6)
+    x = torch.as_tensor(x, device=device, dtype=dtype)
+    s = torch.as_tensor(s, device=device, dtype=dtype).clamp_(min=_const_like(x, 1e-6))
 
     if par_init is None:
         # alpha ~ logit(pi0), log_a ~ log(a), mu
         par_init = (0.9, 1.0, 0.0)  # pi0≈0.71, a≈1.0, mu=0.0
 
-    alpha = torch.nn.Parameter(
-        torch.tensor(par_init[0], dtype=dtype, device=device),
-        requires_grad=not fix_par[0],
-    )
-    log_a = torch.nn.Parameter(
-        torch.tensor(par_init[1], dtype=dtype, device=device),
-        requires_grad=not fix_par[1],
-    )
-    mu = torch.nn.Parameter(
-        torch.tensor(par_init[2], dtype=dtype, device=device),
-        requires_grad=not fix_par[2],
-    )
+    alpha = torch.nn.Parameter(torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0])
+    log_a = torch.nn.Parameter(torch.as_tensor(par_init[1], dtype=dtype, device=device), requires_grad=not fix_par[1])
+    mu = torch.nn.Parameter(torch.as_tensor(par_init[2], dtype=dtype, device=device), requires_grad=not fix_par[2])
 
     params = [p for p in (alpha, log_a, mu) if p.requires_grad]
     opt = torch.optim.LBFGS(
@@ -187,6 +183,7 @@ def ebnm_point_exp(
     a_lo, a_hi = a_bounds
     log_a_lo = math.log(a_lo)
     log_a_hi = math.log(a_hi)
+    eps_t = _const_like(x, eps)
 
     def closure():
         opt.zero_grad(set_to_none=True)
@@ -205,12 +202,13 @@ def ebnm_point_exp(
         llik_i = torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg)
 
         # ridge on log a (like Laplace)
-        penalty = loga_l2 * (log_a**2)
+        penalty = _const_like(x, loga_l2) * (log_a**2)
 
         nll = -(llik_i.sum() - penalty)
 
         # guards
-        nll = torch.nan_to_num(nll, nan=1e30, posinf=1e30, neginf=1e30)
+        huge = _const_like(x, 1e30)
+        nll = torch.nan_to_num(nll, nan=huge, posinf=huge, neginf=huge)
         nll.backward()
         return nll
 
@@ -234,10 +232,10 @@ def ebnm_point_exp(
 
     # ===== Final posterior & summaries =====
     with torch.no_grad():
-        pi0 = torch.sigmoid(alpha).clamp(eps, 1 - eps)
+        pi0 = torch.sigmoid(alpha).clamp(eps_t, 1 - eps_t)
         log_a_eff = log_a.clamp(min=log_a_lo, max=log_a_hi)
         a = log_a_eff.exp()
-        mu_v = float(mu)
+        mu_v = float(mu.item())
 
         xc = x - mu
 
@@ -245,10 +243,10 @@ def ebnm_point_exp(
         lf = _loglik_spike(xc, s)
         lg = _loglik_exp_convolved(xc, s, a)
 
-        # posterior inclusion prob for the Exp branch
+        # posterior inclusion prob for the Exp branch (correct log1p(-pi0))
         log_num = torch.log(pi0) + lg
         log_den = torch.logaddexp(torch.log1p(-pi0) + lf, log_num)
-        gamma = torch.exp(log_num - log_den).clamp(0, 1)
+        gamma = torch.exp(log_num - log_den).clamp(_const_like(x, 0.0), _const_like(x, 1.0))
 
         # moments under Exp branch
         EZ, EZ2 = _posterior_moments_exp_branch(xc, s, a)
@@ -262,28 +260,29 @@ def ebnm_point_exp(
 
         # back to θ
         post_mean = post_mean_c + mu
-        post_mean2 = post_mean2_c + 2.0 * mu * post_mean_c + mu * mu
-        post_sd = (post_mean2 - post_mean**2).clamp_min(0).sqrt()
+        post_mean2 = post_mean2_c + _const_like(x, 2.0) * mu * post_mean_c + mu * mu
+        post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
 
-        # mixture log-likelihood
+        # total log-likelihood (correct log1p(-pi0))
         log_lik = (
-            torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg).sum().item()
-            - (loga_l2 * (log_a_eff**2)).item()
-        )
+            torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0) + lg).sum()
+            - (_const_like(x, loga_l2) * (log_a_eff**2))
+        ).item()
 
         # Threshold to spike-only if pi0 tiny (match Laplace behavior)
-        if float(pi0) < tresh_pi0:
+        if float(pi0.item()) < tresh_pi0:
             post_mean = torch.zeros_like(x)
-            post_mean2 = torch.zeros_like(x) + 1e-4
-            post_sd = (post_mean2).sqrt()
+            tiny = _const_like(x, 1e-4)
+            post_mean2 = torch.zeros_like(x) + tiny
+            post_sd = post_mean2.sqrt()
             log_lik = (torch.log1p(-pi0) + lf).sum().item()
 
     return EBNMPointExp(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        scale=float(a),
-        pi0=float(pi0),
+        scale=float(a.item()),
+        pi0=float(pi0.item()),
         log_lik=float(log_lik),
         mode=mu_v,
     )
