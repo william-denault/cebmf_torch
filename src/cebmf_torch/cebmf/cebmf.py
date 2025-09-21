@@ -104,7 +104,13 @@ class cEBMF:
             K=K, prior_L=prior_L, prior_F=prior_F, allow_backfitting=allow_backfitting, prune_thresh=prune_thresh
         )
         self.noise = NoiseParams(type=noise_type)
-        self.covariate = CovariateParams(X_l=X_l, X_f=X_f, self_row_cov=self_row_cov, self_col_cov=self_col_cov)
+        # Move covariates to device (if provided) to avoid later CPU↔GPU hops
+        self.covariate = CovariateParams(
+            X_l=(X_l.to(self.device) if X_l is not None else None),
+            X_f=(X_f.to(self.device) if X_f is not None else None),
+            self_row_cov=self_row_cov,
+            self_col_cov=self_col_cov,
+        )
 
         if prior_L_kwargs is None:
             prior_L_kwargs = {}
@@ -233,11 +239,13 @@ class cEBMF:
         Lk = self.L[:, k]
         Fk = self.F[:, k]
 
+        # Remove k's contribution (R := Y0 - sum_{j != k} L_j F_j^T)
         self.R.addr_(Lk, Fk, alpha=1.0)
         self.R.mul_(mask_f)
 
         self._update_L_factor(k, tau_map, eps)
 
+        # Re-apply new L_k to restore full residual, then remove k again to update F
         Lk = self.L[:, k]  # updated
         self.R.addr_(Lk, Fk, alpha=-1.0)
         self.R.mul_(mask_f)
@@ -248,6 +256,7 @@ class cEBMF:
         self._update_F_factor(k, tau_map, eps)
 
         Fk = self.F[:, k]  # updated
+        # Final: restore full residual with updated L_k and F_k
         self.R.addr_(Lk, Fk, alpha=-1.0)
         self.R.mul_(mask_f)
 
@@ -290,7 +299,7 @@ class cEBMF:
         self.L[:, k] = resL.post_mean
         self.L2[:, k] = resL.post_mean2
         nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
-        self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device)
+        self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device, dtype=self.L.dtype)
         self.pi0_L[k] = resL.pi0_null
 
     @torch.no_grad()
@@ -332,7 +341,7 @@ class cEBMF:
         self.F[:, k] = resF.post_mean
         self.F2[:, k] = resF.post_mean2
         nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
-        self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device)
+        self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device, dtype=self.F.dtype)
         self.pi0_F[k] = resF.pi0_null
 
     @torch.no_grad()
@@ -351,16 +360,16 @@ class cEBMF:
     @torch.no_grad()
     def _compute_constant_loglik(self, ER2: Tensor) -> Tensor:
         m = self.mask.sum().clamp_min(1.0)
-        return -0.5 * (
-            m * (torch.log(torch.tensor(2 * torch.pi, device=self.device)) - torch.log(self.tau))
-            + self.tau * ER2.sum()
-        )
+        c2pi = ER2.new_tensor(math.log(2.0 * math.pi))
+        # tau is scalar-precision in this branch
+        return -0.5 * (m * (c2pi - torch.log(self.tau)) + self.tau * ER2.sum())
 
     @torch.no_grad()
     def _compute_elementwise_loglik(self, ER2: Tensor) -> Tensor:
         obs = self.mask.bool()
+        c2pi = ER2.new_tensor(math.log(2.0 * math.pi))
         return -0.5 * (
-            torch.log(torch.tensor(2 * torch.pi, device=self.device)) * obs.sum()
+            c2pi * obs.sum()
             - torch.log(self.tau_map[obs]).sum()
             + (self.tau_map * ER2)[obs].sum()
         )
@@ -437,16 +446,17 @@ class cEBMF:
 
         m = self.mask.sum(dim=dim).clamp_min(1.0)
         mean_R2 = R2.sum(dim=dim) / m
-        tau = 1.0 / (mean_R2)
+        tau = 1.0 / (mean_R2.clamp_min(NUMERICAL_EPS))
 
         if dim is None:
-            self.tau = tau  # scalar (back-compat)
+            # scalar precision; also provide a full tau_map for convenience
+            self.tau = tau
             self.tau_map = torch.full((self.N, self.P), tau.item(), device=self.device, dtype=R2.dtype)
             return
 
         view = (-1, 1) if dim == 1 else (1, -1)
         self.tau_map = tau.view(*view).expand(self.N, self.P)  # (N,P)
-        self.tau = self.tau_map  # if downstream expects elementwise
+        self.tau = self.tau_map  # downstream uses elementwise in structured noise
 
     @torch.no_grad()
     def _partial_residual_masked(self, k: int) -> Tensor:
@@ -495,6 +505,9 @@ class cEBMF:
         self, external_cov: Tensor | None, self_cov_enabled: bool, factors: Tensor, k: int, dim_size: int
     ) -> Tensor | None:
         """Build covariate matrix combining external and self-covariates."""
+        if external_cov is not None and external_cov.device != self.device:
+            external_cov = external_cov.to(self.device)
+
         if not self_cov_enabled:
             return external_cov
 
