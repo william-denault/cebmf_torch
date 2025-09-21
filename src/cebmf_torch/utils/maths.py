@@ -10,6 +10,11 @@ _LOG_2PI = math.log(_TWOPI)
 _LOG_SQRT_2PI = 0.5 * _LOG_2PI
 
 
+def _like(x: Tensor, val) -> Tensor:
+    """Create a scalar tensor `val` on x's device/dtype."""
+    return torch.as_tensor(val, device=x.device, dtype=x.dtype)
+
+
 def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
     """
     Compute the log-density of a normal distribution.
@@ -28,8 +33,9 @@ def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
     torch.Tensor
         Log-density evaluated at x.
     """
-    z = (x - loc) / (scale + 1e-32)
-    return -0.5 * torch.log(torch.tensor(_TWOPI, device=x.device)) - torch.log(scale + 1e-32) - 0.5 * z * z
+    eps = _like(scale, 1e-32)
+    z = (x - loc) / (scale + eps)
+    return -0.5 * _like(x, _LOG_2PI) - torch.log(scale + eps) - 0.5 * z * z
 
 
 def norm_cdf(x: Tensor) -> Tensor:
@@ -46,7 +52,7 @@ def norm_cdf(x: Tensor) -> Tensor:
     torch.Tensor
         CDF evaluated at x.
     """
-    return torch.distributions.Normal(0.0, 1.0).cdf(x)
+    return torch.distributions.Normal(_like(x, 0.0), _like(x, 1.0)).cdf(x)
 
 
 def norm_pdf(x: Tensor) -> Tensor:
@@ -63,7 +69,7 @@ def norm_pdf(x: Tensor) -> Tensor:
     torch.Tensor
         PDF evaluated at x.
     """
-    return torch.exp(-0.5 * x * x) / _SQRT_2PI
+    return torch.exp(-0.5 * x * x) / _like(x, _SQRT_2PI)
 
 
 def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
@@ -103,7 +109,7 @@ def safe_log(x: Tensor, eps: float = _EPS) -> Tensor:
     torch.Tensor
         Logarithm of clamped x.
     """
-    return torch.log(torch.clamp(x, min=eps))
+    return torch.log(torch.clamp(x, min=_like(x, eps)))
 
 
 def softmax(x: Tensor, dim: int = -1) -> Tensor:
@@ -142,7 +148,7 @@ def logphi(z: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         Log PDF evaluated at z.
     """
-    return -0.5 * z.pow(2) - _LOG_SQRT_2PI
+    return -0.5 * z.pow(2) - _like(z, _LOG_SQRT_2PI)
 
 
 def logPhi(z: torch.Tensor) -> torch.Tensor:
@@ -219,7 +225,9 @@ def do_truncnorm_argchecks(a: torch.Tensor, b: torch.Tensor):
     tuple of torch.Tensor
         (a, b) after checks.
     """
-    # If a >= b, invalid; we just return as-is
+    # Ensure a and b share device/dtype
+    a = torch.as_tensor(a)
+    b = torch.as_tensor(b, device=a.device, dtype=a.dtype)
     return a, b
 
 
@@ -252,14 +260,12 @@ def safe_tensor_to_float(
             return float(value.min().item())
         elif reduction == "max":
             return float(value.max().item())
-        # ... other reductions
     return float(value)
 
 
 # ------------------------
 # E[Z | a<Z<b]  and E[Z^2 | a<Z<b] for Z~N(mean, sd^2)
 # ------------------------
-
 
 def my_etruncnorm(a, b, mean=0.0, sd=1.0):
     """
@@ -282,11 +288,13 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
         Mean of the truncated normal distribution.
     """
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
-    mean = torch.as_tensor(mean, dtype=torch.float64)
-    sd = torch.as_tensor(sd, dtype=torch.float64)
+    device = a.device
+    # keep high precision but on the correct device
+    mean = torch.as_tensor(mean, dtype=torch.float64, device=device)
+    sd = torch.as_tensor(sd, dtype=torch.float64, device=device)
 
-    alpha = (a - mean) / sd
-    beta = (b - mean) / sd
+    alpha = (a.to(dtype=torch.float64, device=device) - mean) / sd
+    beta = (b.to(dtype=torch.float64, device=device) - mean) / sd
 
     flip = ((alpha > 0) & (beta > 0)) | (beta > alpha.abs())
     orig_alpha = alpha.clone()
@@ -311,8 +319,8 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
     res = mean + sd * scaled_res
 
     if (sd == 0).any():
-        a_rep = a.expand_as(res)
-        b_rep = b.expand_as(res)
+        a_rep = a.expand_as(res).to(res)
+        b_rep = b.expand_as(res).to(res)
         mean_rep = mean.expand_as(res)
         sd_zero = sd == 0
 
@@ -348,11 +356,12 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
         Second moment of the truncated normal distribution.
     """
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
-    mean = torch.as_tensor(mean, dtype=torch.float64)
-    sd = torch.as_tensor(sd, dtype=torch.float64)
+    device = a.device
+    mean = torch.as_tensor(mean, dtype=torch.float64, device=device)
+    sd = torch.as_tensor(sd, dtype=torch.float64, device=device)
 
-    alpha = (a - mean) / sd
-    beta = (b - mean) / sd
+    alpha = (a.to(dtype=torch.float64, device=device) - mean) / sd
+    beta = (b.to(dtype=torch.float64, device=device) - mean) / sd
 
     flip = (alpha > 0) & (beta > 0)
     orig_alpha = alpha.clone()
@@ -389,11 +398,12 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     bad_idx = (~torch.isnan(beta)) & (beta < 0) & ((scaled_res < beta**2) | (scaled_res > upper_bd))
     scaled_res = torch.where(bad_idx, upper_bd, scaled_res)
 
-    res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta) + sd**2 * scaled_res
+    # NOTE: my_etruncnorm expects (a,b,mean,sd). For standardized alpha/beta, use mean=0, sd=1
+    res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta, 0.0, 1.0) + sd**2 * scaled_res
 
     if (sd == 0).any():
-        a_rep = a.expand_as(res)
-        b_rep = b.expand_as(res)
+        a_rep = a.expand_as(res).to(res)
+        b_rep = b.expand_as(res).to(res)
         mean_rep = mean.expand_as(res)
         sd_zero = sd == 0
 
