@@ -49,8 +49,8 @@ class MDN(nn.Module):
         assert n_gaussians >= 2, "Need at least 1 spike + 1 slab."
         self.fc_in = nn.Linear(input_dim, hidden_dim)
         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
-        self.pi = nn.Linear(hidden_dim, n_gaussians)          # includes spike (k=0)
-        self.mu = nn.Linear(hidden_dim, n_gaussians - 1)      # slabs only
+        self.pi = nn.Linear(hidden_dim, n_gaussians)  # includes spike (k=0)
+        self.mu = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
         self.log_sigma = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
         self.point_mass = 0.0
 
@@ -76,7 +76,7 @@ class MDN(nn.Module):
         for layer in self.hidden_layers:
             x = torch.relu(layer(x))
         pi = torch.softmax(self.pi(x), dim=1)  # (N, K)
-        mu = self.mu(x)                        # (N, K-1)
+        mu = self.mu(x)  # (N, K-1)
         # keep slabs' std positive and stable
         log_sigma = torch.log(torch.nn.functional.softplus(self.log_sigma(x)) + 1e-6)  # (N, K-1)
         return pi, mu, log_sigma
@@ -136,8 +136,8 @@ def mdn_spike_loss_with_varying_noise(
 
     # Mixture log-likelihood = logsumexp over [spike, slabs...]
     log_terms_spike = torch.log(pi[:, :1].clamp_min(eps)) + logp_spike.unsqueeze(1)  # (N, 1)
-    log_terms_slabs = torch.log(pi[:, 1:].clamp_min(eps)) + logp_slabs               # (N, K-1)
-    all_log_terms = torch.cat([log_terms_spike, log_terms_slabs], dim=1)             # (N, K)
+    log_terms_slabs = torch.log(pi[:, 1:].clamp_min(eps)) + logp_slabs  # (N, K-1)
+    all_log_terms = torch.cat([log_terms_spike, log_terms_slabs], dim=1)  # (N, K)
     nll = -torch.logsumexp(all_log_terms, dim=1).mean()
 
     # (A) simple steer: penalty>1 encourages spike
@@ -326,7 +326,7 @@ def spiked_emdn_posterior_means(
             pi_pred, mu_pred, log_sigma_pred = model(X_batch)
 
         # Build full mixture params including the spike at 0 (prior sd=0 for spike)
-        mu_full = torch.cat([torch.zeros_like(mu_pred[:, :1]), mu_pred], dim=1)     # (N, K)
+        mu_full = torch.cat([torch.zeros_like(mu_pred[:, :1]), mu_pred], dim=1)  # (N, K)
         sigma_full = torch.cat([torch.zeros_like(log_sigma_pred[:, :1]), torch.exp(log_sigma_pred)], dim=1)  # (N, K)
 
         # Posterior moments per observation

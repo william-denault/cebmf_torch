@@ -184,8 +184,8 @@ def apply_log_sum_exp(data_loglik: torch.Tensor, assignment_loglik: torch.Tensor
         Log posterior assignment matrix (J, K).
     """
     combined = data_loglik + assignment_loglik.unsqueeze(0)  # (J,K)
-    norm = torch.logsumexp(combined, dim=1, keepdim=True)    # (J,1)
-    return combined - norm                                   # (J,K)
+    norm = torch.logsumexp(combined, dim=1, keepdim=True)  # (J,1)
+    return combined - norm  # (J,K)
 
 
 @torch.no_grad()
@@ -241,11 +241,11 @@ def posterior_mean_norm(
 
     # log posterior responsibility
     log_post_assignment = apply_log_sum_exp(data_loglik, log_pi)  # (J,K)
-    resp = torch.exp(log_post_assignment)                         # (J,K)
+    resp = torch.exp(log_post_assignment)  # (J,K)
 
     # posterior variances
     s2 = sebetahat.pow(2).unsqueeze(1)  # (J,1)
-    t2 = scale.pow(2).unsqueeze(0)      # (1,K)
+    t2 = scale.pow(2).unsqueeze(0)  # (1,K)
 
     with torch.no_grad():
         denom = (1.0 / s2) + torch.where(t2 > 0, 1.0 / t2, torch.zeros_like(t2))
