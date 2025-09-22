@@ -308,6 +308,6 @@ def cgb_posterior_means(
         pi=pi1,
         mu_2=mu2.item(),
         sigma_2=sigma2_sq.sqrt().item(),
-        loss= -float(log_marginal.item()),
+        loss=  -float(log_marginal.item()),
         model_param=model.state_dict(),
     )

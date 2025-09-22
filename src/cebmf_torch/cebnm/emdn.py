@@ -285,6 +285,18 @@ def emdn_posterior_means(
             post_mean[i] = result.post_mean
             post_mean2[i] = result.post_mean2
             post_sd[i] = result.post_sd
+            # ---- proper full negative marginal log-likelihood (no penalty)
+        eps = 1e-12
+        # log N(b_i ; mu_{ik}, sqrt(se_i^2 + sigma_{ik}^2)) in log domain
+        total_sigma = torch.sqrt(sigma**2 + sebetahat.unsqueeze(1)**2)        # (N, K)
+        z = (betahat.unsqueeze(1) - mu) / total_sigma                          # (N, K)
+        log_sqrt_2pi = 0.5 * torch.log(torch.tensor(2.0 * torch.pi,
+                                                    device=betahat.device,
+                                                    dtype=betahat.dtype))
+        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi     # (N, K)
+        log_mix = torch.logsumexp(torch.log(pi.clamp_min(eps)) + log_comp, dim=1)  # (N,)
+        full_marginal_ll =  float(log_mix.sum().item())
+
 
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
@@ -293,6 +305,6 @@ def emdn_posterior_means(
         location=mu,
         pi_np=pi,
         scale=sigma,
-        loss=running_loss,
+        loss=full_marginal_ll,
         model_param=model.state_dict(),
     )
