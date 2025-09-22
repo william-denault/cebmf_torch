@@ -30,8 +30,6 @@ class DensityRegressionDataset(Dataset):
 # -------------------------
 
 
-
-
 # MDN Model: π₂(x) + global μ₂
 # -------------------------
 class CgbNet(nn.Module):
@@ -213,7 +211,6 @@ def cgb_posterior_means(
         Container with posterior means, standard deviations, and model parameters.
     """
 
-
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ---- to tensor on device
@@ -225,7 +222,7 @@ def cgb_posterior_means(
         X = X.reshape(-1, 1)
 
     # ---- scale on device
-    X_scaled  = standard_scale(X)  # stays on device
+    X_scaled = standard_scale(X)  # stays on device
 
     # ---- dataset / loader (GPU tensors, keep num_workers=0)
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
@@ -254,9 +251,11 @@ def cgb_posterior_means(
             total_loss += loss.item()
 
         if (epoch + 1) % 10 == 0:
-            print(f"[CGB] Epoch {epoch + 1}/{n_epochs}, "
-                  f"Loss={total_loss / len(dataloader):.4f}, "
-                  f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}")
+            print(
+                f"[CGB] Epoch {epoch + 1}/{n_epochs}, "
+                f"Loss={total_loss / len(dataloader):.4f}, "
+                f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}"
+            )
 
     # ---- posterior inference
     model.eval()
@@ -283,7 +282,3 @@ def cgb_posterior_means(
         loss=total_loss,
         model_param=model.state_dict(),
     )
-
-
-
-    

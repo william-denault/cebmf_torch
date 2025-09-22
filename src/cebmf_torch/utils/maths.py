@@ -267,6 +267,7 @@ def safe_tensor_to_float(
 # E[Z | a<Z<b]  and E[Z^2 | a<Z<b] for Z~N(mean, sd^2)
 # ------------------------
 
+
 def my_etruncnorm(a, b, mean=0.0, sd=1.0):
     """
     Compute E[Z | a < Z < b] for Z ~ N(mean, sd^2), the mean of a truncated normal.

@@ -90,9 +90,9 @@ def optimize_pi_logL(
             Lb = logL[idx]  # (B, K)
 
             # E-step: responsibilities r_{jk} ∝ pi_k * exp(logL_{jk})
-            log_r = Lb + log_pi.unsqueeze(0)                 # (B, K)
+            log_r = Lb + log_pi.unsqueeze(0)  # (B, K)
             log_norm = torch.logsumexp(log_r, dim=1, keepdim=True)  # (B,1)
-            r = torch.exp(log_r - log_norm)                  # (B, K)
+            r = torch.exp(log_r - log_norm)  # (B, K)
 
             # accumulate expected counts
             n_k += r.sum(dim=0)  # (K,)
@@ -141,7 +141,8 @@ def _calculate_scales(
     return torch.cat(
         [
             torch.tensor([0.0], device=device, dtype=dtype),
-            (1.0 / mult) ** (-seq.to(dtype=torch.float64)).to(dtype) * torch.tensor(sigmaamax, device=device, dtype=dtype),
+            (1.0 / mult) ** (-seq.to(dtype=torch.float64)).to(dtype)
+            * torch.tensor(sigmaamax, device=device, dtype=dtype),
         ]
     )
 
@@ -176,8 +177,7 @@ def autoselect_scales_mix_norm(betahat: torch.Tensor, sebetahat: torch.Tensor, m
         sigmaamax = 2.0 * torch.sqrt(torch.max(betahat**2 - sebetahat**2))
 
     if mult == 0:
-        return torch.stack([torch.tensor(0.0, device=device, dtype=dtype),
-                            (sigmaamax / 2.0).to(dtype)], dim=0)
+        return torch.stack([torch.tensor(0.0, device=device, dtype=dtype), (sigmaamax / 2.0).to(dtype)], dim=0)
 
     scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device, dtype)
     if max_class is not None:
@@ -224,8 +224,7 @@ def autoselect_scales_mix_exp(
         sigmaamax = tt * torch.sqrt(torch.max(betahat**2))
 
     if mult == 0:
-        return torch.stack([torch.tensor(0.0, device=device, dtype=dtype),
-                            (sigmaamax / 2.0).to(dtype)], dim=0)
+        return torch.stack([torch.tensor(0.0, device=device, dtype=dtype), (sigmaamax / 2.0).to(dtype)], dim=0)
 
     scales = _calculate_scales(float(sigmaamax), float(sigmaamin), mult, device, dtype)
     if max_class is not None:

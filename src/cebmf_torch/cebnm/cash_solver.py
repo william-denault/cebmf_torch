@@ -65,12 +65,13 @@ class CashNet(nn.Module):
             x = self.relu(layer(x))
         return self.softmax(self.output_layer(x))
 
+
 # Custom loss function
 def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
-    L_batch = torch.exp(marginal_log_lik)                 # (B, K)
-    inner_sum = torch.sum(pred_pi * L_batch, dim=1)       # (B,)
+    L_batch = torch.exp(marginal_log_lik)  # (B, K)
+    inner_sum = torch.sum(pred_pi * L_batch, dim=1)  # (B,)
     inner_sum = torch.clamp(inner_sum, min=epsilon)
-    first_sum = torch.sum(torch.log(inner_sum))           # scalar
+    first_sum = torch.sum(torch.log(inner_sum))  # scalar
 
     if penalty > 1:
         # penalize the (assumed) spike component's total mass in the batch
@@ -103,7 +104,7 @@ class cash_PosteriorMeanNorm:
             Final training loss or log-likelihood.
         model_param : dict, optional
             Trained model parameters (state_dict).
-        """        
+        """
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
@@ -112,9 +113,8 @@ class cash_PosteriorMeanNorm:
         self.scale = scale
         self.model_param = model_param
 
-# Class to store the results
- 
 
+# Class to store the results
 
 
 def cash_posterior_means(
@@ -133,7 +133,7 @@ def cash_posterior_means(
 ):
     """
     GPU-native CASH training and posterior computation.
-     
+
     Fit a CASH (Covariate Adaptive Shrinkage) model and compute posterior means,
     second moments, and standard deviations.
 
@@ -192,7 +192,9 @@ def cash_posterior_means(
 
     # ---- model / optimizer on device
     input_dim = X_scaled.shape[1]
-    model_cash = CashNet(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes, n_layers=n_layers).to(device)
+    model_cash = CashNet(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes, n_layers=n_layers).to(
+        device
+    )
     if model_param is not None:
         model_cash.load_state_dict(model_param)
     optimizer_cash = optim.Adam(model_cash.parameters(), lr=lr)
@@ -242,7 +244,7 @@ def cash_posterior_means(
                 sebetahat=sebetahat[i : i + 1],
                 log_pi=log_pi_i,
                 data_loglik=data_loglik[i, :],
-                location=[0],    # your routine expects this form
+                location=[0],  # your routine expects this form
                 scale=scale,
             )
             post_mean[i] = res_i.post_mean
@@ -253,9 +255,8 @@ def cash_posterior_means(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi_np=all_pi_values,      # (N, K) on device
+        pi_np=all_pi_values,  # (N, K) on device
         loss=total_cash_loss,
-        scale=scale,              # (K,) on device
+        scale=scale,  # (K,) on device
         model_param=model_cash.state_dict(),
-    ) 
- 
+    )

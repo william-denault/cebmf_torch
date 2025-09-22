@@ -16,6 +16,7 @@ def _const_like(x: Tensor, val) -> Tensor:
 # Core pieces
 # =========================
 
+
 def _loglik_spike(xc: Tensor, s: Tensor) -> Tensor:
     # log N(xc | 0, s^2)
     c = _LOG_SQRT_2PI if isinstance(_LOG_SQRT_2PI, torch.Tensor) else _const_like(s, _LOG_SQRT_2PI)
@@ -62,6 +63,7 @@ def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Ten
 # =========================
 # Public EBNM interface
 # =========================
+
 
 class EBNMPointExp:
     def __init__(
