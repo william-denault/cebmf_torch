@@ -299,7 +299,10 @@ class cEBMF:
         self.L[:, k] = resL.post_mean
         self.L2[:, k] = resL.post_mean2
         nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
+        print(nm_ll_L)
+        print(resL.loss)    
         self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device, dtype=self.L.dtype)
+        print(self.kl_l[k])
         self.pi0_L[k] = resL.pi0_null
 
     @torch.no_grad()

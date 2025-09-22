@@ -250,13 +250,18 @@ def cash_posterior_means(
             post_mean[i] = res_i.post_mean
             post_mean2[i] = res_i.post_mean2
             post_sd[i] = res_i.post_sd
+     # ---- compute proper full negative marginal log-likelihood (no penalty)
+ 
+ # ---- compute proper full negative marginal log-likelihood (no penalty)
+ 
 
     return cash_PosteriorMeanNorm(
         post_mean=post_mean,
         post_mean2=post_mean2,
-        post_sd=post_sd,
+        post_sd=post_sd, 
         pi_np=all_pi_values,  # (N, K) on device
-        loss=total_cash_loss,
+        loss=-total_cash_loss,
         scale=scale,  # (K,) on device
+ 
         model_param=model_cash.state_dict(),
     )
