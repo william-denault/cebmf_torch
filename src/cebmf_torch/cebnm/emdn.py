@@ -305,6 +305,6 @@ def emdn_posterior_means(
         location=mu,
         pi_np=pi,
         scale=sigma,
-        loss=full_marginal_ll,
+        loss= -full_marginal_ll,
         model_param=model.state_dict(),
     )

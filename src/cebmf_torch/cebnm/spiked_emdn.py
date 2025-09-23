@@ -355,6 +355,24 @@ def spiked_emdn_posterior_means(
             post_mean2[i] = result.post_mean2
             post_sd[i] = result.post_sd
 
+
+# ---- proper full negative marginal log-likelihood (no penalty)
+        
+        # total sd per obs/component: sqrt(se_i^2 + sigma_{ik}^2); spike has sigma=0 ⇒ total sd = se
+        total_sigma = torch.sqrt(sigma_full**2 + sebetahat.unsqueeze(1)**2)          # (N, K)
+        z = (betahat.unsqueeze(1) - mu_full) / total_sigma                            # (N, K)
+
+        # log N(b_i ; mu_{ik}, total_sigma_{ik}) = -0.5 z^2 - log(total_sigma) - 0.5 log(2π)
+        log_sqrt_2pi = 0.5 * torch.log(torch.tensor(2.0 * torch.pi,
+                                                    device=betahat.device,
+                                                    dtype=betahat.dtype))
+        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi           # (N, K)
+
+        # log ∑_k π_{ik} * N_k
+        log_mix = torch.logsumexp(torch.log(pi_pred.clamp_min(eps)) + log_comp, dim=1)  # (N,)
+        full_marginal_ll =  float(log_mix.sum().item())
+
+
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
         post_mean2=post_mean2,
@@ -362,6 +380,6 @@ def spiked_emdn_posterior_means(
         location=mu_full,
         pi_np=pi_pred,
         scale=sigma_full,
-        loss=running_loss,
+        loss= -full_marginal_ll,
         model_param=model.state_dict(),
     )

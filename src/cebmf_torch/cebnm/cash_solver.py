@@ -260,8 +260,7 @@ def cash_posterior_means(
         post_mean2=post_mean2,
         post_sd=post_sd, 
         pi_np=all_pi_values,  # (N, K) on device
-        loss=-total_cash_loss,
+        loss= total_cash_loss,
         scale=scale,  # (K,) on device
- 
         model_param=model_cash.state_dict(),
     )
