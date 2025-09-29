@@ -162,6 +162,7 @@ class CgbPosteriorResult:
         self.loss = loss
         self.model_param = model_param
 
+
 @torch.no_grad()
 def compute_marginal_loglik_full(model, X, betahat, se, sigma2_sq, eps=1e-12):
     """
@@ -179,11 +180,9 @@ def compute_marginal_loglik_full(model, X, betahat, se, sigma2_sq, eps=1e-12):
     logp2 = -0.5 * ((betahat - mu2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
 
     # stable log mixture
-    log_mix = torch.logaddexp(
-        (pi1.clamp_min(eps)).log() + logp1,
-        (pi2.clamp_min(eps)).log() + logp2
-    )
+    log_mix = torch.logaddexp((pi1.clamp_min(eps)).log() + logp1, (pi2.clamp_min(eps)).log() + logp2)
     return log_mix.sum()  # scalar
+
 
 # -------------------------
 # Main solver
@@ -295,11 +294,11 @@ def cgb_posterior_means(
         post_sd = torch.sqrt(torch.clamp(post_var, min=0.0))
         log_marginal = compute_marginal_loglik_full(
             model,
-            X=dataset.X,                  # X_scaled (full)
-            betahat=dataset.betahat,      # full
-            se=dataset.sebetahat,         # full
-            sigma2_sq=sigma2_sq
-            )
+            X=dataset.X,  # X_scaled (full)
+            betahat=dataset.betahat,  # full
+            se=dataset.sebetahat,  # full
+            sigma2_sq=sigma2_sq,
+        )
 
     return CgbPosteriorResult(
         post_mean=post_mean,
@@ -308,6 +307,6 @@ def cgb_posterior_means(
         pi=pi1,
         mu_2=mu2.item(),
         sigma_2=sigma2_sq.sqrt().item(),
-        loss=   -float(log_marginal.item()),
+        loss=-float(log_marginal.item()),
         model_param=model.state_dict(),
     )
