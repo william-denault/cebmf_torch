@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
 
+
 # -------------------------
 # Torch StandardScaler (GPU-friendly)
 # -------------------------
@@ -65,11 +66,9 @@ class CgbNet(nn.Module):
     def __init__(self, input_dim, hidden_dim=32, n_layers=2):
         super().__init__()
         self.input_layer = nn.Linear(input_dim, hidden_dim)
-        self.hidden_layers = nn.ModuleList(
-            [nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)]
-        )
-        self.output_layer = nn.Linear(hidden_dim, 1)   # logit for π₂(x)
-        self.mu_2 = nn.Parameter(torch.zeros(()))      # global slab mean (scalar)
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
+        self.output_layer = nn.Linear(hidden_dim, 1)  # logit for π₂(x)
+        self.mu_2 = nn.Parameter(torch.zeros(()))  # global slab mean (scalar)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
@@ -156,10 +155,10 @@ class CgbPosteriorResult:
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
         self.post_sd = post_sd
-        self.pi = pi                # π₀(x): spike probability
+        self.pi = pi  # π₀(x): spike probability
         self.mu_2 = mu_2
         self.sigma_2 = sigma_2
-        self.loss = loss            # negative marginal log-likelihood
+        self.loss = loss  # negative marginal log-likelihood
         self.model_param = model_param
 
 
@@ -241,7 +240,7 @@ def cgb_posterior_means(
         post_mean, post_var = posterior_point_mass_normal(
             betahat=dataset.betahat,
             sebetahat=dataset.sebetahat,
-            pi=pi1_full,            # spike prob
+            pi=pi1_full,  # spike prob
             mu0=0.0,
             mu1=mu2_full.item(),
             sigma_0=sigma2_sq.sqrt().item(),
