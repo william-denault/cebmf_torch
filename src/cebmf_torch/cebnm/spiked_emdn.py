@@ -49,8 +49,8 @@ class MDN(nn.Module):
         assert n_gaussians >= 2, "Need at least 1 spike + 1 slab."
         self.fc_in = nn.Linear(input_dim, hidden_dim)
         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(n_layers)])
-        self.pi = nn.Linear(hidden_dim, n_gaussians)          # includes spike (k=0)
-        self.mu = nn.Linear(hidden_dim, n_gaussians - 1)      # slabs only
+        self.pi = nn.Linear(hidden_dim, n_gaussians)  # includes spike (k=0)
+        self.mu = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
         self.log_sigma = nn.Linear(hidden_dim, n_gaussians - 1)  # slabs only
         self.point_mass = 0.0
 
@@ -76,7 +76,7 @@ class MDN(nn.Module):
         for layer in self.hidden_layers:
             x = torch.relu(layer(x))
         pi = torch.softmax(self.pi(x), dim=1)  # (N, K)
-        mu = self.mu(x)                        # (N, K-1)
+        mu = self.mu(x)  # (N, K-1)
         # keep slabs' std positive and stable
         log_sigma = torch.log(torch.nn.functional.softplus(self.log_sigma(x)) + 1e-6)  # (N, K-1)
         return pi, mu, log_sigma
@@ -136,8 +136,8 @@ def mdn_spike_loss_with_varying_noise(
 
     # Mixture log-likelihood = logsumexp over [spike, slabs...]
     log_terms_spike = torch.log(pi[:, :1].clamp_min(eps)) + logp_spike.unsqueeze(1)  # (N, 1)
-    log_terms_slabs = torch.log(pi[:, 1:].clamp_min(eps)) + logp_slabs               # (N, K-1)
-    all_log_terms = torch.cat([log_terms_spike, log_terms_slabs], dim=1)             # (N, K)
+    log_terms_slabs = torch.log(pi[:, 1:].clamp_min(eps)) + logp_slabs  # (N, K-1)
+    all_log_terms = torch.cat([log_terms_spike, log_terms_slabs], dim=1)  # (N, K)
     nll = -torch.logsumexp(all_log_terms, dim=1).mean()
 
     # (A) simple steer: penalty>1 encourages spike
@@ -326,7 +326,7 @@ def spiked_emdn_posterior_means(
             pi_pred, mu_pred, log_sigma_pred = model(X_batch)
 
         # Build full mixture params including the spike at 0 (prior sd=0 for spike)
-        mu_full = torch.cat([torch.zeros_like(mu_pred[:, :1]), mu_pred], dim=1)     # (N, K)
+        mu_full = torch.cat([torch.zeros_like(mu_pred[:, :1]), mu_pred], dim=1)  # (N, K)
         sigma_full = torch.cat([torch.zeros_like(log_sigma_pred[:, :1]), torch.exp(log_sigma_pred)], dim=1)  # (N, K)
 
         # Posterior moments per observation
@@ -355,6 +355,24 @@ def spiked_emdn_posterior_means(
             post_mean2[i] = result.post_mean2
             post_sd[i] = result.post_sd
 
+
+# ---- proper full negative marginal log-likelihood (no penalty)
+        
+        # total sd per obs/component: sqrt(se_i^2 + sigma_{ik}^2); spike has sigma=0 ⇒ total sd = se
+        total_sigma = torch.sqrt(sigma_full**2 + sebetahat.unsqueeze(1)**2)          # (N, K)
+        z = (betahat.unsqueeze(1) - mu_full) / total_sigma                            # (N, K)
+
+        # log N(b_i ; mu_{ik}, total_sigma_{ik}) = -0.5 z^2 - log(total_sigma) - 0.5 log(2π)
+        log_sqrt_2pi = 0.5 * torch.log(torch.tensor(2.0 * torch.pi,
+                                                    device=betahat.device,
+                                                    dtype=betahat.dtype))
+        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi           # (N, K)
+
+        # log ∑_k π_{ik} * N_k
+        log_mix = torch.logsumexp(torch.log(pi_pred.clamp_min(eps)) + log_comp, dim=1)  # (N,)
+        full_marginal_ll =  float(log_mix.sum().item())
+
+
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
         post_mean2=post_mean2,
@@ -362,6 +380,6 @@ def spiked_emdn_posterior_means(
         location=mu_full,
         pi_np=pi_pred,
         scale=sigma_full,
-        loss=running_loss,
+        loss= -full_marginal_ll,
         model_param=model.state_dict(),
     )
