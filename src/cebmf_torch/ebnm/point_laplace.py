@@ -150,7 +150,9 @@ def ebnm_point_laplace(
     if par_init is None:
         par_init = (2, 2.0, 0.0)  # heuristic init (logit(w), log(a), mu)
 
-    w_logit = torch.nn.Parameter(torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0])
+    w_logit = torch.nn.Parameter(
+        torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0]
+    )
     log_a = torch.nn.Parameter(torch.as_tensor(par_init[1], dtype=dtype, device=device), requires_grad=not fix_par[1])
     mu = torch.nn.Parameter(torch.as_tensor(par_init[2], dtype=dtype, device=device), requires_grad=not fix_par[2])
 

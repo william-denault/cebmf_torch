@@ -30,8 +30,6 @@ class DensityRegressionDataset(Dataset):
 # -------------------------
 
 
-
-
 # MDN Model: π₂(x) + global μ₂
 # -------------------------
 class CgbNet(nn.Module):
@@ -164,6 +162,28 @@ class CgbPosteriorResult:
         self.loss = loss
         self.model_param = model_param
 
+@torch.no_grad()
+def compute_marginal_loglik_full(model, X, betahat, se, sigma2_sq, eps=1e-12):
+    """
+    Exact marginal log-likelihood for current params.
+    No penalty, computed on the FULL dataset (not batches).
+    """
+    model.eval()
+    pi1, pi2, mu2 = model(X)
+
+    var1 = se**2
+    var2 = se**2 + sigma2_sq
+
+    # log component densities
+    logp1 = -0.5 * ((betahat - 0.0) ** 2 / var1 + torch.log(2 * torch.pi * var1))
+    logp2 = -0.5 * ((betahat - mu2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
+
+    # stable log mixture
+    log_mix = torch.logaddexp(
+        (pi1.clamp_min(eps)).log() + logp1,
+        (pi2.clamp_min(eps)).log() + logp2
+    )
+    return log_mix.sum()  # scalar
 
 # -------------------------
 # Main solver
@@ -213,7 +233,6 @@ def cgb_posterior_means(
         Container with posterior means, standard deviations, and model parameters.
     """
 
-
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ---- to tensor on device
@@ -225,7 +244,7 @@ def cgb_posterior_means(
         X = X.reshape(-1, 1)
 
     # ---- scale on device
-    X_scaled  = standard_scale(X)  # stays on device
+    X_scaled = standard_scale(X)  # stays on device
 
     # ---- dataset / loader (GPU tensors, keep num_workers=0)
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
@@ -254,9 +273,11 @@ def cgb_posterior_means(
             total_loss += loss.item()
 
         if (epoch + 1) % 10 == 0:
-            print(f"[CGB] Epoch {epoch + 1}/{n_epochs}, "
-                  f"Loss={total_loss / len(dataloader):.4f}, "
-                  f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}")
+            print(
+                f"[CGB] Epoch {epoch + 1}/{n_epochs}, "
+                f"Loss={total_loss / len(dataloader):.4f}, "
+                f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}"
+            )
 
     # ---- posterior inference
     model.eval()
@@ -272,6 +293,13 @@ def cgb_posterior_means(
         )
         post_mean2 = post_var + post_mean**2
         post_sd = torch.sqrt(torch.clamp(post_var, min=0.0))
+        log_marginal = compute_marginal_loglik_full(
+            model,
+            X=dataset.X,                  # X_scaled (full)
+            betahat=dataset.betahat,      # full
+            se=dataset.sebetahat,         # full
+            sigma2_sq=sigma2_sq
+            )
 
     return CgbPosteriorResult(
         post_mean=post_mean,
@@ -280,10 +308,6 @@ def cgb_posterior_means(
         pi=pi1,
         mu_2=mu2.item(),
         sigma_2=sigma2_sq.sqrt().item(),
-        loss=total_loss,
+        loss=   -float(log_marginal.item()),
         model_param=model.state_dict(),
     )
-
-
-
-    
