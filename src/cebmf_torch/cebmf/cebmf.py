@@ -198,9 +198,11 @@ class cEBMF:
         tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
             self._update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
-
-        self._backfit()
+            
+            
         self.update_tau()
+        self._backfit()
+        
         self._cal_obj()
 
     @torch.no_grad()
