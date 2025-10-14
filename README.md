@@ -7,8 +7,7 @@
 ## Overview
 
 **cebmf_torch** is a pure-PyTorch implementation of Empirical Bayes Matrix Factorization (EBMF) and Empirical Bayes Normal Means (EBNM) methods. It is designed for scalable, GPU-accelerated analysis of large datasets, with a focus on genomics and other high-dimensional applications. The package provides flexible prior families, efficient mini-batch EM, and full support for GPU computation.
-
-- **No NumPy. No SciPy. No R.**
+ 
 - **GPU-accelerated**: All core computations are performed in PyTorch.
 - **Flexible priors**: Easily extendable to new prior families.
 - **Mini-batch EM**: Fast optimization for large datasets.
