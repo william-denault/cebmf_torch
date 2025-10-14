@@ -57,12 +57,12 @@ def ebnm_point_laplace(
     s: Tensor,
     par_init=None,                     # None by default; choose safely inside
     fix_par=(False, False, True),      # [w_logit, log_a, mu]; mu fixed at 0 by default
-    max_iter: int = 50,
+    max_iter: int = 20,
     tol: float = 1e-3,
-    a_bounds=(1e-2, 1e2),              # bounds for Laplace rate a
+    a_bounds=(1e-1, 1e2),              # bounds for Laplace rate a
     loga_l2: float = 1e-2,             # ridge on log a (optimization only)
-    tresh_pi0: float = 1e-3,           # hard spike-only shortcut when slab weight tiny
-    eps: float = 1e-12,
+    tresh_pi0: float = 1e-2,           # hard spike-only shortcut when slab weight tiny
+    eps: float = 1e-6,
     pen_pi0: float = 1.0,              # optional penalty to encourage spike (optimization only)
 ) -> EBNMLaplaceResult:
     """
@@ -219,5 +219,5 @@ def ebnm_point_laplace(
         pi0=float(pi0.item()),   # return slab weight as documented
         a=float(a),
         mu=mu_v,
-        log_lik=float(llik.item()),
+        log_lik=-float(llik.item()),
     )
