@@ -46,14 +46,14 @@ def ebnm_point_laplace(
     fix_par=(False, False, True),      # [w_logit, a_logit, mu]; mu fixed at 0 by default
     max_iter: int = 20,
     tol: float = 1e-6,
-    a_bounds=(1e-1, 1e2),              # bounds for Laplace rate a
-    loga_l2: float = 1e-5,             # ridge on a's unconstrained logit (optimization only; 0=off)
+    a_bounds=(1e-2, 1e2),              # bounds for Laplace rate a
+    loga_l2: float = 0,             # ridge on a's unconstrained logit (optimization only; 0=off)
     tresh_pi0: float = 1e-3,           # spike-only shortcut (post-processing only)
     eps: float = 1e-12,
     pen_pi0: float = 0.0,              # optional symmetric prior on pi0 (size-independent); 0=off
     use_adam_warmstart: bool = True,  # off by default; set True to use a short warm-up
-    adam_steps: int = 20,
-    adam_lr: float = 1e-3,
+    adam_steps: int = 10,
+    adam_lr: float = 1e-2,
     weight_decay=0.01,
 ) -> EBNMLaplaceResult:
     """
