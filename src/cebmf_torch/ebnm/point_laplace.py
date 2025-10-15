@@ -19,7 +19,7 @@ def logg_laplace_convolved_with_normal(x: Tensor, s: Tensor, a: Tensor) -> Tenso
     log (Laplace(0, rate=a) ⊗ Normal(0, s^2)) at x.
     = log(a/2) + 0.5*(s a)^2 + log( Φ((x - s^2 a)/s) e^{-a x} + Φ(-(x + s^2 a)/s) e^{a x} )
     """
-    # Assume x, s, a already on correct device/dtype; s already clamped outside
+    # assume x, s, a already on correct device/dtype; s already clamped outside
     z1 = (x - (s * s) * a) / s
     z2 = -(x + (s * s) * a) / s
     lg1 = -a * x + logPhi(z1)
@@ -47,18 +47,18 @@ def ebnm_point_laplace(
     max_iter: int = 20,
     tol: float = 1e-6,
     a_bounds=(1e-2, 1e2),              # bounds for Laplace rate a
-    loga_l2: float = 0,             # ridge on a's unconstrained logit (optimization only; 0=off)
+    loga_l2: float = 0.0,              # ridge on a's unconstrained logit (optimization only; 0=off)
     tresh_pi0: float = 1e-3,           # spike-only shortcut (post-processing only)
     eps: float = 1e-12,
     pen_pi0: float = 0.0,              # optional symmetric prior on pi0 (size-independent); 0=off
-    use_adam_warmstart: bool = True,  # off by default; set True to use a short warm-up
-    adam_steps: int = 10,
+    use_adam_warmstart: bool = False,  # default OFF for speed; set True to enable short warm-up
+    adam_steps: int = 8,
     adam_lr: float = 1e-2,
-    weight_decay=0.00,
+    weight_decay: float = 0.0,
 ) -> EBNMLaplaceResult:
     """
     Efficient direct maximization of the observed marginal log-likelihood for a point-Laplace EBNM.
-    Optimizer: LBFGS only (AdamW warm-start optional and short). GPU-safe (no host<->device hops).
+    Optimizer: LBFGS-only (AdamW warm-start optional and short). GPU-safe (no host<->device hops).
     """
     # ---- setup & hoisted constants (device/dtype safe) ----
     device, dtype = x.device, x.dtype
@@ -67,7 +67,6 @@ def ebnm_point_laplace(
 
     # Precompute once; reused in closure & posterior
     inv_s  = 1.0 / s
-    inv_s2 = inv_s * inv_s
     log_s  = torch.log(s)
     s2     = s * s
 
@@ -104,23 +103,25 @@ def ebnm_point_laplace(
 
     params = [p for p in (w_logit, a_logit, mu) if p.requires_grad]
 
-    # ---- tiny optional warm-start (kept short) ----
+    # ---- optional warm-start (kept very short) ----
     if use_adam_warmstart and params:
-        opt_adam = torch.optim.AdamW(params, lr=adam_lr, betas=(0.9, 0.999),
-                                     weight_decay= weight_decay)
+        opt_adam = torch.optim.AdamW(params, lr=adam_lr, betas=(0.9, 0.999), weight_decay=weight_decay)
         for _ in range(int(adam_steps)):
             opt_adam.zero_grad(set_to_none=True)
-            # lean forward: only loss for speed
             w   = torch.sigmoid(w_logit).clamp(eps_t, one - eps_t)
-            sig = torch.sigmoid(a_logit)
-            a   = a_lo_t + a_span * sig
+            a   = a_lo_t + a_span * torch.sigmoid(a_logit)
             xc  = x - mu
 
             # spike log-lik
-            lf = -(half * (xc * inv_s) ** 2) - log_s - c_norm
+            lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
             # slab log-lik (fused helper)
-            lg = logg_laplace_convolved_with_normal(xc, s, a)
+            z1 = (xc - s2 * a) / s
+            z2 = -(xc + s2 * a) / s
+            lg1 = -a * xc + logPhi(z1)
+            lg2 =  a * xc + logPhi(z2)
+            lsum = torch.logaddexp(lg1, lg2)
+            lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
 
             llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg).sum()
 
@@ -149,15 +150,19 @@ def ebnm_point_laplace(
         def closure():
             opt_lbfgs.zero_grad(set_to_none=True)
             w   = torch.sigmoid(w_logit).clamp(eps_t, one - eps_t)
-            sig = torch.sigmoid(a_logit)
-            a   = a_lo_t + a_span * sig
+            a   = a_lo_t + a_span * torch.sigmoid(a_logit)
             xc  = x - mu
 
-            # spike log-lik (reuses inv_s, log_s, c_norm)
-            lf = -(half * (xc * inv_s) ** 2) - log_s - c_norm
+            # spike log-lik (reuses log_s, c_norm)
+            lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
-            # slab log-lik (reuses s2 via s and fused helper)
-            lg = logg_laplace_convolved_with_normal(xc, s, a)
+            # slab log-lik (inline for speed)
+            z1 = (xc - s2 * a) / s
+            z2 = -(xc + s2 * a) / s
+            lg1 = -a * xc + logPhi(z1)
+            lg2 =  a * xc + logPhi(z2)
+            lsum = torch.logaddexp(lg1, lg2)
+            lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
 
             llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg).sum()
 
@@ -171,9 +176,9 @@ def ebnm_point_laplace(
                 )
 
             loss = -(llik - penalty)
-            # guard for NaN/Inf without host-device traffic
-            huge = torch.tensor(1e30, device=device, dtype=dtype)
-            loss = torch.nan_to_num(loss, nan=huge, posinf=huge, neginf=huge)
+            loss = torch.nan_to_num(loss, nan=torch.tensor(1e30, device=device, dtype=dtype),
+                                    posinf=torch.tensor(1e30, device=device, dtype=dtype),
+                                    neginf=torch.tensor(1e30, device=device, dtype=dtype))
             loss.backward()
             return loss
 
@@ -197,15 +202,19 @@ def ebnm_point_laplace(
     # ---- posterior & summaries (no penalties; single no_grad block) ----
     with torch.no_grad():
         w   = torch.sigmoid(w_logit).clamp(eps_t, one - eps_t)
-        sig = torch.sigmoid(a_logit)
-        a   = a_lo_t + a_span * sig
+        a   = a_lo_t + a_span * torch.sigmoid(a_logit)
         xc  = x - mu
 
         # spike
-        lf = -(half * (xc * inv_s) ** 2) - log_s - c_norm
+        lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
-        # slab (reuse helper)
-        lg = logg_laplace_convolved_with_normal(xc, s, a)
+        # slab
+        z1 = (xc - s2 * a) / s
+        z2 = -(xc + s2 * a) / s
+        lg1 = -a * xc + logPhi(z1)
+        lg2 =  a * xc + logPhi(z2)
+        lsum = torch.logaddexp(lg1, lg2)
+        lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
 
         # posterior inclusion prob (slab)
         log_num   = torch.log(w) + lg
@@ -213,13 +222,8 @@ def ebnm_point_laplace(
         gamma     = torch.exp(log_num - log_denom).clamp(zero, one)
 
         # sign-mixture inside slab
-        z1 = (xc - s2 * a) / s
-        z2 = -(xc + s2 * a) / s
-        lg1 = -a * xc + logPhi(z1)
-        lg2 =  a * xc + logPhi(z2)
-        lsum = torch.logaddexp(lg1, lg2)
-        lam  = torch.exp(lg1 - lsum)
-        lam  = torch.where(torch.isfinite(lsum), lam, torch.full_like(lsum, 0.5))
+        lam = torch.exp(lg1 - lsum)
+        lam = torch.where(torch.isfinite(lsum), lam, torch.full_like(lsum, 0.5))
 
         # truncated-normal moments
         m_pos = xc - s2 * a
@@ -248,7 +252,6 @@ def ebnm_point_laplace(
             post_mean2 = torch.zeros_like(x) + mu * mu + torch.tensor(1e-4, device=device, dtype=dtype)
             post_sd    = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
             llik       = lf.sum()
-            # (leave w as-is, or set to 0 if you prefer)
 
     return EBNMLaplaceResult(
         post_mean=post_mean,
