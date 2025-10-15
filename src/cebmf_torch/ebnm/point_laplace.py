@@ -54,7 +54,7 @@ def ebnm_point_laplace(
     use_adam_warmstart: bool = True,  # off by default; set True to use a short warm-up
     adam_steps: int = 10,
     adam_lr: float = 1e-2,
-    weight_decay=0.01,
+    weight_decay=0.00,
 ) -> EBNMLaplaceResult:
     """
     Efficient direct maximization of the observed marginal log-likelihood for a point-Laplace EBNM.
