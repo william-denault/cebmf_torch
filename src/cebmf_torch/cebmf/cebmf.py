@@ -198,9 +198,11 @@ class cEBMF:
         tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
             self._update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
-
-        self._backfit()
+            
+            
         self.update_tau()
+        self._backfit()
+        
         self._cal_obj()
 
     @torch.no_grad()
@@ -396,8 +398,14 @@ class cEBMF:
         resid_mean_sq = (self.Y0 - Yfit).pow(2)  # (N,P)
         first_moment_sq = (self.L.pow(2)) @ (self.F.pow(2)).T  # Σ_k (E[L]^2)(E[F]^2)^T
         second_moment = self.L2 @ self.F2.T  # Σ_k E[L^2] E[F^2]^T
-        R2 = resid_mean_sq - first_moment_sq + second_moment
-        R2 = (R2 * self.mask).clamp_min(0.0)  # zero where missing; no negatives
+        #R2 = resid_mean_sq - first_moment_sq + second_moment
+        #R2 = (R2 * self.mask).clamp_min(0.0)  # zero where missing; no negatives
+
+
+        variance_term = second_moment - first_moment_sq
+    
+        R2 = resid_mean_sq + variance_term  # NOT minus!
+        R2 = (R2 * self.mask).clamp_min(0.0)
         return R2
 
     @torch.no_grad()

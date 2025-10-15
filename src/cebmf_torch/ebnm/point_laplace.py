@@ -1,6 +1,5 @@
 import math
 from dataclasses import dataclass
-
 import torch
 from torch import Tensor
 
@@ -12,205 +11,183 @@ from cebmf_torch.utils.maths import (
     safe_log,
 )
 
-
 def _const_like(x: Tensor, val) -> Tensor:
-    """Create a scalar tensor `val` on x's device/dtype."""
     return torch.as_tensor(val, device=x.device, dtype=x.dtype)
-
 
 def logg_laplace_convolved_with_normal(x: Tensor, s: Tensor, a: Tensor) -> Tensor:
     """
-    Compute log p(x | theta ~ Laplace(0, 1/a), noise ~ N(0, s^2)) as a function of x.
-
-    Closed form:
-        log(a/2) + 0.5*(s*a)^2
-        + log( Φ((x - s^2 a)/s) * e^{-a x} + Φ(-(x + s^2 a)/s) * e^{a x} )
-
-    Implemented in log-space with logaddexp for numerical stability.
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Observed data.
-    s : torch.Tensor
-        Standard deviation of the noise.
-    a : torch.Tensor
-        Laplace scale parameter (1/a).
-
-    Returns
-    -------
-    torch.Tensor
-        Log-likelihood values for each observation.
+    log (Laplace(0, rate=a) ⊗ Normal(0, s^2)) at x.
+    = log(a/2) + 0.5*(s a)^2 + log( Φ((x - s^2 a)/s) e^{-a x} + Φ(-(x + s^2 a)/s) e^{a x} )
     """
-    x = torch.as_tensor(x, device=x.device, dtype=x.dtype)
-    s = torch.as_tensor(s, device=x.device, dtype=x.dtype).clamp_(min=_const_like(x, 1e-12))
-    a = torch.as_tensor(a, device=x.device, dtype=x.dtype)
-
+    # assume x, s, a already on correct device/dtype; s already clamped outside
     z1 = (x - (s * s) * a) / s
     z2 = -(x + (s * s) * a) / s
-
-    # log of each branch safely
     lg1 = -a * x + logPhi(z1)
-    lg2 = a * x + logPhi(z2)
-
-    lsum = torch.logaddexp(lg1, lg2)  # stable log(exp(lg1) + exp(lg2))
-    return safe_log(a / _const_like(x, 2.0)) + _const_like(x, 0.5) * (s * a) ** 2 + lsum
-
+    lg2 =  a * x + logPhi(z2)
+    lsum = torch.logaddexp(lg1, lg2)
+    half = torch.tensor(0.5, device=x.device, dtype=x.dtype)
+    two  = torch.tensor(2.0, device=x.device, dtype=x.dtype)
+    return safe_log(a / two) + half * (s * a) ** 2 + lsum
 
 @dataclass
 class EBNMLaplaceResult:
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    pi0: float
-    a: float
+    pi0: float   # mixture weight of the Laplace branch (slab)
+    a: float     # Laplace rate (1/scale)
     mu: float
-    log_lik: float
-    """
-    Container for the results of the point-Laplace EBNM posterior estimation.
-
-    Attributes
-    ----------
-    post_mean : torch.Tensor
-        Posterior means for each observation.
-    post_mean2 : torch.Tensor
-        Posterior second moments for each observation.
-    post_sd : torch.Tensor
-        Posterior standard deviations for each observation.
-    pi0 : float
-        Estimated mixture weight for the Laplace branch.
-    a : float
-        Estimated Laplace scale parameter.
-    mu : float
-        Estimated mode (mu).
-    log_lik : float
-        Final log-likelihood value.
-    """
-
+    log_lik: float  # pure marginal log-likelihood (no penalties)
 
 def ebnm_point_laplace(
     x: Tensor,
     s: Tensor,
-    par_init=None,  # None by default; choose safely inside
-    fix_par=(False, False, True),  # [w_logit, log_a, mu]; mu fixed at 0
-    max_iter: int = 50,
-    tol: float = 1e-3,
-    a_bounds=(1e-2, 1e2),  # slightly tighter; adjust if needed
-    loga_l2: float = 1e-2,
-    tresh_pi0: float = 1e-3,
+    par_init=None,                     # None by default; choose safely inside
+    fix_par=(False, False, True),      # [w_logit, a_logit, mu]; mu fixed at 0 by default
+    max_iter: int = 20,
+    tol: float = 1e-6,
+    a_bounds=(1e-2, 1e2),              # bounds for Laplace rate a
+    loga_l2: float = 0.0,              # ridge on a's unconstrained logit (optimization only; 0=off)
+    tresh_pi0: float = 1e-3,           # spike-only shortcut (post-processing only)
     eps: float = 1e-12,
-    pen_pi0=1,
+    pen_pi0: float = 0.0,              # optional symmetric prior on pi0 (size-independent); 0=off
+    use_adam_warmstart: bool = False,  # default OFF for speed; set True to enable short warm-up
+    adam_steps: int = 8,
+    adam_lr: float = 1e-2,
+    weight_decay: float = 0.0,
 ) -> EBNMLaplaceResult:
     """
-    Fit a point-Laplace Empirical Bayes Normal Means (EBNM) model using PyTorch.
-
-    This implementation uses stability tricks:
-      - clamps log a to [log(a_min), log(a_max)]
-      - L2 penalty on log a
-      - thresholds pi0 to spike-only if below tresh_pi0
-      - robust LBFGS closure with NaN/Inf guards
-
-    The prior on θ is: (1 - pi0) δ_μ + pi0 * Laplace(μ, 1/a), with support θ ∈ ℝ.
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Observed data.
-    s : torch.Tensor
-        Standard errors of the observed data.
-    par_init : tuple or None, optional
-        Initial values for (w_logit, log_a, mu). If None, defaults are used.
-    fix_par : tuple of bool, optional
-        Which parameters to fix during optimization (default: (False, False, True)).
-    max_iter : int, optional
-        Maximum number of LBFGS iterations (default: 50).
-    tol : float, optional
-        Tolerance for optimizer (default: 1e-3).
-    a_bounds : tuple, optional
-        Bounds for the Laplace scale parameter a (default: (1e-2, 1e2)).
-    loga_l2 : float, optional
-        L2 penalty on log a (default: 1e-2).
-    tresh_pi0 : float, optional
-        Threshold for pi0 below which the solution is set to spike-only (default: 1e-3).
-    eps : float, optional
-        Small value to avoid numerical issues (default: 1e-12).
-    pen_pi0 : float, optional
-        Penalty on pi0 (default: 1).
-
-    Returns
-    -------
-    EBNMLaplaceResult
-        Container with posterior means, standard deviations, and model parameters.
+    Efficient direct maximization of the observed marginal log-likelihood for a point-Laplace EBNM.
+    Optimizer: LBFGS-only (AdamW warm-start optional and short). GPU-safe (no host<->device hops).
     """
+    # ---- setup & hoisted constants (device/dtype safe) ----
     device, dtype = x.device, x.dtype
     x = torch.as_tensor(x, device=device, dtype=dtype)
-    s = torch.as_tensor(s, device=device, dtype=dtype).clamp_(min=_const_like(x, 1e-6))
+    s = torch.as_tensor(s, device=device, dtype=dtype).clamp_min(_const_like(x, 1e-6))
 
-    # ---- choose robust defaults if None ----
+    # Precompute once; reused in closure & posterior
+    inv_s  = 1.0 / s
+    log_s  = torch.log(s)
+    s2     = s * s
+
+    # scalar constants as tensors on the right device/dtype
+    zero = torch.tensor(0.0, device=device, dtype=dtype)
+    one  = torch.tensor(1.0, device=device, dtype=dtype)
+    half = torch.tensor(0.5, device=device, dtype=dtype)
+    two  = torch.tensor(2.0, device=device, dtype=dtype)
+    eps_t = torch.tensor(eps, device=device, dtype=dtype)
+    thresh_pi0_t = torch.tensor(tresh_pi0, device=device, dtype=dtype)
+
+    # normalizing constant (reuse tensor if given, else make one)
+    c_norm = _LOG_SQRT_2PI if isinstance(_LOG_SQRT_2PI, torch.Tensor) else _const_like(s, _LOG_SQRT_2PI)
+
+    # bounds for 'a' via smooth map a = a_lo + (a_hi - a_lo) * sigmoid(v)
+    a_lo, a_hi = a_bounds
+    a_lo_t = torch.tensor(a_lo, device=device, dtype=dtype)
+    a_hi_t = torch.tensor(a_hi, device=device, dtype=dtype)
+    a_span = a_hi_t - a_lo_t
+
+    # ---- defaults & parameter tensors ----
     if par_init is None:
-        par_init = (2, 2.0, 0.0)  # heuristic init (logit(w), log(a), mu)
+        par_init = (2.0, 0.0, 0.0)  # (logit(w), log(a_init), mu)
 
-    w_logit = torch.nn.Parameter(
-        torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0]
-    )
-    log_a = torch.nn.Parameter(torch.as_tensor(par_init[1], dtype=dtype, device=device), requires_grad=not fix_par[1])
-    mu = torch.nn.Parameter(torch.as_tensor(par_init[2], dtype=dtype, device=device), requires_grad=not fix_par[2])
+    # map provided log(a_init) into v0 for the bounded-sigmoid parameterization
+    a_init = float(min(max(math.exp(float(par_init[1])), a_lo), a_hi))
+    r = (a_init - a_lo) / (a_hi - a_lo)
+    r = min(max(r, 1e-8), 1 - 1e-8)
+    v0 = math.log(r) - math.log(1 - r)
 
-    params = [p for p in (w_logit, log_a, mu) if p.requires_grad]
-    opt = torch.optim.LBFGS(
-        params,
-        max_iter=max_iter,
-        tolerance_grad=tol,
-        tolerance_change=tol,
-        line_search_fn="strong_wolfe",  # steadier
-        history_size=20,
-    )
+    w_logit = torch.nn.Parameter(torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0])
+    a_logit = torch.nn.Parameter(torch.as_tensor(v0,             dtype=dtype, device=device), requires_grad=not fix_par[1])
+    mu      = torch.nn.Parameter(torch.as_tensor(par_init[2],    dtype=dtype, device=device), requires_grad=not fix_par[2])
 
-    log_a_lo = math.log(a_bounds[0])
-    log_a_hi = math.log(a_bounds[1])
-    eps_t = _const_like(x, eps)
+    params = [p for p in (w_logit, a_logit, mu) if p.requires_grad]
 
-    def closure():
-        opt.zero_grad(set_to_none=True)
-        w = torch.sigmoid(w_logit)
+    # ---- optional warm-start (kept very short) ----
+    if use_adam_warmstart and params:
+        opt_adam = torch.optim.AdamW(params, lr=adam_lr, betas=(0.9, 0.999), weight_decay=weight_decay)
+        for _ in range(int(adam_steps)):
+            opt_adam.zero_grad(set_to_none=True)
+            w   = torch.sigmoid(w_logit).clamp(eps_t, one - eps_t)
+            a   = a_lo_t + a_span * torch.sigmoid(a_logit)
+            xc  = x - mu
 
-        pen = -_const_like(x, pen_pi0) * torch.log((1 - w).clamp(min=eps_t, max=1 - eps_t))
+            # spike log-lik
+            lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
-        # bounded a
-        log_a_eff = log_a.clamp(min=log_a_lo, max=log_a_hi)
-        a = log_a_eff.exp()
+            # slab log-lik (fused helper)
+            z1 = (xc - s2 * a) / s
+            z2 = -(xc + s2 * a) / s
+            lg1 = -a * xc + logPhi(z1)
+            lg2 =  a * xc + logPhi(z2)
+            lsum = torch.logaddexp(lg1, lg2)
+            lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
 
-        xc = x - mu
+            llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg).sum()
 
-        # spike likelihood
-        c = _LOG_SQRT_2PI if isinstance(_LOG_SQRT_2PI, torch.Tensor) else _const_like(s, _LOG_SQRT_2PI)
-        lf = -_const_like(x, 0.5) * ((xc / s) ** 2) - torch.log(s) - c
+            penalty = zero
+            if loga_l2 != 0.0:
+                penalty = penalty + torch.tensor(loga_l2, device=device, dtype=dtype) * (a_logit**2)
+            if pen_pi0 != 0.0:
+                penalty = penalty - torch.tensor(pen_pi0, device=device, dtype=dtype) * (
+                    torch.log(w) + torch.log1p(-w)
+                )
+            loss = -(llik - penalty)
+            loss.backward()
+            opt_adam.step()
 
-        # slab log-likelihood (Laplace convolved with Normal)
-        z1 = (xc - (s * s) * a) / s
-        z2 = -(xc + (s * s) * a) / s
-        lg1 = -a * xc + logPhi(z1)
-        lg2 = a * xc + logPhi(z2)
-        lsum = torch.logaddexp(lg1, lg2)
-        lg = safe_log(a / _const_like(x, 2.0)) + _const_like(x, 0.5) * (s * a) ** 2 + lsum
-
-        llik_i = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg)
-
-        loss = -llik_i.sum() + _const_like(x, loga_l2) * (log_a**2) + pen
-
-        # graph-preserving guard
-        huge = _const_like(x, 1e30)
-        loss = torch.nan_to_num(loss, nan=huge, posinf=huge, neginf=huge) + pen
-        loss.backward()
-        return loss
-
+    # ---- LBFGS polish (closure computes ONLY the scalar loss) ----
     if params:
+        opt_lbfgs = torch.optim.LBFGS(
+            params,
+            max_iter=max_iter,
+            tolerance_grad=tol,
+            tolerance_change=tol,
+            line_search_fn="strong_wolfe",
+            history_size=10,
+        )
+
+        def closure():
+            opt_lbfgs.zero_grad(set_to_none=True)
+            w   = torch.sigmoid(w_logit).clamp(eps_t, one - eps_t)
+            a   = a_lo_t + a_span * torch.sigmoid(a_logit)
+            xc  = x - mu
+
+            # spike log-lik (reuses log_s, c_norm)
+            lf = -(half * (xc / s) ** 2) - log_s - c_norm
+
+            # slab log-lik (inline for speed)
+            z1 = (xc - s2 * a) / s
+            z2 = -(xc + s2 * a) / s
+            lg1 = -a * xc + logPhi(z1)
+            lg2 =  a * xc + logPhi(z2)
+            lsum = torch.logaddexp(lg1, lg2)
+            lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
+
+            llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg).sum()
+
+            # penalties as tensors on-device
+            penalty = zero
+            if loga_l2 != 0.0:
+                penalty = penalty + torch.tensor(loga_l2, device=device, dtype=dtype) * (a_logit**2)
+            if pen_pi0 != 0.0:
+                penalty = penalty - torch.tensor(pen_pi0, device=device, dtype=dtype) * (
+                    torch.log(w) + torch.log1p(-w)
+                )
+
+            loss = -(llik - penalty)
+            loss = torch.nan_to_num(loss, nan=torch.tensor(1e30, device=device, dtype=dtype),
+                                    posinf=torch.tensor(1e30, device=device, dtype=dtype),
+                                    neginf=torch.tensor(1e30, device=device, dtype=dtype))
+            loss.backward()
+            return loss
+
         try:
-            opt.step(closure)
+            opt_lbfgs.step(closure)
         except RuntimeError:
-            # fallback: fix 'a' if line search still blows up
-            if log_a.requires_grad:
-                log_a.requires_grad_(False)
+            # fallback: freeze 'a' if line search fails; keep everything on-device
+            if a_logit.requires_grad:
+                a_logit.requires_grad_(False)
                 params2 = [p for p in (w_logit, mu) if p.requires_grad]
                 if params2:
                     torch.optim.LBFGS(
@@ -219,75 +196,69 @@ def ebnm_point_laplace(
                         tolerance_grad=tol,
                         tolerance_change=tol,
                         line_search_fn="strong_wolfe",
+                        history_size=10,
                     ).step(closure)
 
-    # ---- posterior (same bounded a) ----
+    # ---- posterior & summaries (no penalties; single no_grad block) ----
     with torch.no_grad():
-        pi0 = torch.sigmoid(w_logit).clamp(eps_t, 1 - eps_t)
+        w   = torch.sigmoid(w_logit).clamp(eps_t, one - eps_t)
+        a   = a_lo_t + a_span * torch.sigmoid(a_logit)
+        xc  = x - mu
 
-        log_a_eff = log_a.clamp(min=log_a_lo, max=log_a_hi)
-        a = log_a_eff.exp()
-        mu_v = float(mu.item())
+        # spike
+        lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
-        xc = x - mu
-
-        # spike loglik
-        c = _LOG_SQRT_2PI if isinstance(_LOG_SQRT_2PI, torch.Tensor) else _const_like(s, _LOG_SQRT_2PI)
-        lf = -_const_like(x, 0.5) * ((xc / s) ** 2) - torch.log(s) - c
-
-        # slab loglik
-        z1 = (xc - (s * s) * a) / s
-        z2 = -(xc + (s * s) * a) / s
+        # slab
+        z1 = (xc - s2 * a) / s
+        z2 = -(xc + s2 * a) / s
         lg1 = -a * xc + logPhi(z1)
-        lg2 = a * xc + logPhi(z2)
+        lg2 =  a * xc + logPhi(z2)
         lsum = torch.logaddexp(lg1, lg2)
-        lg = safe_log(a / _const_like(x, 2.0)) + _const_like(x, 0.5) * (s * a) ** 2 + lsum
+        lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
 
-        # posterior inclusion prob for slab
-        log_num = torch.log(pi0) + lg
-        log_denom = torch.logaddexp(torch.log1p(-pi0) + lf, log_num)
-        gamma = torch.exp(log_num - log_denom).clamp(_const_like(x, 0.0), _const_like(x, 1.0))
+        # posterior inclusion prob (slab)
+        log_num   = torch.log(w) + lg
+        log_denom = torch.logaddexp(torch.log1p(-w) + lf, log_num)
+        gamma     = torch.exp(log_num - log_denom).clamp(zero, one)
 
-        # mixture weight within the slab (sign branch)
+        # sign-mixture inside slab
         lam = torch.exp(lg1 - lsum)
         lam = torch.where(torch.isfinite(lsum), lam, torch.full_like(lsum, 0.5))
 
-        # truncated-normal moments for Z given sign branch
-        m_pos = xc - s * s * a
-        m_neg = xc + s * s * a
-        infp = torch.full_like(x, float("inf"))
-        infn = -infp
+        # truncated-normal moments
+        m_pos = xc - s2 * a
+        m_neg = xc + s2 * a
+        infp  = torch.full_like(x, float("inf"))
+        infn  = -infp
 
-        EX_pos = my_etruncnorm(_const_like(x, 0.0), infp, mean=m_pos, sd=s)
-        EX2_pos = my_e2truncnorm(_const_like(x, 0.0), infp, mean=m_pos, sd=s)
-        EX_neg = my_etruncnorm(infn, _const_like(x, 0.0), mean=m_neg, sd=s)
-        EX2_neg = my_e2truncnorm(infn, _const_like(x, 0.0), mean=m_neg, sd=s)
+        EX_pos  = my_etruncnorm(zero, infp, mean=m_pos, sd=s)
+        EX2_pos = my_e2truncnorm(zero, infp, mean=m_pos, sd=s)
+        EX_neg  = my_etruncnorm(infn, zero, mean=m_neg, sd=s)
+        EX2_neg = my_e2truncnorm(infn, zero, mean=m_neg, sd=s)
 
-        EX = lam * EX_pos + (1 - lam) * EX_neg
-        EX2 = lam * EX2_pos + (1 - lam) * EX2_neg
+        EX  = lam * EX_pos  + (one - lam) * EX_neg
+        EX2 = lam * EX2_pos + (one - lam) * EX2_neg
 
-        # combine spike/slab
-        post_mean = gamma * (EX + mu) + (1 - gamma) * mu
-        post_mean2 = gamma * (EX2 + _const_like(x, 2.0) * mu * EX + mu * mu) + (1 - gamma) * (mu * mu)
-        post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
+        post_mean  = gamma * (EX + mu) + (one - gamma) * mu
+        post_mean2 = gamma * (EX2 + two * mu * EX + mu * mu) + (one - gamma) * (mu * mu)
+        post_sd    = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
 
-        # mixture log-likelihood (no hard overrides)
-        log_lik = torch.logaddexp(torch.log1p(-pi0) + lf, torch.log(pi0.clamp_min(eps_t)) + lg).sum().item()
+        # PURE marginal log-likelihood
+        llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w.clamp_min(eps_t)) + lg).sum()
 
-        # Optional early-exit guard; keep semantics
-        if float(pi0.item()) < tresh_pi0:
-            post_mean = torch.zeros_like(x)
-            post_mean2 = torch.zeros_like(x) + _const_like(x, 1e-4)
-            post_sd = post_mean2.sqrt()
-            # consistent spike-only log-lik:
-            log_lik = (torch.log1p(-pi0) + lf).sum().item()
+        # spike-only shortcut if pi0 (slab weight) tiny
+        if float(w.item()) < float(thresh_pi0_t.item()):
+            post_mean  = torch.zeros_like(x) + mu
+            post_mean2 = torch.zeros_like(x) + mu * mu + torch.tensor(1e-4, device=device, dtype=dtype)
+            post_sd    = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
+            llik       = lf.sum()
 
     return EBNMLaplaceResult(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi0=float(1 - pi0),  # kept semantics of original return
-        a=float(a),
-        mu=mu_v,
-        log_lik=float(log_lik),
+        pi0=float(w.item()),     # mixture weight of the Laplace branch (slab)
+        a=float(a.item()),
+        mu=float(mu.item()),
+        log_lik=float(llik.item()),
     )

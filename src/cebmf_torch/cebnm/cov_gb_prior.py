@@ -262,8 +262,9 @@ def cgb_posterior_means(
         total_loss = 0.0
         for xb, xhat, se in dataloader:  # already device tensors
             pi1, pi2, mu2 = model(xb)
-            gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
+           
             with torch.no_grad():
+                gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
                 sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se)
             loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
             optimizer.zero_grad()

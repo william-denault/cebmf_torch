@@ -276,7 +276,6 @@ notebooks in the `examples/` directory of the source code.
 .. toctree::
    :maxdepth: 1
 
-   notebooks/spiked_emdn.ipynb
-   notebooks/model_RNA_ATAC.ipynb
-   notebooks/cEBMF_with_CLIP.ipynb
+   notebooks/spiked_emdn.ipynb 
+   notebooks/Tiled-clustering model.ipynb
 

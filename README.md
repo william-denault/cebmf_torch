@@ -19,7 +19,7 @@
 - Empirical Bayes Normal Means (EBNM) solvers (normal, exponential, Laplace, point-mass, etc.)
 - GPU support for all operations
 - Mini-batch EM and Adam optimizers for mixture weights
-- Analytical truncated normal moments (no SciPy dependency)
+- Analytical truncated normal moments for exponential prior
 - Easy-to-use API for both beginners and advanced users
 
 ## Installation

@@ -239,10 +239,11 @@ In this case, we again learn the function :math:`\pi(z_i)` with a neural network
 
 References
 ----------
-
-* See this `YouTube tutorial <https://www.youtube.com/watch?v=PhNBzmTpVVg>`_ for a video explanation.
+* Covariate-moderated Empirical Bayes Matrix Factorization: Denault, et al. 2025 NeuRIPS. |statme-shield|
+* See also:
+*  `Intro to EBMF <https://www.youtube.com/watch?v=PhNBzmTpVVg>`_ for a video explanation of EBMF.
+* Empirical Bayes Matrix Factorization: Wang & Stephens 2021 JMLR. |statme-shield|
 * Non-negative matrix factorization: `Lee \& Seung 1999 <https://www.nature.com/articles/44565>`_
-* Covariate-moderated Empirical Bayes Matrix Factorization: Denault, et al. 2025. |statme-shield|
 
 .. |statme-shield| image:: https://img.shields.io/badge/stat.ME-arXiv%32505.11639-B31B1B.svg
   :target: https://arxiv.org/abs/2505.11639 

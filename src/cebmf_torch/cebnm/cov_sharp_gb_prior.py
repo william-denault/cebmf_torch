@@ -1,5 +1,5 @@
 # ============================================================
-# Covariate Global-Bayes Prior Solver (CGB Solver, Torch-only)
+# Covariate Generalized-Binary Prior Solver (CGB Solver, Torch-only)
 # ============================================================
 
 import torch
@@ -16,9 +16,9 @@ from cebmf_torch.utils.standard_scaler import standard_scale
 # -------------------------
 class DensityRegressionDataset(Dataset):
     def __init__(self, X, betahat, sebetahat):
-        self.X = torch.as_tensor(X, dtype=torch.float32)
-        self.betahat = torch.as_tensor(betahat, dtype=torch.float32)
-        self.sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32)
+        self.X = X
+        self.betahat = betahat
+        self.sebetahat = sebetahat
 
     def __len__(self):
         return len(self.X)
@@ -28,12 +28,14 @@ class DensityRegressionDataset(Dataset):
 
 
 # -------------------------
+
+
 # MDN Model: π₂(x) + global μ₂
 # -------------------------
 class CgbNet(nn.Module):
     def __init__(self, input_dim, hidden_dim=32, n_layers=2):
         """
-        Initialize a Covariate Global-Bayes (CGB) neural network.
+        Initialize a Covariate Generalized-Binary (CGB) neural network.
 
         Parameters
         ----------
@@ -161,6 +163,27 @@ class CgbPosteriorResult:
         self.model_param = model_param
 
 
+@torch.no_grad()
+def compute_marginal_loglik_full(model, X, betahat, se, sigma2_sq, eps=1e-12):
+    """
+    Exact marginal log-likelihood for current params.
+    No penalty, computed on the FULL dataset (not batches).
+    """
+    model.eval()
+    pi1, pi2, mu2 = model(X)
+
+    var1 = se**2
+    var2 = se**2 + sigma2_sq
+
+    # log component densities
+    logp1 = -0.5 * ((betahat - 0.0) ** 2 / var1 + torch.log(2 * torch.pi * var1))
+    logp2 = -0.5 * ((betahat - mu2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
+
+    # stable log mixture
+    log_mix = torch.logaddexp((pi1.clamp_min(eps)).log() + logp1, (pi2.clamp_min(eps)).log() + logp2)
+    return log_mix.sum()  # scalar
+
+
 # -------------------------
 # Main solver
 # -------------------------
@@ -170,16 +193,18 @@ def sharp_cgb_posterior_means(
     sebetahat,
     n_epochs=50,
     n_layers=2,
+    
+    omega=0.02,
     hidden_dim=32,
     batch_size=128,
-    ratio=0.01,
     lr=1e-3,
     penalty: float = 1.5,
     model_param=None,
-    eps=1e-3,
+    eps=1e-8,
+    device: torch.device | None = None,
 ):
     """
-    Fit a Covariate Global-Bayes (CGB) model to estimate the prior distribution of effects.
+    Fit a Covariate Generalized-Binary (CGB) model to estimate the prior distribution of effects.
 
     Parameters
     ----------
@@ -197,51 +222,52 @@ def sharp_cgb_posterior_means(
         Number of hidden units in each layer (default=32).
     batch_size : int, optional
         Batch size for training (default=128).
-    ratio : float, optional
-        Ratio for updating slab variance (default=0.01).
     lr : float, optional
         Learning rate for the optimizer (default=1e-3).
     penalty : float, optional
         Penalty for spike probability (default=1.5).
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
-    eps : float, optional
-        Small value to avoid numerical issues (default=1e-3).
 
     Returns
     -------
     CgbPosteriorResult
         Container with posterior means, standard deviations, and model parameters.
     """
-    # Standardize X
+
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # ---- to tensor on device
+    X = torch.as_tensor(X, dtype=torch.float32, device=device)
+    betahat = torch.as_tensor(betahat, dtype=torch.float32, device=device)
+    sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32, device=device)
+
     if X.ndim == 1:
         X = X.reshape(-1, 1)
-    X_scaled = standard_scale(X)
 
+    # ---- scale on device
+    X_scaled = standard_scale(X)  # stays on device
+
+    # ---- dataset / loader (GPU tensors, keep num_workers=0)
     dataset = DensityRegressionDataset(X_scaled, betahat, sebetahat)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-    # Init model
-    model = CgbNet(input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers)
+    # ---- model / optimizer on device
+    model = CgbNet(input_dim=X_scaled.shape[1], hidden_dim=hidden_dim, n_layers=n_layers).to(device)
     if model_param is not None:
         model.load_state_dict(model_param)
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    sigma2_sq = torch.tensor(1.0, dtype=torch.float32)  # slab variance
+    sigma2_sq = torch.tensor(1, dtype=torch.float32, device=device)
 
-    # Training
+    # ---- training
     for epoch in range(n_epochs):
         total_loss = 0.0
-        for xb, xhat, se in dataloader:
-            pi1, pi2, mu2 = model(xb)
-
-            # E-step
-
-            # M-step
-
-            sigma2_sq = ratio * torch.abs(mu2 + eps)
-
-            # Loss + update
+        for xb, xhat, se in dataloader:  # already device tensors
+            pi1, pi2, mu2 = model(xb) 
+            with torch.no_grad():
+                gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
+                sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se)*omega
             loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
             optimizer.zero_grad()
             loss.backward()
@@ -250,24 +276,32 @@ def sharp_cgb_posterior_means(
 
         if (epoch + 1) % 10 == 0:
             print(
-                f"[CGB] Epoch {epoch + 1}/{n_epochs}, Loss={total_loss / len(dataloader):.4f}, "
+                f"[CGB] Epoch {epoch + 1}/{n_epochs}, "
+                f"Loss={total_loss / len(dataloader):.4f}, "
                 f"mu2={mu2.item():.3f}, sigma2={sigma2_sq.sqrt().item():.3f}"
             )
 
-    # Posterior inference
+    # ---- posterior inference
     model.eval()
     with torch.no_grad():
         pi1, pi2, mu2 = model(dataset.X)
         post_mean, post_var = posterior_point_mass_normal(
             betahat=dataset.betahat,
             sebetahat=dataset.sebetahat,
-            pi=pi1,  # spike prob
+            pi=pi1,
             mu0=0.0,
             mu1=mu2.item(),
             sigma_0=sigma2_sq.sqrt().item(),
         )
         post_mean2 = post_var + post_mean**2
         post_sd = torch.sqrt(torch.clamp(post_var, min=0.0))
+        log_marginal = compute_marginal_loglik_full(
+            model,
+            X=dataset.X,  # X_scaled (full)
+            betahat=dataset.betahat,  # full
+            se=dataset.sebetahat,  # full
+            sigma2_sq=sigma2_sq,
+        )
 
     return CgbPosteriorResult(
         post_mean=post_mean,
@@ -276,6 +310,6 @@ def sharp_cgb_posterior_means(
         pi=pi1,
         mu_2=mu2.item(),
         sigma_2=sigma2_sq.sqrt().item(),
-        loss=total_loss,
+        loss=-float(log_marginal.item()),
         model_param=model.state_dict(),
     )
