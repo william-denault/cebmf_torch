@@ -51,9 +51,10 @@ def ebnm_point_laplace(
     tresh_pi0: float = 1e-3,           # spike-only shortcut (post-processing only)
     eps: float = 1e-12,
     pen_pi0: float = 0.0,              # optional symmetric prior on pi0 (size-independent); 0=off
-    use_adam_warmstart: bool = False,  # off by default; set True to use a short warm-up
-    adam_steps: int = 8,
-    adam_lr: float = 1e-2,
+    use_adam_warmstart: bool = True,  # off by default; set True to use a short warm-up
+    adam_steps: int = 20,
+    adam_lr: float = 1e-3,
+    weight_decay=0.01,
 ) -> EBNMLaplaceResult:
     """
     Efficient direct maximization of the observed marginal log-likelihood for a point-Laplace EBNM.
@@ -105,7 +106,8 @@ def ebnm_point_laplace(
 
     # ---- tiny optional warm-start (kept short) ----
     if use_adam_warmstart and params:
-        opt_adam = torch.optim.AdamW(params, lr=adam_lr, betas=(0.9, 0.999), weight_decay=0.0)
+        opt_adam = torch.optim.AdamW(params, lr=adam_lr, betas=(0.9, 0.999),
+                                     weight_decay= weight_decay)
         for _ in range(int(adam_steps)):
             opt_adam.zero_grad(set_to_none=True)
             # lean forward: only loss for speed
