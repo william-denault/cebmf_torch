@@ -4,6 +4,14 @@
 [![unittest](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml/badge.svg)](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml)
 [![docs](https://readthedocs.org/projects/cebmf-torch/badge/?version=latest)](https://cebmf-torch.readthedocs.io/en/latest/)
 
+## Documentation & Examples
+
+- Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
+- Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
+  - To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
+  (or `pip install ".[examples]"` if using `pip`). 
+
+
 ## Overview
 
 **cebmf_torch** is a pure-PyTorch implementation of Empirical Bayes Matrix Factorization (EBMF) and Empirical Bayes Normal Means (EBNM) methods. It is designed for scalable, GPU-accelerated analysis of large datasets, with a focus on genomics and other high-dimensional applications. The package provides flexible prior families, efficient mini-batch EM, and full support for GPU computation.
@@ -86,12 +94,7 @@ print(fit.L.shape, fit.F.shape, fit.tau.item())
 ```
 
 
-## Documentation & Examples
 
-- Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
-- Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
-  - To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
-  (or `pip install ".[examples]"` if using `pip`). 
 
 ## Notes & Tips
 
