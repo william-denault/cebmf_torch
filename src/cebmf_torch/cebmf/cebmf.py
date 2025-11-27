@@ -85,6 +85,7 @@ class cEBMF:
         K: int = 5,
         prior_L: str = "norm",
         prior_F: str = "norm",
+        internal_epoch: int =10,
         prior_L_kwargs: dict | None = None,
         prior_F_kwargs: dict | None = None,
         allow_backfitting: bool = True,
@@ -122,7 +123,7 @@ class cEBMF:
         self.N, self.P = self.Y.shape
         self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
-
+        self.internal_epoch = internal_epoch
         self._factors_initialised = False
 
     @torch.no_grad()
@@ -286,6 +287,7 @@ class cEBMF:
             resL = self.prior_L_fn.fit(
                 X=X_model,
                 betahat=lhat,
+                internal_epoch=self.internal_epoch,
                 sebetahat=se_l,
                 model_param=self.model_state_L[k],
             )
@@ -330,6 +332,8 @@ class cEBMF:
                 X=X_model,
                 betahat=fhat,
                 sebetahat=se_f,
+                
+                internal_epoch=self.internal_epoch,
                 model_param=self.model_state_F[k],
             )
 
