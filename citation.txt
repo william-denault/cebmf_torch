@@ -1,0 +1,6 @@
+@inproceedings{Denault2025cEBMF,
+  title        = {Covariate-moderated Empirical Bayes Matrix Factorization},
+  author       = {William R. P. Denault and Karl Tayeb and Peter Carbonetto and Jason Willwerscheid and Matthew Stephens},
+  booktitle    = {Proceedings of the 39th Conference on Neural Information Processing Systems (NeurIPS 2025)},
+  year         = {2025}
+}
