@@ -4,7 +4,8 @@
 [![unittest](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml/badge.svg)](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml)
 [![docs](https://readthedocs.org/projects/cebmf-torch/badge/?version=latest)](https://cebmf-torch.readthedocs.io/en/latest/)
 
-*See [here](cEBMF_demo.ipynb) for a cEBMF demo in Google Colab.*
+*See [here](cEBMF_demo.ipynb) for a Jupyter notebook demo of cEBMF, or
+open up the notebook [in Google Colab](https://colab.research.google.com/github/pcarbo/pcarbo/blob/master/cEBMF_demo.ipynb).*
 
 ## Documentation & Examples
 
