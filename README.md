@@ -6,6 +6,8 @@
 
 ## Documentation & Examples
 
+- See [here](cEBMF_demo.ipynb) for a cEBMF demo in Google Colab.
+
 - Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
 
 - Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
