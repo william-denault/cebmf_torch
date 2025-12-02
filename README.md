@@ -3,6 +3,7 @@
 [![codecov](https://codecov.io/gh/william-denault/cebmf_torch/branch/main/graph/badge.svg)](https://codecov.io/gh/william-denault/cebmf_torch)
 [![unittest](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml/badge.svg)](https://github.com/william-denault/cebmf_torch/actions/workflows/test.yml)
 [![docs](https://readthedocs.org/projects/cebmf-torch/badge/?version=latest)](https://cebmf-torch.readthedocs.io/en/latest/)
+[![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pcarbo/pcarbo/blob/master/cEBMF_demo.ipynb)
 
 *See [here](cEBMF_demo.ipynb) for a Jupyter notebook demo of cEBMF, or
 open up the notebook [in Google Colab](https://colab.research.google.com/github/pcarbo/pcarbo/blob/master/cEBMF_demo.ipynb).*
