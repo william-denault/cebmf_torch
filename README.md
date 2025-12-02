@@ -5,8 +5,8 @@
 [![docs](https://readthedocs.org/projects/cebmf-torch/badge/?version=latest)](https://cebmf-torch.readthedocs.io/en/latest/)
 [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pcarbo/pcarbo/blob/master/cEBMF_demo.ipynb)
 
-*See [here](cEBMF_demo.ipynb) for a Jupyter notebook demo of cEBMF, or
-open up the notebook [in Google Colab](https://colab.research.google.com/github/pcarbo/pcarbo/blob/master/cEBMF_demo.ipynb).*
+*See [here](cEBMF_demo.ipynb) for a Jupyter notebook demo of cEBMF.
+You can also open up the notebook [directly in Google Colab](https://colab.research.google.com/github/pcarbo/pcarbo/blob/master/cEBMF_demo.ipynb).*
 
 ## Documentation & Examples
 
