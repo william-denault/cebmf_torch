@@ -7,10 +7,11 @@
 ## Documentation & Examples
 
 - Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
-- Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
-  - To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
-  (or `pip install ".[examples]"` if using `pip`). 
 
+- Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
+
+- To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
+  (or `pip install ".[examples]"` if using `pip`). 
 
 ## Overview
 
