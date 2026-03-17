@@ -74,9 +74,9 @@ def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
     first_sum = torch.sum(torch.log(inner_sum))  # scalar
 
     if penalty > 1:
-        # penalize the (assumed) spike component's total mass in the batch
-        pi_clamped = torch.clamp(torch.sum(pred_pi[:, 0]), min=epsilon)
-        penalized_log_likelihood_value = first_sum + (penalty - 1) * torch.log(pi_clamped)
+        # penalize per-gene spike probability (Dirichlet-like prior on component 0)
+        log_pi0 = torch.log(torch.clamp(pred_pi[:, 0], min=epsilon))
+        penalized_log_likelihood_value = first_sum + (penalty - 1) * torch.sum(log_pi0)
     else:
         penalized_log_likelihood_value = first_sum
 
