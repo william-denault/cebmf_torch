@@ -33,7 +33,7 @@ def test_cash_posterior_means_mse(n_samples):
         hidden_dim=32,
         batch_size=128,
         lr=1e-3,
-        penalty=1.5,
+        penalty=1.01,
     )
 
     # Compute mean squared error between posterior mean and truth
