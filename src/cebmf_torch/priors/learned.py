@@ -100,6 +100,7 @@ class LearnedBuilder(PriorBuilder):
         betahat: Tensor,
         sebetahat: Tensor,
         model_param: Any | None = None,
+        internal_epoch: int | None = None   
     ) -> Prior:
         """
         Fit the learned prior to the data.
@@ -125,7 +126,12 @@ class LearnedBuilder(PriorBuilder):
         ValueError
             If the prior type is unknown or unsupported.
         """
-        obj = builder_functions[self.type](X, betahat, sebetahat, model_param=model_param, **self.kwargs)
+        obj = builder_functions[self.type](X,
+                                            betahat,
+                                            sebetahat,
+                                            model_param=model_param,
+                                            n_epochs=internal_epoch,
+                                            **self.kwargs)
 
         # A bit annoying that the different types have different ways of handling pi0
         match self.type:

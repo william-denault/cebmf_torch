@@ -77,6 +77,7 @@ class ASHBuilder(PriorBuilder):
         betahat: Tensor,
         sebetahat: Tensor,
         model_param: Any | None = None,
+        internal_epoch: Any | None = None,
     ) -> Prior:
         """
         Fit the ASH mixture prior to the data.

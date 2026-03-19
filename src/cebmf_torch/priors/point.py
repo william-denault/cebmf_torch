@@ -88,6 +88,7 @@ class PointBuilder(PriorBuilder):
         betahat: Tensor,
         sebetahat: Tensor,
         model_param: Any | None = None,
+        internal_epoch: Any | None = None,
     ) -> Prior:
         """
         Fit the point prior to the data.
