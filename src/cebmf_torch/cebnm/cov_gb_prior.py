@@ -273,10 +273,7 @@ def cgb_posterior_means(
         
         # 2. GRADIENT DESCENT (Neural Net update over batches)
         model.train()
-        total_loss = 0.0
-
-        model.train()
-        total_loss = 0.0
+        total_loss = 0.0 
         for xb, xhat, se in dataloader:  # already device tensors
             pi1, pi2, mu2 = model(xb)
 
