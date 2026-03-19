@@ -4,9 +4,9 @@ from typing import Any
 
 from torch import Tensor
 
+from cebmf_torch.ebnm.generalized_binary import ebnm_gb
 from cebmf_torch.ebnm.point_exp import ebnm_point_exp
 from cebmf_torch.ebnm.point_laplace import ebnm_point_laplace
-from cebmf_torch.ebnm.generalized_binary import ebnm_gb
 
 from .base import Prior, PriorBuilder
 
@@ -25,7 +25,7 @@ class PointPriorType(StrEnum):
 
     LAPLACE = auto()
     EXP = auto()
-    GBINARY =auto()
+    GBINARY = auto()
 
 
 builder_functions: dict[PointPriorType, Callable] = {
