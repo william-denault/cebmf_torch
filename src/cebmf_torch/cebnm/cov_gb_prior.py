@@ -92,13 +92,14 @@ def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8):
     logp2 = -0.5 * ((targets - mu_2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
 
     log_mix = torch.logaddexp(torch.log(pi_1.clamp_min(eps)) + logp1, torch.log(pi_2.clamp_min(eps)) + logp2)
-    
+
     if penalty > 1.0:
         # Penalize per-observation spike probability
         log_pi0 = torch.log(pi_1.clamp_min(eps))
         log_mix = log_mix + (penalty - 1.0) * log_pi0
-        
+
     return -(log_mix.mean())
+
 
 # -------------------------
 # E-step responsibilities (γ₂)
@@ -259,8 +260,6 @@ def cgb_posterior_means(
 
     # ---- training
     for epoch in range(n_epochs):
-
-
         model.eval()
         with torch.no_grad():
             full_pi1, full_pi2, full_mu2 = model(dataset.X)
@@ -270,16 +269,16 @@ def cgb_posterior_means(
             )
             # M-Step: Update global variance
             sigma2_sq = m_step_sigma2(gamma2, full_mu2, dataset.betahat, dataset.sebetahat)
-        
+
         # 2. GRADIENT DESCENT (Neural Net update over batches)
         model.train()
-        total_loss = 0.0 
+        total_loss = 0.0
         for xb, xhat, se in dataloader:  # already device tensors
             pi1, pi2, mu2 = model(xb)
 
             # Calculate loss using the fixed, global sigma2_sq
             loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
-            
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
