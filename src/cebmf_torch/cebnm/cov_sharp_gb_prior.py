@@ -93,10 +93,9 @@ def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8):
 
     log_mix = torch.logaddexp(torch.log(pi_1.clamp_min(eps)) + logp1, torch.log(pi_2.clamp_min(eps)) + logp2)
     if penalty > 1.0:
-        # take mean spike prob for stability
-        pi0_clamped = pi_1.mean().clamp_min(eps)
-        penalty_term = (penalty - 1.0) * torch.log(pi0_clamped)
-        log_mix = log_mix + penalty_term
+        # penalize per-gene spike probability (Dirichlet-like prior on component 0)
+        log_pi0 = torch.log(pi_1.clamp_min(eps))
+        log_mix = log_mix + (penalty - 1.0) * log_pi0
     return -(log_mix.mean())
 
 
