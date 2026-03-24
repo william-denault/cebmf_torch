@@ -144,6 +144,6 @@ class LearnedBuilder(PriorBuilder):
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,
             loss=float(obj.loss),
-            model_param=model_param,
+            model_param=obj.model_param,
             pi0_null=pi0_null,
         )
