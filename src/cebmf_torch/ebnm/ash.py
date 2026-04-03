@@ -47,10 +47,7 @@ _VALID_OPTIMIZERS = {"em", "lbfgs"}
 def _optimize_mixture_weights(L: torch.Tensor, config: AshConfig) -> torch.Tensor:
     """Optimize mixture weights and return log probabilities."""
     if config.optimizer not in _VALID_OPTIMIZERS:
-        raise ValueError(
-            f"Unknown optimizer {config.optimizer!r}. "
-            f"Choose from {_VALID_OPTIMIZERS}."
-        )
+        raise ValueError(f"Unknown optimizer {config.optimizer!r}. Choose from {_VALID_OPTIMIZERS}.")
     if config.optimizer == "lbfgs":
         pi0 = optimize_pi_logL_lbfgs(L, penalty=config.penalty)
     elif config.optimizer == "em":
@@ -86,7 +83,7 @@ def _ash_exp(
     config: AshConfig,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, PosteriorMean]:
     scale = autoselect_scales_mix_exp(x, s, mult=config.mult)  # (K,) with scale[0]=0 (spike)
-    L =  get_data_loglik_exp_torch(x, s, scale=scale)  # (J,K)
+    L = get_data_loglik_exp_torch(x, s, scale=scale)  # (J,K)
     log_pi0 = _optimize_mixture_weights(L, config)
     pm_obj = posterior_mean_exp(x, s, log_pi=log_pi0, scale=scale)
     return scale, log_pi0, L, pm_obj

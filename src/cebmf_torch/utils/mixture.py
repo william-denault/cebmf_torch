@@ -239,6 +239,7 @@ def autoselect_scales_mix_exp(
 # L-BFGS mixture weight optimizer (alternative to EM)
 # ============================================================
 
+
 @torch.no_grad()
 def optimize_pi_logL_lbfgs(
     logL: torch.Tensor,
@@ -301,15 +302,16 @@ def optimize_pi_logL_lbfgs(
     pen_idx = torch.where(prior_minus_1 > 0)[0]
 
     if pen_idx.numel() > 0:
-        I_rows = torch.zeros(pen_idx.numel(), K, device=device,
-                             dtype=torch.float64)
+        I_rows = torch.zeros(pen_idx.numel(), K, device=device, dtype=torch.float64)
         for ii, ki in enumerate(pen_idx):
             I_rows[ii, ki] = 1.0
         L_aug = torch.cat([I_rows, L_data], dim=0)
-        w_aug = torch.cat([
-            prior_minus_1[pen_idx],
-            torch.ones(n, device=device, dtype=torch.float64),
-        ])
+        w_aug = torch.cat(
+            [
+                prior_minus_1[pen_idx],
+                torch.ones(n, device=device, dtype=torch.float64),
+            ]
+        )
     else:
         L_aug = L_data
         w_aug = torch.ones(n, device=device, dtype=torch.float64)
@@ -317,13 +319,16 @@ def optimize_pi_logL_lbfgs(
     w_aug = w_aug / w_aug.sum()
 
     # Solve via L-BFGS in float64.
-    z = torch.zeros(K, device=device, dtype=torch.float64,
-                    requires_grad=True)
+    z = torch.zeros(K, device=device, dtype=torch.float64, requires_grad=True)
 
     optimizer = torch.optim.LBFGS(
-        [z], lr=1.0, max_iter=2000,
-        tolerance_grad=1e-8, tolerance_change=1e-10,
-        history_size=10, line_search_fn='strong_wolfe',
+        [z],
+        lr=1.0,
+        max_iter=2000,
+        tolerance_grad=1e-8,
+        tolerance_change=1e-10,
+        history_size=10,
+        line_search_fn="strong_wolfe",
     )
 
     @torch.no_grad()

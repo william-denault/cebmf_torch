@@ -4,8 +4,8 @@ import math
 
 import torch
 
-from cebmf_torch.utils.mixture import autoselect_scales_mix_norm, optimize_pi_logL, optimize_pi_logL_lbfgs
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
+from cebmf_torch.utils.mixture import autoselect_scales_mix_norm, optimize_pi_logL, optimize_pi_logL_lbfgs
 
 
 def _penalised_ll(pi, logL, penalty=10.0):
@@ -29,7 +29,10 @@ def test_lbfgs_produces_sparse_solution():
     se = torch.ones(5000)
     scale = autoselect_scales_mix_norm(betahat, se, mult=math.sqrt(2))
     logL = get_data_loglik_normal_torch(
-        betahat, se, torch.zeros_like(scale), scale,
+        betahat,
+        se,
+        torch.zeros_like(scale),
+        scale,
     )
 
     pi_em = optimize_pi_logL(logL, penalty=10.0, verbose=False)
@@ -38,9 +41,7 @@ def test_lbfgs_produces_sparse_solution():
     # Compare at the same threshold: components > 1e-6
     n_em = (pi_em > 1e-6).sum().item()
     n_lbfgs = (pi_lbfgs > 1e-6).sum().item()
-    assert n_lbfgs < n_em, (
-        f"L-BFGS ({n_lbfgs}) should have fewer active than EM ({n_em})"
-    )
+    assert n_lbfgs < n_em, f"L-BFGS ({n_lbfgs}) should have fewer active than EM ({n_em})"
 
 
 def test_lbfgs_simplex_constraint():
@@ -50,7 +51,10 @@ def test_lbfgs_simplex_constraint():
     se = torch.ones(500) * 0.5
     scale = autoselect_scales_mix_norm(betahat, se, mult=math.sqrt(2))
     logL = get_data_loglik_normal_torch(
-        betahat, se, torch.zeros_like(scale), scale,
+        betahat,
+        se,
+        torch.zeros_like(scale),
+        scale,
     )
 
     pi = optimize_pi_logL_lbfgs(logL, penalty=10.0)
@@ -65,7 +69,10 @@ def test_optimizer_em_is_deterministic():
     se = torch.ones(500)
     scale = autoselect_scales_mix_norm(betahat, se)
     logL = get_data_loglik_normal_torch(
-        betahat, se, torch.zeros_like(scale), scale,
+        betahat,
+        se,
+        torch.zeros_like(scale),
+        scale,
     )
 
     pi_a = optimize_pi_logL(logL, penalty=10.0, verbose=False)
@@ -81,7 +88,10 @@ def test_lbfgs_spike_dominated():
     se = torch.ones(1000)
     scale = autoselect_scales_mix_norm(betahat, se, mult=math.sqrt(2))
     logL = get_data_loglik_normal_torch(
-        betahat, se, torch.zeros_like(scale), scale,
+        betahat,
+        se,
+        torch.zeros_like(scale),
+        scale,
     )
 
     pi = optimize_pi_logL_lbfgs(logL, penalty=10.0)
@@ -111,7 +121,10 @@ def test_lbfgs_vs_em_spike_dominated():
 
     scale = autoselect_scales_mix_norm(betahat, se, mult=math.sqrt(2))
     logL = get_data_loglik_normal_torch(
-        betahat, se, torch.zeros_like(scale), scale,
+        betahat,
+        se,
+        torch.zeros_like(scale),
+        scale,
     )
 
     # Pure EM
@@ -122,21 +135,12 @@ def test_lbfgs_vs_em_spike_dominated():
     # L-BFGS should be sparser
     n_active_em = (pi_em > 1e-6).sum().item()
     n_active_lbfgs = (pi_lbfgs > 0).sum().item()
-    assert n_active_lbfgs < n_active_em, (
-        f"L-BFGS ({n_active_lbfgs}) should have fewer active than "
-        f"EM ({n_active_em})"
-    )
+    assert n_active_lbfgs < n_active_em, f"L-BFGS ({n_active_lbfgs}) should have fewer active than EM ({n_active_em})"
 
     # L-BFGS should have higher spike weight
-    assert pi_lbfgs[0] > pi_em[0] + 0.01, (
-        f"L-BFGS spike ({pi_lbfgs[0]:.4f}) should exceed "
-        f"EM spike ({pi_em[0]:.4f})"
-    )
+    assert pi_lbfgs[0] > pi_em[0] + 0.01, f"L-BFGS spike ({pi_lbfgs[0]:.4f}) should exceed EM spike ({pi_em[0]:.4f})"
 
     # L-BFGS should achieve higher penalised log-likelihood
     obj_em = _penalised_ll(pi_em, logL)
     obj_lbfgs = _penalised_ll(pi_lbfgs, logL)
-    assert obj_lbfgs > obj_em, (
-        f"L-BFGS objective ({obj_lbfgs:.2f}) should exceed "
-        f"EM objective ({obj_em:.2f})"
-    )
+    assert obj_lbfgs > obj_em, f"L-BFGS objective ({obj_lbfgs:.2f}) should exceed EM objective ({obj_em:.2f})"

@@ -22,7 +22,6 @@ from cebmf_torch.ebnm.ash import PriorType, ash
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
 
-
 # ============================================================
 # Model classes
 # ============================================================
@@ -58,8 +57,7 @@ class LcashNet(nn.Module):
         # Small random perturbation breaks symmetry across features.
         # Starting from exact zeros leads Adam to different local
         # optima on high-dimensional feature sets (F > 100).
-        nn.init.normal_(self.linear.weight, mean=0.0, std=0.01,
-                        generator=generator)
+        nn.init.normal_(self.linear.weight, mean=0.0, std=0.01, generator=generator)
         if log_pi_init is not None:
             with torch.no_grad():
                 self.linear.bias.copy_(log_pi_init)
@@ -120,9 +118,7 @@ class PropOddsLcashNet(nn.Module):
         self._K = K
 
     @staticmethod
-    def _init_cutpoints_from_pi(
-        log_pi_init: torch.Tensor, K: int
-    ) -> torch.Tensor:
+    def _init_cutpoints_from_pi(log_pi_init: torch.Tensor, K: int) -> torch.Tensor:
         """Initialise cut-points so that sigma(theta_k) approx cumprob_k.
 
         At initialisation w ~ 0, so s_i ~ 0 for all genes.  Then
@@ -226,7 +222,7 @@ def _nanstandardise(X: torch.Tensor) -> torch.Tensor:
 
     # Population std on observed values
     diff = torch.where(mask, X - mu, torch.zeros_like(X))
-    var = (diff ** 2).sum(dim=0) / safe_counts  # (F,)
+    var = (diff**2).sum(dim=0) / safe_counts  # (F,)
     sd = var.sqrt()
 
     # Standardise observed, zero-fill missing
@@ -277,8 +273,7 @@ def _select_grid(
         None when ``ash_init=False``.
     """
     if ash_init:
-        ash_result = ash(betahat, sebetahat, prior=PriorType.NORM,
-                         verbose=False, optimizer="lbfgs", mult=mult)
+        ash_result = ash(betahat, sebetahat, prior=PriorType.NORM, verbose=False, optimizer="lbfgs", mult=mult)
         pi_full = ash_result.pi
         active = pi_full > ash_threshold
         # Fallback: ensure at least K=2 (spike + one slab)
@@ -295,8 +290,7 @@ def _select_grid(
         log_pi_init = log_pi_init.to(device=device, dtype=torch.float32)
         return scale, log_pi_init
 
-    scale = autoselect_scales_mix_norm(betahat=betahat, sebetahat=sebetahat,
-                                       mult=mult)
+    scale = autoselect_scales_mix_norm(betahat=betahat, sebetahat=sebetahat, mult=mult)
     if not isinstance(scale, torch.Tensor):
         scale = torch.as_tensor(scale, dtype=torch.float32, device=device)
     else:
@@ -331,8 +325,10 @@ def _train_model(
     loc = torch.zeros_like(scale)
     with torch.no_grad():
         logL_all = get_data_loglik_normal_torch(
-            betahat=betahat, sebetahat=sebetahat,
-            location=loc, scale=scale,
+            betahat=betahat,
+            sebetahat=sebetahat,
+            location=loc,
+            scale=scale,
         )
 
     # Seeded manual batching (5x faster than DataLoader due to
@@ -358,8 +354,7 @@ def _train_model(
             epoch_loss += loss.item()
         final_epoch_loss = epoch_loss
         if verbose and (epoch + 1) % 50 == 0:
-            print(f"[{label}] Epoch {epoch + 1}/{n_epochs} | "
-                  f"Loss: {epoch_loss / n_batches:.4f}")
+            print(f"[{label}] Epoch {epoch + 1}/{n_epochs} | Loss: {epoch_loss / n_batches:.4f}")
 
     return final_epoch_loss
 
@@ -467,8 +462,7 @@ def _fit_lcash(
         n_epochs = 200
 
     X_scaled, betahat, sebetahat = _prepare_inputs(X, betahat, sebetahat, device)
-    scale, log_pi_init = _select_grid(betahat, sebetahat, mult, ash_init,
-                                       ash_threshold, device)
+    scale, log_pi_init = _select_grid(betahat, sebetahat, mult, ash_init, ash_threshold, device)
 
     # Local RNG for reproducible weight init and batch ordering.
     # Does not mutate global torch RNG state.
@@ -476,8 +470,7 @@ def _fit_lcash(
     rng.manual_seed(seed)
 
     K = scale.shape[0]
-    model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init,
-                        generator=rng).to(device)
+    model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init, generator=rng).to(device)
     _warm_start(model, model_param, label)
 
     # Build optimizer: weight_decay on feature weights only.
@@ -497,12 +490,27 @@ def _fit_lcash(
     optimizer = torch.optim.Adam(param_groups, lr=lr)
 
     final_loss = _train_model(
-        model, optimizer, X_scaled, betahat, sebetahat, scale,
-        n_epochs, batch_size, penalty, verbose, label, seed=seed,
+        model,
+        optimizer,
+        X_scaled,
+        betahat,
+        sebetahat,
+        scale,
+        n_epochs,
+        batch_size,
+        penalty,
+        verbose,
+        label,
+        seed=seed,
     )
 
     post_mean, post_mean2, post_sd, all_pi_values = _compute_posteriors(
-        model, X_scaled, betahat, sebetahat, scale, device,
+        model,
+        X_scaled,
+        betahat,
+        sebetahat,
+        scale,
+        device,
     )
 
     return cash_PosteriorMeanNorm(
@@ -589,12 +597,22 @@ def lcash_posterior_means(
         scale (K,), loss, model_param (state dict for warm-starting).
     """
     return _fit_lcash(
-        X, betahat, sebetahat,
-        model_class=LcashNet, label="LC-ASH",
-        n_epochs=n_epochs, batch_size=batch_size, lr=lr,
-        weight_decay=weight_decay, penalty=penalty,
-        mult=mult, ash_init=ash_init, ash_threshold=ash_threshold,
-        model_param=model_param, device=device, verbose=verbose,
+        X,
+        betahat,
+        sebetahat,
+        model_class=LcashNet,
+        label="LC-ASH",
+        n_epochs=n_epochs,
+        batch_size=batch_size,
+        lr=lr,
+        weight_decay=weight_decay,
+        penalty=penalty,
+        mult=mult,
+        ash_init=ash_init,
+        ash_threshold=ash_threshold,
+        model_param=model_param,
+        device=device,
+        verbose=verbose,
         seed=seed,
     )
 
@@ -643,11 +661,21 @@ def po_lcash_posterior_means(
         scale (K,), loss, model_param (state dict for warm-starting).
     """
     return _fit_lcash(
-        X, betahat, sebetahat,
-        model_class=PropOddsLcashNet, label="PO-LC-ASH",
-        n_epochs=n_epochs, batch_size=batch_size, lr=lr,
-        weight_decay=weight_decay, penalty=penalty,
-        mult=mult, ash_init=ash_init, ash_threshold=ash_threshold,
-        model_param=model_param, device=device, verbose=verbose,
+        X,
+        betahat,
+        sebetahat,
+        model_class=PropOddsLcashNet,
+        label="PO-LC-ASH",
+        n_epochs=n_epochs,
+        batch_size=batch_size,
+        lr=lr,
+        weight_decay=weight_decay,
+        penalty=penalty,
+        mult=mult,
+        ash_init=ash_init,
+        ash_threshold=ash_threshold,
+        model_param=model_param,
+        device=device,
+        verbose=verbose,
         seed=seed,
     )

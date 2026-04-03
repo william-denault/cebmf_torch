@@ -83,13 +83,19 @@ def test_lcash_warm_start():
     s = 0.5 * torch.ones(n)
 
     res1 = lcash_posterior_means(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=20, ash_init=False,
+        X=X,
+        betahat=x,
+        sebetahat=s,
+        n_epochs=20,
+        ash_init=False,
     )
 
     res2 = lcash_posterior_means(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=20, ash_init=False,
+        X=X,
+        betahat=x,
+        sebetahat=s,
+        n_epochs=20,
+        ash_init=False,
         model_param=res1.model_param,
     )
 
@@ -192,13 +198,19 @@ def test_po_lcash_warm_start():
     s = 0.5 * torch.ones(n)
 
     res1 = po_lcash_posterior_means(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=20, ash_init=False,
+        X=X,
+        betahat=x,
+        sebetahat=s,
+        n_epochs=20,
+        ash_init=False,
     )
 
     res2 = po_lcash_posterior_means(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=20, ash_init=False,
+        X=X,
+        betahat=x,
+        sebetahat=s,
+        n_epochs=20,
+        ash_init=False,
         model_param=res1.model_param,
     )
 
@@ -242,6 +254,4 @@ def test_po_lcash_fewer_params_than_softmax():
     print(f"Softmax params: {n_softmax}, PropOdds params: {n_propodds}")
     # Softmax: F*K + K = 10*20 + 20 = 220
     # PropOdds: F + 1 + (K-2) = 10 + 1 + 18 = 29
-    assert n_propodds < n_softmax, (
-        f"PropOdds ({n_propodds}) should have fewer params than Softmax ({n_softmax})"
-    )
+    assert n_propodds < n_softmax, f"PropOdds ({n_propodds}) should have fewer params than Softmax ({n_softmax})"

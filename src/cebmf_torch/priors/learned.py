@@ -141,7 +141,12 @@ class LearnedBuilder(PriorBuilder):
 
         # A bit annoying that the different types have different ways of handling pi0
         match self.type:
-            case LearnedPriorType.CASH | LearnedPriorType.LCASH | LearnedPriorType.PO_LCASH | LearnedPriorType.SPIKED_EMDN:
+            case (
+                LearnedPriorType.CASH
+                | LearnedPriorType.LCASH
+                | LearnedPriorType.PO_LCASH
+                | LearnedPriorType.SPIKED_EMDN
+            ):
                 # optional: could expose from obj.pi_np
                 pi0_null = obj.pi_np[:, 0]
             case LearnedPriorType.CGB | LearnedPriorType.CGB_SHARP:
