@@ -14,6 +14,7 @@ from cebmf_torch.utils.mixture import (
     autoselect_scales_mix_exp,
     autoselect_scales_mix_norm,
     optimize_pi_logL,
+    optimize_pi_logL_lbfgs,
 )
 from cebmf_torch.utils.posterior import (
     PosteriorMean,
@@ -37,18 +38,30 @@ class AshConfig:
     batch_size: int | None = 128
     shuffle: bool = False
     seed: int | None = None
+    optimizer: str = "em"
+
+
+_VALID_OPTIMIZERS = {"em", "lbfgs"}
 
 
 def _optimize_mixture_weights(L: torch.Tensor, config: AshConfig) -> torch.Tensor:
     """Optimize mixture weights and return log probabilities."""
-    pi0 = optimize_pi_logL(
-        L,
-        penalty=config.penalty,
-        verbose=config.verbose,
-        batch_size=config.batch_size,
-        shuffle=config.shuffle,
-        seed=config.seed,
-    )
+    if config.optimizer not in _VALID_OPTIMIZERS:
+        raise ValueError(
+            f"Unknown optimizer {config.optimizer!r}. "
+            f"Choose from {_VALID_OPTIMIZERS}."
+        )
+    if config.optimizer == "lbfgs":
+        pi0 = optimize_pi_logL_lbfgs(L, penalty=config.penalty)
+    elif config.optimizer == "em":
+        pi0 = optimize_pi_logL(
+            L,
+            penalty=config.penalty,
+            verbose=config.verbose,
+            batch_size=config.batch_size,
+            shuffle=config.shuffle,
+            seed=config.seed,
+        )
     eps = torch.tensor(1e-32, device=L.device, dtype=L.dtype)
     return torch.log(torch.clamp(pi0, min=eps.item()))
 
@@ -112,6 +125,7 @@ class ASHResult:
     scale: torch.Tensor
     pi0: torch.Tensor | float
     prior: str
+    pi: torch.Tensor | None = None  # full (K,) mixture weight vector
     log_lik: float = 0.0
     mode: float = 0.0
 
@@ -134,6 +148,7 @@ class ASHResult:
             post_sd=pm_obj.post_sd,
             scale=scale,
             pi0=pi0[0],
+            pi=pi0,
             prior=str(prior),
             log_lik=log_lik,
             mode=float(config.mode),
@@ -155,12 +170,15 @@ def ash(
     batch_size: int | None = 128,
     shuffle: bool = False,
     seed: int | None = None,
+    optimizer: str = "em",
 ):
     """
     Adaptive shrinkage with mixture priors ("norm" or "exp") in pure PyTorch.
 
-    Uses EM for π (mini-batch capable via batch_size).
-    Returns an ASHResult object with Torch tensors.
+    Uses EM for π by default (mini-batch capable via batch_size).
+    Set ``optimizer="lbfgs"`` to use L-BFGS with softmax
+    reparameterisation, which produces sparse solutions matching
+    R ashr's convex optimiser.
 
     Parameters
     ----------
@@ -186,6 +204,9 @@ def ash(
         Whether to shuffle data in EM (default: False).
     seed : int or None, optional
         Random seed for reproducibility.
+    optimizer : str, optional
+        ``"em"`` (default) or ``"lbfgs"``. L-BFGS produces sparse
+        solutions matching R ashr's convex optimiser.
 
     Returns
     -------
@@ -207,5 +228,6 @@ def ash(
         batch_size=batch_size,
         shuffle=shuffle,
         seed=seed,
+        optimizer=optimizer,
     )
     return ASHResult.from_data(torch.as_tensor(x, dtype=x.dtype, device=x.device), s, prior, config)

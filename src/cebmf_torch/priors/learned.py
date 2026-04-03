@@ -8,6 +8,7 @@ from cebmf_torch.cebnm.cash_solver import cash_posterior_means
 from cebmf_torch.cebnm.cov_gb_prior import cgb_posterior_means
 from cebmf_torch.cebnm.cov_sharp_gb_prior import sharp_cgb_posterior_means
 from cebmf_torch.cebnm.emdn import emdn_posterior_means
+from cebmf_torch.cebnm.lcash import lcash_posterior_means, po_lcash_posterior_means
 from cebmf_torch.cebnm.spiked_emdn import spiked_emdn_posterior_means
 
 from .base import Prior, PriorBuilder
@@ -27,6 +28,10 @@ class LearnedPriorType(StrEnum):
         Covariate sharp Generalized-binary prior.
     EMDN : str
         Empirical Mixture Density Network prior.
+    LCASH : str
+        Linear Covariate Adaptive Shrinkage (softmax / multinomial logistic).
+    PO_LCASH : str
+        Proportional Odds LC-ASH (ordered logistic).
     SPIKED_EMDN : str
         Spiked Empirical Mixture Density Network prior.
     """
@@ -35,6 +40,8 @@ class LearnedPriorType(StrEnum):
     CGB = auto()
     CGB_SHARP = auto()
     EMDN = auto()
+    LCASH = auto()
+    PO_LCASH = auto()
     SPIKED_EMDN = auto()
 
 
@@ -43,6 +50,8 @@ builder_functions: dict[LearnedPriorType, Callable] = {
     LearnedPriorType.CGB: cgb_posterior_means,
     LearnedPriorType.CGB_SHARP: sharp_cgb_posterior_means,
     LearnedPriorType.EMDN: emdn_posterior_means,
+    LearnedPriorType.LCASH: lcash_posterior_means,
+    LearnedPriorType.PO_LCASH: po_lcash_posterior_means,
     LearnedPriorType.SPIKED_EMDN: spiked_emdn_posterior_means,
 }
 
@@ -132,7 +141,7 @@ class LearnedBuilder(PriorBuilder):
 
         # A bit annoying that the different types have different ways of handling pi0
         match self.type:
-            case LearnedPriorType.CASH | LearnedPriorType.SPIKED_EMDN:
+            case LearnedPriorType.CASH | LearnedPriorType.LCASH | LearnedPriorType.PO_LCASH | LearnedPriorType.SPIKED_EMDN:
                 # optional: could expose from obj.pi_np
                 pi0_null = obj.pi_np[:, 0]
             case LearnedPriorType.CGB | LearnedPriorType.CGB_SHARP:
