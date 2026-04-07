@@ -2,8 +2,8 @@
 name: Build and Push Docker Image
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  # remove pull_request trigger entirely
     paths:
       - 'Dockerfile'
       - '.github/workflows/docker.yml'
