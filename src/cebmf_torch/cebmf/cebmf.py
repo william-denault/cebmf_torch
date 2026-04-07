@@ -85,6 +85,7 @@ class cEBMF:
         K: int = 5,
         prior_L: str = "norm",
         prior_F: str = "norm",
+        internal_epoch: int = 10,
         prior_L_kwargs: dict | None = None,
         prior_F_kwargs: dict | None = None,
         allow_backfitting: bool = True,
@@ -122,7 +123,7 @@ class cEBMF:
         self.N, self.P = self.Y.shape
         self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
-
+        self.internal_epoch = internal_epoch
         self._factors_initialised = False
 
     @torch.no_grad()
@@ -198,11 +199,10 @@ class cEBMF:
         tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
             self._update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
-            
-            
+
         self.update_tau()
         self._backfit()
-        
+
         self._cal_obj()
 
     @torch.no_grad()
@@ -264,12 +264,12 @@ class cEBMF:
 
         if tau_map is None:
             denom_l = (mask_f @ Fk2).clamp_min(eps)  # (N,)
-            num_l = (Rk @ Fk)                        # (N,)
+            num_l = Rk @ Fk  # (N,)
             se_l = torch.sqrt(1.0 / (self.tau * denom_l))
         else:
-            W = (tau_map * mask_f)
-            denom_l = (W @ Fk2).clamp_min(eps)      # (N,)
-            num_l = (W * Rk) @ Fk                    # (N,)
+            W = tau_map * mask_f
+            denom_l = (W @ Fk2).clamp_min(eps)  # (N,)
+            num_l = (W * Rk) @ Fk  # (N,)
             se_l = torch.sqrt(1.0 / denom_l)
 
         lhat = num_l / denom_l
@@ -286,6 +286,7 @@ class cEBMF:
             resL = self.prior_L_fn.fit(
                 X=X_model,
                 betahat=lhat,
+                internal_epoch=self.internal_epoch,
                 sebetahat=se_l,
                 model_param=self.model_state_L[k],
             )
@@ -307,10 +308,10 @@ class cEBMF:
 
         if tau_map is None:
             denom_f = (mask_f.T @ Lk2).clamp_min(eps)  # (P,)
-            num_f = (Rk.T @ Lk)                        # (P,)
+            num_f = Rk.T @ Lk  # (P,)
             se_f = torch.sqrt(1.0 / (self.tau * denom_f))
         else:
-            W = (tau_map * mask_f)
+            W = tau_map * mask_f
             denom_f = (W.T @ Lk2).clamp_min(eps)
             num_f = (W * Rk).transpose(0, 1) @ Lk
             se_f = torch.sqrt(1.0 / denom_f)
@@ -330,6 +331,7 @@ class cEBMF:
                 X=X_model,
                 betahat=fhat,
                 sebetahat=se_f,
+                internal_epoch=self.internal_epoch,
                 model_param=self.model_state_F[k],
             )
 
@@ -365,11 +367,7 @@ class cEBMF:
     def _compute_elementwise_loglik(self, ER2: Tensor) -> Tensor:
         obs = self.mask.bool()
         c2pi = ER2.new_tensor(math.log(2.0 * math.pi))
-        return -0.5 * (
-            c2pi * obs.sum()
-            - torch.log(self.tau_map[obs]).sum()
-            + (self.tau_map * ER2)[obs].sum()
-        )
+        return -0.5 * (c2pi * obs.sum() - torch.log(self.tau_map[obs]).sum() + (self.tau_map * ER2)[obs].sum())
 
     @torch.no_grad()
     def _backfit(self):
@@ -398,12 +396,11 @@ class cEBMF:
         resid_mean_sq = (self.Y0 - Yfit).pow(2)  # (N,P)
         first_moment_sq = (self.L.pow(2)) @ (self.F.pow(2)).T  # Σ_k (E[L]^2)(E[F]^2)^T
         second_moment = self.L2 @ self.F2.T  # Σ_k E[L^2] E[F^2]^T
-        #R2 = resid_mean_sq - first_moment_sq + second_moment
-        #R2 = (R2 * self.mask).clamp_min(0.0)  # zero where missing; no negatives
-
+        # R2 = resid_mean_sq - first_moment_sq + second_moment
+        # R2 = (R2 * self.mask).clamp_min(0.0)  # zero where missing; no negatives
 
         variance_term = second_moment - first_moment_sq
-    
+
         R2 = resid_mean_sq + variance_term  # NOT minus!
         R2 = (R2 * self.mask).clamp_min(0.0)
         return R2
@@ -523,7 +520,7 @@ class cEBMF:
 
         # K=1 case: return external covariates or intercept
         return external_cov if external_cov is not None else factors.new_ones(dim_size, 1)
-    
+
     @torch.no_grad()
     def _recompute_residual(self) -> None:
         """R := (Y0 - L F^T) ⊙ mask, NaNs -> 0."""

@@ -46,6 +46,7 @@ class PriorBuilder(ABC):
         betahat: Tensor,
         sebetahat: Tensor,
         model_param: Any | None = None,
+        internal_epoch: Any | None = None,
     ) -> Prior:
         """
         Fit the prior and return posterior estimates.
