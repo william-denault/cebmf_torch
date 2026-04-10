@@ -11,11 +11,11 @@ density at ``1e-10``. After the fix it is computed via a single full-batch
 ``logsumexp`` over the saved per-observation pi values.
 """
 import math
-import torch
-import pytest
 
-from cebmf_torch.cebnm.lcash import lcash_posterior_means, po_lcash_posterior_means
+import torch
+
 from cebmf_torch.cebnm.cash_solver import cash_posterior_means
+from cebmf_torch.cebnm.lcash import lcash_posterior_means, po_lcash_posterior_means
 
 
 def _proper_marginal_loglik(betahat, sebetahat, scale, pi):
@@ -91,12 +91,19 @@ def test_lcash_loss_independent_of_penalty():
     (computed from the respective fitted pi). Pre-fix the two values would
     differ by exactly (penalty-1) * sum_g log(pi_g,0)."""
     X, x, s = _make_data()
-    common = dict(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=50, batch_size=512, lr=1e-3, weight_decay=1e-3,
-        ash_init=True, verbose=False,
-        device=torch.device("cpu"), seed=42,
-    )
+    common = {
+        "X": X,
+        "betahat": x,
+        "sebetahat": s,
+        "n_epochs": 50,
+        "batch_size": 512,
+        "lr": 1e-3,
+        "weight_decay": 1e-3,
+        "ash_init": True,
+        "verbose": False,
+        "device": torch.device("cpu"),
+        "seed": 42,
+    }
     res1 = lcash_posterior_means(penalty=1.0, **common)
     res2 = lcash_posterior_means(penalty=1.5, **common)
     ll1 = _proper_marginal_loglik(x, s, res1.scale, res1.pi_np)
