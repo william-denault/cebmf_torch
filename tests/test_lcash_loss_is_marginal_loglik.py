@@ -10,6 +10,7 @@ not on the marginal-log-lik scale once ``penalty > 1`` and clamps the inner
 density at ``1e-10``. After the fix it is computed via a single full-batch
 ``logsumexp`` over the saved per-observation pi values.
 """
+
 import math
 
 import torch
@@ -53,10 +54,15 @@ def test_lcash_loss_equals_negative_marginal_loglik_penalty1():
     the proper negative marginal log-lik, not the training-loss surrogate."""
     X, x, s = _make_data()
     res = lcash_posterior_means(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=50, batch_size=512,
-        lr=1e-3, weight_decay=1e-3,
-        penalty=1.0, ash_init=True,
+        X=X,
+        betahat=x,
+        sebetahat=s,
+        n_epochs=50,
+        batch_size=512,
+        lr=1e-3,
+        weight_decay=1e-3,
+        penalty=1.0,
+        ash_init=True,
         verbose=False,
         device=torch.device("cpu"),
         seed=42,
@@ -65,18 +71,21 @@ def test_lcash_loss_equals_negative_marginal_loglik_penalty1():
     expected_loss = -proper_ll
     # Tight tolerance: the post-fix loss is computed from exactly the same
     # tensor that the test recomputes here.
-    assert abs(res.loss - expected_loss) < 1e-3, (
-        f"LC-ASH loss = {res.loss}, expected -marginal_ll = {expected_loss}"
-    )
+    assert abs(res.loss - expected_loss) < 1e-3, f"LC-ASH loss = {res.loss}, expected -marginal_ll = {expected_loss}"
 
 
 def test_po_lcash_loss_equals_negative_marginal_loglik_penalty1():
     X, x, s = _make_data()
     res = po_lcash_posterior_means(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=50, batch_size=512,
-        lr=1e-3, weight_decay=1e-3,
-        penalty=1.0, ash_init=True,
+        X=X,
+        betahat=x,
+        sebetahat=s,
+        n_epochs=50,
+        batch_size=512,
+        lr=1e-3,
+        weight_decay=1e-3,
+        penalty=1.0,
+        ash_init=True,
         verbose=False,
         device=torch.device("cpu"),
         seed=42,
@@ -116,8 +125,11 @@ def test_cash_loss_equals_negative_marginal_loglik_penalty1():
     """Same regression test for the CASH solver."""
     X, x, s = _make_data()
     res = cash_posterior_means(
-        X=X, betahat=x, sebetahat=s,
-        n_epochs=20, batch_size=512,
+        X=X,
+        betahat=x,
+        sebetahat=s,
+        n_epochs=20,
+        batch_size=512,
         penalty=1.0,
         device=torch.device("cpu"),
     )

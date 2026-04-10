@@ -254,7 +254,7 @@ def cash_posterior_means(
         # the inner density). This is what `cebmf.py:299`'s `kl_l[k] = (-loss)
         # - nm_ll_L` formula expects, and matches the `cebnm/emdn.py:288-298`
         # convention.
-        log_pi_full = torch.log(all_pi_values.clamp_min(eps))           # (N, K)
+        log_pi_full = torch.log(all_pi_values.clamp_min(eps))  # (N, K)
         log_marginal_per_obs = torch.logsumexp(data_loglik + log_pi_full, dim=1)  # (N,)
         full_marginal_ll = float(log_marginal_per_obs.sum().item())
 
