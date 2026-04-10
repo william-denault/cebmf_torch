@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+
 import torch
 from torch import Tensor
 
@@ -10,6 +11,7 @@ from cebmf_torch.utils.maths import (
     my_etruncnorm,
     safe_log,
 )
+
 
 def _const_like(x: Tensor, val) -> Tensor:
     return torch.as_tensor(val, device=x.device, dtype=x.dtype)
@@ -66,7 +68,6 @@ def ebnm_point_laplace(
     s = torch.as_tensor(s, device=device, dtype=dtype).clamp_min(_const_like(x, 1e-6))
 
     # Precompute once; reused in closure & posterior
-    inv_s  = 1.0 / s
     log_s  = torch.log(s)
     s2     = s * s
 
@@ -97,9 +98,9 @@ def ebnm_point_laplace(
     r = min(max(r, 1e-8), 1 - 1e-8)
     v0 = math.log(r) - math.log(1 - r)
 
-    w_logit = torch.nn.Parameter(torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0])
-    a_logit = torch.nn.Parameter(torch.as_tensor(v0,             dtype=dtype, device=device), requires_grad=not fix_par[1])
-    mu      = torch.nn.Parameter(torch.as_tensor(par_init[2],    dtype=dtype, device=device), requires_grad=not fix_par[2])
+    w_logit = torch.nn.Parameter(torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0])  # noqa: E501
+    a_logit = torch.nn.Parameter(torch.as_tensor(v0,             dtype=dtype, device=device), requires_grad=not fix_par[1])  # noqa: E501
+    mu      = torch.nn.Parameter(torch.as_tensor(par_init[2],    dtype=dtype, device=device), requires_grad=not fix_par[2])  # noqa: E501
 
     params = [p for p in (w_logit, a_logit, mu) if p.requires_grad]
 

@@ -153,9 +153,9 @@ def ebnm_point_exp(
     r = min(max(r, 1e-8), 1 - 1e-8)
     v0 = math.log(r) - math.log(1 - r)
 
-    alpha = torch.nn.Parameter(torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0])
-    a_logit = torch.nn.Parameter(torch.as_tensor(v0,             dtype=dtype, device=device), requires_grad=not fix_par[1])
-    mu      = torch.nn.Parameter(torch.as_tensor(par_init[2],    dtype=dtype, device=device), requires_grad=not fix_par[2])
+    alpha = torch.nn.Parameter(torch.as_tensor(par_init[0], dtype=dtype, device=device), requires_grad=not fix_par[0])  # noqa: E501
+    a_logit = torch.nn.Parameter(torch.as_tensor(v0,             dtype=dtype, device=device), requires_grad=not fix_par[1])  # noqa: E501
+    mu      = torch.nn.Parameter(torch.as_tensor(par_init[2],    dtype=dtype, device=device), requires_grad=not fix_par[2])  # noqa: E501
 
     params = [p for p in (alpha, a_logit, mu) if p.requires_grad]
     opt = torch.optim.LBFGS(

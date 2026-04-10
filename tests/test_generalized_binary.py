@@ -1,10 +1,11 @@
 # tests/test_ebnm_gb.py
 import math
-import torch
+
 import pytest
+import torch
 
 # import your implementation
-from cebmf_torch.ebnm.generalized_binary import ebnm_gb # adjust path if needed
+from cebmf_torch.ebnm.generalized_binary import ebnm_gb  # adjust path if needed
 
 torch.set_num_threads(1)
 

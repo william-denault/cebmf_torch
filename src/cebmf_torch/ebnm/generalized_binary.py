@@ -1,13 +1,15 @@
-import math
 from dataclasses import dataclass
+
 import torch
 from torch import Tensor
+
 from cebmf_torch.utils.maths import (
     _LOG_SQRT_2PI,  # log(sqrt(2π))
-    logPhi,         # stable log Φ
+    logPhi,  # stable log Φ
+    my_e2truncnorm,  # E[X^2 | a < X < b] for Normal(mean, sd) via truncation
     my_etruncnorm,  # E[X | a < X < b] for Normal(mean, sd) via truncation
-    my_e2truncnorm, # E[X^2 | a < X < b] for Normal(mean, sd) via truncation
 )
+
 
 @dataclass
 class EBNMGBResult:
@@ -68,8 +70,8 @@ def ebnm_gb(
         sig_tilde2 = 1.0 / denom
         mu_tilde = ( (s*s)*mu_val + (sigma*sigma)*x ) / (s*s + sigma*sigma)
 
-        # log Φ(μ̃/σ̃) − log Φ(μ/σ). Note μ/σ = 1/ω is constant in μ’s optimization. :contentReference[oaicite:2]{index=2}
-        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))
+        # log Φ(μ̃/σ̃) − log Φ(μ/σ). Note μ/σ = 1/ω is constant in μ’s optimization. :contentReference[oaicite:2]{index=2}  # noqa: E501
+        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))  # noqa: E501
 
         lg = lg0 + log_norm_cdf_ratio  # log slab marginal per i
 
@@ -81,7 +83,7 @@ def ebnm_gb(
 
         return zeta, lg, lf, mu_tilde, sig_tilde2
 
-    # M-step for μ: maximize sum_i ζ_i [ log N(x; μ, ω^2 μ^2 + s^2) + log Φ(μ̃/σ̃) ], no closed form. :contentReference[oaicite:3]{index=3}
+    # M-step for μ: maximize sum_i ζ_i [ log N(x; μ, ω^2 μ^2 + s^2) + log Φ(μ̃/σ̃) ], no closed form. :contentReference[oaicite:3]{index=3}  # noqa: E501
     # We optimize an unconstrained η with μ = softplus(η).
     def _optimize_mu(zeta: Tensor, mu_init: Tensor):
         eta = torch.nn.Parameter(torch.log(torch.expm1(mu_init.clamp_min(1e-8))))
@@ -141,7 +143,7 @@ def ebnm_gb(
         # M-step π (eq. (22)): average ζ
         pi_new = zeta.mean().clamp(1e-8, 1-1e-8)
 
-        # M-step μ: optimize expected complete log-lik (eq. (23); constant −logΦ(1/ω) dropped). :contentReference[oaicite:4]{index=4}
+        # M-step μ: optimize expected complete log-lik (eq. (23); constant −logΦ(1/ω) dropped). :contentReference[oaicite:4]{index=4}  # noqa: E501
         mu_new = _optimize_mu(zeta, mu)
 
         # Evaluate marginal log-likelihood with updated params (for convergence check; eq. (18))
@@ -152,7 +154,7 @@ def ebnm_gb(
             denom = 1.0/(sigma*sigma + eps) + 1.0/(s*s)
             sig_tilde2 = 1.0 / denom
             mu_tilde = ( (s*s)*mu_new + (sigma*sigma)*x ) / (s*s + sigma*sigma)
-            log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))
+            log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))  # noqa: E501
             lg_marg = lg0 + log_norm_cdf_ratio
 
             # log ∏ [ (1-π)N(x;0,s^2) + π * slab ]
@@ -185,7 +187,7 @@ def ebnm_gb(
         sigma = omega_t * mu
         var_sum = s*s + sigma*sigma
         lg0 = _log_normal_pdf(x, mu, var_sum.sqrt())
-        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))
+        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))  # noqa: E501
         lg_marg = lg0 + log_norm_cdf_ratio
         log_lik = torch.logaddexp(torch.log1p(-pi) + lf, torch.log(pi) + lg_marg).sum().item()
 
@@ -198,4 +200,3 @@ def ebnm_gb(
         scale=float(1/(omega+1e-8)),
         log_lik=float(log_lik),
     )
- 

@@ -17,11 +17,10 @@ After the fix:
   preserved.
 """
 import torch
-import pytest
 
 from cebmf_torch.ebnm.generalized_binary import ebnm_gb
-from cebmf_torch.priors.point import PointBuilder, PointPriorType
 from cebmf_torch.priors.base import Prior
+from cebmf_torch.priors.point import PointBuilder, PointPriorType
 
 
 def _simulate_gb(n, pi, mu, omega, s_val, seed):
