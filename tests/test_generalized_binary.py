@@ -9,6 +9,7 @@ from cebmf_torch.ebnm.generalized_binary import ebnm_gb  # adjust path if needed
 
 torch.set_num_threads(1)
 
+
 def simulate_gb(n=2000, pi=0.3, mu=2.0, omega=0.2, s_val=0.5, seed=1, device="cpu"):
     """
     Simulate (theta, x, s) from the generalized-binary prior:
@@ -82,7 +83,7 @@ def test_variance_is_consistent():
     res = ebnm_gb(x, s, omega=0.25)
 
     # sd^2 = E[X^2] - E[X]^2, and must be >= 0
-    v = res.post_mean2 - res.post_mean ** 2
+    v = res.post_mean2 - res.post_mean**2
     assert torch.all(v >= -1e-8)
     assert torch.all(res.post_sd >= 0.0)
     # post_sd should agree with sqrt(var) numerically
@@ -95,17 +96,17 @@ def test_shrinkage_and_omega_effect():
     theta, x, s = simulate_gb(n=2500, pi=true_pi, mu=true_mu, omega=0.2, s_val=s_val, seed=99)
 
     res_narrow = ebnm_gb(x, s, omega=0.15)
-    res_wide   = ebnm_gb(x, s, omega=0.50)
+    res_wide = ebnm_gb(x, s, omega=0.50)
 
     # Look only at positive observations (where shrinkage is most interpretable)
     pos = x > 0
     pm_narrow = res_narrow.post_mean[pos]
-    pm_wide   = res_wide.post_mean[pos]
-    x_pos     = x[pos]
+    pm_wide = res_wide.post_mean[pos]
+    x_pos = x[pos]
 
     # Both should be positively associated with x
-    corr_narrow = torch.corrcoef(torch.stack([x_pos, pm_narrow]))[0,1].item()
-    corr_wide   = torch.corrcoef(torch.stack([x_pos, pm_wide]))[0,1].item()
+    corr_narrow = torch.corrcoef(torch.stack([x_pos, pm_narrow]))[0, 1].item()
+    corr_wide = torch.corrcoef(torch.stack([x_pos, pm_wide]))[0, 1].item()
     assert corr_narrow > 0.7 and corr_wide > 0.7
 
     # Wider slab shrinks less on average

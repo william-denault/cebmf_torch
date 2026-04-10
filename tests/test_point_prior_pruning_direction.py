@@ -16,6 +16,7 @@ After the fix:
 - A strong-signal factor (true slab ≈ 1) gets ``pi0_null ≈ 0`` and is
   preserved.
 """
+
 import torch
 
 from cebmf_torch.ebnm.generalized_binary import ebnm_gb
@@ -59,9 +60,7 @@ def test_point_builder_pi0_null_is_null_for_signal_factor():
     prior: Prior = builder.fit(X=None, betahat=x, sebetahat=s)
     pi0_null = _to_float(prior.pi0_null)
     pi_slab = _to_float(prior.pi_slab)
-    assert pi0_null < 0.2, (
-        f"Real-signal factor must have small null weight, got pi0_null={pi0_null}"
-    )
+    assert pi0_null < 0.2, f"Real-signal factor must have small null weight, got pi0_null={pi0_null}"
     assert pi_slab > 0.8, f"Real-signal factor must have large slab weight, got pi_slab={pi_slab}"
     assert abs(pi0_null + pi_slab - 1.0) < 1e-5
     # Default cebmf prune_thresh
@@ -79,9 +78,7 @@ def test_point_builder_pi0_null_is_null_for_noise_factor():
     prior: Prior = builder.fit(X=None, betahat=x, sebetahat=s)
     pi0_null = _to_float(prior.pi0_null)
     pi_slab = _to_float(prior.pi_slab)
-    assert pi0_null > 0.85, (
-        f"Null factor must have large null weight, got pi0_null={pi0_null}"
-    )
+    assert pi0_null > 0.85, f"Null factor must have large null weight, got pi0_null={pi0_null}"
     assert pi_slab < 0.15
     assert abs(pi0_null + pi_slab - 1.0) < 1e-5
 

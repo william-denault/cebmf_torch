@@ -16,22 +16,24 @@ class EBNMGBResult:
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    pi_slab: float    # slab weight π (= 1 - pi_null)
-    mode: float        # learned μ ≥ 0
-    scale: float     # fixed ω (σ = ω μ)
+    pi_slab: float  # slab weight π (= 1 - pi_null)
+    mode: float  # learned μ ≥ 0
+    scale: float  # fixed ω (σ = ω μ)
     log_lik: float
+
 
 def _log_normal_pdf(x: Tensor, mean: Tensor, sd: Tensor) -> Tensor:
     sd = sd.clamp_min(1e-12)
     z = (x - mean) / sd
     return -0.5 * z**2 - torch.log(sd) - _LOG_SQRT_2PI
 
+
 def ebnm_gb(
     x: Tensor,
     s: Tensor,
-    omega: float = 0.2,          # fixed ω (σ = ω μ), typically small
-    par_init_mu: float = 1.0,    # μ initialization (on the original scale)
-    par_init_pi: float = 0.2,    # π initialization
+    omega: float = 0.2,  # fixed ω (σ = ω μ), typically small
+    par_init_mu: float = 1.0,  # μ initialization (on the original scale)
+    par_init_pi: float = 0.2,  # π initialization
     max_em: int = 200,
     tol_em: float = 1e-5,
     max_lbfgs: int = 200,
@@ -49,7 +51,7 @@ def ebnm_gb(
 
     # Initialize hyperparameters
     mu = torch.tensor(float(max(par_init_mu, 1e-6)), device=device, dtype=dtype)
-    pi = torch.tensor(float(min(max(par_init_pi, 1e-6), 1-1e-6)), device=device, dtype=dtype)
+    pi = torch.tensor(float(min(max(par_init_pi, 1e-6), 1 - 1e-6)), device=device, dtype=dtype)
     omega_t = torch.tensor(float(omega), device=device, dtype=dtype)
 
     # Precompute spike log-likelihood terms: N(x; 0, s^2)
@@ -62,16 +64,18 @@ def ebnm_gb(
 
         # slab marginal density from eq. (18):
         # N(x; μ, σ^2 + s^2) * Φ(μ̃/σ̃) / Φ(μ/σ)
-        var_sum = s*s + sigma*sigma
+        var_sum = s * s + sigma * sigma
         lg0 = _log_normal_pdf(x, mu_val, var_sum.sqrt())
 
         # σ̃_i^2 and μ̃_i (eqs. (19)-(20) with σ=ω μ)
-        denom = 1.0/(sigma*sigma + eps) + 1.0/(s*s)
+        denom = 1.0 / (sigma * sigma + eps) + 1.0 / (s * s)
         sig_tilde2 = 1.0 / denom
-        mu_tilde = ( (s*s)*mu_val + (sigma*sigma)*x ) / (s*s + sigma*sigma)
+        mu_tilde = ((s * s) * mu_val + (sigma * sigma) * x) / (s * s + sigma * sigma)
 
         # log Φ(μ̃/σ̃) − log Φ(μ/σ). Note μ/σ = 1/ω is constant in μ’s optimization. :contentReference[oaicite:2]{index=2}  # noqa: E501
-        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))  # noqa: E501
+        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(
+            torch.tensor(1.0 / float(omega), device=device, dtype=dtype)
+        )  # noqa: E501
 
         lg = lg0 + log_norm_cdf_ratio  # log slab marginal per i
 
@@ -87,24 +91,26 @@ def ebnm_gb(
     # We optimize an unconstrained η with μ = softplus(η).
     def _optimize_mu(zeta: Tensor, mu_init: Tensor):
         eta = torch.nn.Parameter(torch.log(torch.expm1(mu_init.clamp_min(1e-8))))
-        opt = torch.optim.LBFGS([eta],
-                                max_iter=max_lbfgs,
-                                tolerance_grad=tol_lbfgs,
-                                tolerance_change=tol_lbfgs,
-                                line_search_fn="strong_wolfe",
-                                history_size=20)
+        opt = torch.optim.LBFGS(
+            [eta],
+            max_iter=max_lbfgs,
+            tolerance_grad=tol_lbfgs,
+            tolerance_change=tol_lbfgs,
+            line_search_fn="strong_wolfe",
+            history_size=20,
+        )
 
         def closure():
             opt.zero_grad(set_to_none=True)
             mu_pos = torch.nn.functional.softplus(eta) + 0.0  # ensure ≥ 0
             sigma = omega_t * mu_pos
-            var_sum = s*s + sigma*sigma
+            var_sum = s * s + sigma * sigma
             lg0 = _log_normal_pdf(x, mu_pos, var_sum.sqrt())
 
             # μ̃_i, σ̃_i as functions of μ (via σ)
-            denom = 1.0/(sigma*sigma + eps) + 1.0/(s*s)
+            denom = 1.0 / (sigma * sigma + eps) + 1.0 / (s * s)
             sig_tilde2 = 1.0 / denom
-            mu_tilde = ( (s*s)*mu_pos + (sigma*sigma)*x ) / (s*s + sigma*sigma)
+            mu_tilde = ((s * s) * mu_pos + (sigma * sigma) * x) / (s * s + sigma * sigma)
 
             obj_terms = lg0 + logPhi(mu_tilde / sig_tilde2.sqrt())  # drop constant −logΦ(1/ω)
             loss = -(zeta * obj_terms).sum()
@@ -121,11 +127,11 @@ def ebnm_gb(
                 adam.zero_grad(set_to_none=True)
                 mu_pos = torch.nn.functional.softplus(eta)
                 sigma = omega_t * mu_pos
-                var_sum = s*s + sigma*sigma
+                var_sum = s * s + sigma * sigma
                 lg0 = _log_normal_pdf(x, mu_pos, var_sum.sqrt())
-                denom = 1.0/(sigma*sigma + eps) + 1.0/(s*s)
+                denom = 1.0 / (sigma * sigma + eps) + 1.0 / (s * s)
                 sig_tilde2 = 1.0 / denom
-                mu_tilde = ( (s*s)*mu_pos + (sigma*sigma)*x ) / (s*s + sigma*sigma)
+                mu_tilde = ((s * s) * mu_pos + (sigma * sigma) * x) / (s * s + sigma * sigma)
                 obj_terms = lg0 + logPhi(mu_tilde / sig_tilde2.sqrt())
                 loss = -(zeta * obj_terms).sum()
                 loss.backward()
@@ -141,7 +147,7 @@ def ebnm_gb(
         zeta, lg, lf, mu_tilde, sig_tilde2 = _E_step(mu, pi)
 
         # M-step π (eq. (22)): average ζ
-        pi_new = zeta.mean().clamp(1e-8, 1-1e-8)
+        pi_new = zeta.mean().clamp(1e-8, 1 - 1e-8)
 
         # M-step μ: optimize expected complete log-lik (eq. (23); constant −logΦ(1/ω) dropped). :contentReference[oaicite:4]{index=4}  # noqa: E501
         mu_new = _optimize_mu(zeta, mu)
@@ -149,12 +155,14 @@ def ebnm_gb(
         # Evaluate marginal log-likelihood with updated params (for convergence check; eq. (18))
         with torch.no_grad():
             sigma = omega_t * mu_new
-            var_sum = s*s + sigma*sigma
+            var_sum = s * s + sigma * sigma
             lg0 = _log_normal_pdf(x, mu_new, var_sum.sqrt())
-            denom = 1.0/(sigma*sigma + eps) + 1.0/(s*s)
+            denom = 1.0 / (sigma * sigma + eps) + 1.0 / (s * s)
             sig_tilde2 = 1.0 / denom
-            mu_tilde = ( (s*s)*mu_new + (sigma*sigma)*x ) / (s*s + sigma*sigma)
-            log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))  # noqa: E501
+            mu_tilde = ((s * s) * mu_new + (sigma * sigma) * x) / (s * s + sigma * sigma)
+            log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(
+                torch.tensor(1.0 / float(omega), device=device, dtype=dtype)
+            )  # noqa: E501
             lg_marg = lg0 + log_norm_cdf_ratio
 
             # log ∏ [ (1-π)N(x;0,s^2) + π * slab ]
@@ -185,9 +193,11 @@ def ebnm_gb(
 
         # Final marginal log-likelihood
         sigma = omega_t * mu
-        var_sum = s*s + sigma*sigma
+        var_sum = s * s + sigma * sigma
         lg0 = _log_normal_pdf(x, mu, var_sum.sqrt())
-        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(torch.tensor(1.0/float(omega), device=device, dtype=dtype))  # noqa: E501
+        log_norm_cdf_ratio = logPhi(mu_tilde / sig_tilde2.sqrt()) - logPhi(
+            torch.tensor(1.0 / float(omega), device=device, dtype=dtype)
+        )  # noqa: E501
         lg_marg = lg0 + log_norm_cdf_ratio
         log_lik = torch.logaddexp(torch.log1p(-pi) + lf, torch.log(pi) + lg_marg).sum().item()
 
@@ -197,6 +207,6 @@ def ebnm_gb(
         post_sd=post_sd,
         pi_slab=float(pi),  # local `pi` is the slab weight
         mode=float(mu),
-        scale=float(1/(omega+1e-8)),
+        scale=float(1 / (omega + 1e-8)),
         log_lik=float(log_lik),
     )
