@@ -34,7 +34,7 @@ class EBNMLaplaceResult:
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    pi0: float   # mixture weight of the Laplace branch (slab)
+    pi_slab: float  # mixture weight of the Laplace branch (slab); = 1 - pi_null
     a: float     # Laplace rate (1/scale)
     mu: float
     log_lik: float  # pure marginal log-likelihood (no penalties)
@@ -48,9 +48,9 @@ def ebnm_point_laplace(
     tol: float = 1e-6,
     a_bounds=(1e-2, 1e2),              # bounds for Laplace rate a
     loga_l2: float = 0.0,              # ridge on a's unconstrained logit (optimization only; 0=off)
-    tresh_pi0: float = 1e-3,           # spike-only shortcut (post-processing only)
+    tresh_pi0: float = 1e-3,           # legacy name; slab-weight threshold for spike-only shortcut
     eps: float = 1e-12,
-    pen_pi0: float = 0.0,              # optional symmetric prior on pi0 (size-independent); 0=off
+    pen_pi0: float = 0.0,              # legacy name; optional symmetric prior on slab-weight parameter w
     use_adam_warmstart: bool = False,  # default OFF for speed; set True to enable short warm-up
     adam_steps: int = 8,
     adam_lr: float = 1e-2,
@@ -76,7 +76,7 @@ def ebnm_point_laplace(
     half = torch.tensor(0.5, device=device, dtype=dtype)
     two  = torch.tensor(2.0, device=device, dtype=dtype)
     eps_t = torch.tensor(eps, device=device, dtype=dtype)
-    thresh_pi0_t = torch.tensor(tresh_pi0, device=device, dtype=dtype)
+    thresh_pi_slab_t = torch.tensor(tresh_pi0, device=device, dtype=dtype)
 
     # normalizing constant (reuse tensor if given, else make one)
     c_norm = _LOG_SQRT_2PI if isinstance(_LOG_SQRT_2PI, torch.Tensor) else _const_like(s, _LOG_SQRT_2PI)
@@ -246,8 +246,8 @@ def ebnm_point_laplace(
         # PURE marginal log-likelihood
         llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w.clamp_min(eps_t)) + lg).sum()
 
-        # spike-only shortcut if pi0 (slab weight) tiny
-        if float(w.item()) < float(thresh_pi0_t.item()):
+        # spike-only shortcut if slab weight is tiny
+        if float(w.item()) < float(thresh_pi_slab_t.item()):
             post_mean  = torch.zeros_like(x) + mu
             post_mean2 = torch.zeros_like(x) + mu * mu + torch.tensor(1e-4, device=device, dtype=dtype)
             post_sd    = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
@@ -257,7 +257,7 @@ def ebnm_point_laplace(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi0=float(w.item()),     # mixture weight of the Laplace branch (slab)
+        pi_slab=float(w.item()),  # mixture weight of the Laplace branch (slab)
         a=float(a.item()),
         mu=float(mu.item()),
         log_lik=float(llik.item()),

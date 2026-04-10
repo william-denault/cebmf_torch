@@ -14,7 +14,7 @@ class EBNMGBResult:
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    pi0: float        # slab weight π
+    pi_slab: float    # slab weight π (= 1 - pi_null)
     mode: float        # learned μ ≥ 0
     scale: float     # fixed ω (σ = ω μ)
     log_lik: float
@@ -193,7 +193,7 @@ def ebnm_gb(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi0=float(pi),
+        pi_slab=float(pi),  # local `pi` is the slab weight
         mode=float(mu),
         scale=float(1/(omega+1e-8)),
         log_lik=float(log_lik),

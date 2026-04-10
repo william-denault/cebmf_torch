@@ -96,9 +96,9 @@ Point-mass + Exponential Prior
     s = torch.tensor([1.0, 0.5, 1.2, 0.8, 1.0])
     
     result = ebnm_point_exp(x, s)
-    
+
     print(f"Posterior means: {result.post_mean}")
-    print(f"Null probability: {result.pi0}")
+    print(f"Null probability: {1.0 - result.pi_slab}")
 
 Advanced Usage
 --------------
