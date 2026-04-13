@@ -200,7 +200,6 @@ def cash_posterior_means(
     optimizer_cash = optim.Adam(model_cash.parameters(), lr=lr)
 
     # ---- training
-    total_cash_loss = 0.0
     for epoch in range(n_epochs):
         epoch_loss = 0.0
         for inputs, targets, noise_std in dataloader:
@@ -215,7 +214,6 @@ def cash_posterior_means(
             optimizer_cash.step()
             epoch_loss += cash_loss.item()
 
-        total_cash_loss = epoch_loss
         if (epoch + 1) % 10 == 0:
             print(f"[CASH] Epoch {epoch + 1}/{n_epochs} | Loss: {epoch_loss / max(1, len(dataloader)):.4f}")
 
@@ -250,17 +248,22 @@ def cash_posterior_means(
             post_mean[i] = res_i.post_mean
             post_mean2[i] = res_i.post_mean2
             post_sd[i] = res_i.post_sd
-     # ---- compute proper full negative marginal log-likelihood (no penalty)
- 
- # ---- compute proper full negative marginal log-likelihood (no penalty)
- 
+
+        # ---- proper full negative marginal log-likelihood (no penalty).
+        # Computed in log space via logsumexp (no `clamp(min=1e-10)` floor on
+        # the inner density). This is what `cebmf.py:299`'s `kl_l[k] = (-loss)
+        # - nm_ll_L` formula expects, and matches the `cebnm/emdn.py:288-298`
+        # convention.
+        log_pi_full = torch.log(all_pi_values.clamp_min(eps))  # (N, K)
+        log_marginal_per_obs = torch.logsumexp(data_loglik + log_pi_full, dim=1)  # (N,)
+        full_marginal_ll = float(log_marginal_per_obs.sum().item())
 
     return cash_PosteriorMeanNorm(
         post_mean=post_mean,
         post_mean2=post_mean2,
-        post_sd=post_sd, 
+        post_sd=post_sd,
         pi_np=all_pi_values,  # (N, K) on device
-        loss= total_cash_loss,
+        loss=-full_marginal_ll,
         scale=scale,  # (K,) on device
         model_param=model_cash.state_dict(),
     )
