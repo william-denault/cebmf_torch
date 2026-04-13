@@ -366,7 +366,7 @@ def _compute_posteriors(
     sebetahat: torch.Tensor,
     scale: torch.Tensor,
     device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, float]:
     """Vectorised posterior computation with per-observation pi.
 
     Assumes location = 0 for all mixture components (spike mean is 0).
@@ -374,7 +374,13 @@ def _compute_posteriors(
 
     Returns
     -------
-    post_mean, post_mean2, post_sd, all_pi_values
+    post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik
+        ``marginal_loglik`` is the full-data marginal log-likelihood
+        ``sum_g logsumexp_k (log pi_g,k + log p(beta_g | 0, sqrt(se_g^2 + scale_k^2)))``,
+        i.e. ``log p(y | fitted prior)`` without any spike Dirichlet penalty.
+        It is what the cebmf consumer at ``cebmf.py:299``
+        (``self.kl_l[k] = (-resL.loss) - nm_ll_L``) requires of the loss
+        field on this object.
     """
     model.eval()
     loc = torch.zeros_like(scale)
@@ -390,6 +396,9 @@ def _compute_posteriors(
         log_pi_all = torch.log(torch.clamp(all_pi_values, min=eps))  # (G, K)
         combined = data_loglik + log_pi_all  # (G, K)
         log_norm = torch.logsumexp(combined, dim=1, keepdim=True)  # (G, 1)
+        # log_norm[g] is the per-gene marginal log-likelihood of the fitted
+        # mixture; summing gives the full-data marginal log-lik (no penalty).
+        marginal_loglik = float(log_norm.sum().item())
         resp = torch.exp(combined - log_norm)  # (G, K) responsibilities
 
         s2 = sebetahat.pow(2).unsqueeze(1)  # (G, 1)
@@ -408,7 +417,7 @@ def _compute_posteriors(
         post_mean2 = torch.sum(resp * (post_var_comp + m_comp.pow(2)), dim=1)
         post_sd = torch.sqrt(torch.clamp(post_mean2 - post_mean.pow(2), min=0.0))
 
-    return post_mean, post_mean2, post_sd, all_pi_values
+    return post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik
 
 
 def _warm_start(
@@ -489,7 +498,7 @@ def _fit_lcash(
         ]
     optimizer = torch.optim.Adam(param_groups, lr=lr)
 
-    final_loss = _train_model(
+    _train_model(
         model,
         optimizer,
         X_scaled,
@@ -504,7 +513,7 @@ def _fit_lcash(
         seed=seed,
     )
 
-    post_mean, post_mean2, post_sd, all_pi_values = _compute_posteriors(
+    post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik = _compute_posteriors(
         model,
         X_scaled,
         betahat,
@@ -513,12 +522,20 @@ def _fit_lcash(
         device,
     )
 
+    # `loss` is the negative full-data marginal log-likelihood under the
+    # fitted prior, *without* the spike Dirichlet penalty. This matches
+    # the convention used by `cebnm/emdn.py` and is the meaning required
+    # by `cebmf.py`'s per-factor `kl_l[k] = (-loss) - nm_ll_L` formula.
+    # The previous training-loss-on-final-epoch return value was an
+    # unfinished refactor (cf. the `# compute proper full negative
+    # marginal log-likelihood (no penalty)` TODO comments that used to
+    # live in `cash_solver.py`).
     return cash_PosteriorMeanNorm(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
         pi_np=all_pi_values,
-        loss=final_loss,
+        loss=-marginal_loglik,
         scale=scale,
         model_param=model.state_dict(),
     )
