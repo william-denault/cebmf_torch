@@ -43,6 +43,7 @@ class NoiseType(StrEnum):
     CONSTANT = auto()
     ROW_WISE = auto()
     COLUMN_WISE = auto()
+    KNOWN = auto()  # user-supplied standard errors; variance is fixed (not learned)
 
 
 @dataclass
@@ -75,6 +76,10 @@ class cEBMF:
     --------
     - Observed-mask weighting in lhat/fhat and their standard errors.
     - Constant or structured noise precision (scalar or per-row/column tau).
+    - User-supplied (fixed) standard errors via ``S`` — useful for z-scores
+      (pass ``S=1.0``) or pre-computed standard errors of effect-size estimates
+      (pass an ``(N, P)`` tensor). When ``S`` is provided, the noise variance is
+      treated as known and is *not* re-estimated during fitting.
     - Mini-batch optimization for mixture weights inside ash().
     - Modular prior and covariate support.
     """
@@ -91,14 +96,67 @@ class cEBMF:
         allow_backfitting: bool = True,
         prune_thresh: float = DEFAULT_PRUNE_THRESH,
         noise_type: NoiseType = NoiseType.CONSTANT,
+        S: torch.Tensor | float | int | None = None,
         X_l: torch.Tensor | None = None,
         X_f: torch.Tensor | None = None,
         self_row_cov: bool = False,
         self_col_cov: bool = False,
         device: torch.device | None = None,
     ):
+        """
+        Parameters
+        ----------
+        data : torch.Tensor
+            Observed data matrix of shape (N, P). NaN entries are treated as missing.
+        K : int, optional
+            Initial number of factors. Default 5.
+        prior_L, prior_F : str, optional
+            Prior names to use for the row/column factors.
+        internal_epoch : int, optional
+            Number of inner epochs for the prior fitting routine.
+        prior_L_kwargs, prior_F_kwargs : dict or None, optional
+            Extra keyword arguments forwarded to the prior builders.
+        allow_backfitting : bool, optional
+            If True, allow factor pruning between iterations.
+        prune_thresh : float, optional
+            π0 threshold above which a factor is pruned.
+        noise_type : NoiseType, optional
+            Structure of the (learned) noise variance. Ignored if ``S`` is provided.
+        S : torch.Tensor, float, int, or None, optional
+            User-supplied standard errors. When provided, the noise variance is
+            taken as fixed (not estimated) and ``noise_type`` is forced to
+            :attr:`NoiseType.KNOWN`. ``S`` may be:
+
+            * a scalar — typical for z-scores (``S=1.0``) — applied to every
+              entry;
+            * a tensor broadcastable to ``data.shape`` — for example, ``(N, P)``
+              if every observation has its own standard error, or ``(P,)`` /
+              ``(N, 1)`` for column- or row-wise known SEs.
+
+            Entries of ``S`` that are NaN, infinite, or non-positive are folded
+            into the missing-data mask (those observations are dropped from the
+            likelihood). A warning is raised if any such entries align with
+            observed values in ``data``.
+        X_l, X_f : torch.Tensor or None, optional
+            External covariates for the row/column factors.
+        self_row_cov, self_col_cov : bool, optional
+            Whether to use other factors as self-covariates.
+        device : torch.device or None, optional
+            Target device. Defaults to the result of :func:`get_device`.
+        """
         self.data = data
         self.device = device or get_device()
+
+        # If the user supplied S, the noise variance is fixed and any explicit
+        # ``noise_type`` other than the default CONSTANT is silently overridden.
+        if S is not None:
+            if noise_type != NoiseType.CONSTANT:
+                warn(
+                    f"`S` was provided so the noise variance is treated as known/fixed; "
+                    f"the requested noise_type={noise_type!r} will be ignored.",
+                    stacklevel=2,
+                )
+            noise_type = NoiseType.KNOWN
 
         # Build config objects internally
         self.model = ModelParams(
@@ -118,6 +176,8 @@ class cEBMF:
         if prior_F_kwargs is None:
             prior_F_kwargs = {}
 
+        # Stash raw S input; normalised to an (N, P) tensor inside _initialise_tensors
+        self._S_input = S
         self._validate_inputs()
         self.Y = self.data.to(self.device).float()
         self.N, self.P = self.Y.shape
@@ -210,11 +270,17 @@ class cEBMF:
         """
         Update the noise precision parameter(s) according to the noise model.
 
-        Matches NumPy behavior:
-        - 'constant'   -> scalar tau; also provides tau_map (N,P) if you need it
-        - 'row_wise'   -> tau_row (N,), tau_map broadcast to (N,P)
-        - 'column_wise'-> tau_col (P,), tau_map broadcast to (N,P)
+        Behaviour by noise type:
+
+        - ``CONSTANT``    -> scalar tau; also provides tau_map (N,P) if you need it
+        - ``ROW_WISE``    -> tau_row (N,), tau_map broadcast to (N,P)
+        - ``COLUMN_WISE`` -> tau_col (P,), tau_map broadcast to (N,P)
+        - ``KNOWN``       -> no-op; tau_map was built once from the user-supplied ``S``.
         """
+        if self.noise.type == NoiseType.KNOWN:
+            # Variance is fixed by the user; nothing to update.
+            return
+
         R2 = self._expected_residuals_squared()  # (N,P), zeros at missing
 
         match self.noise.type:
@@ -225,7 +291,7 @@ class cEBMF:
             case NoiseType.ROW_WISE:
                 dim = 1
             case _:
-                raise ValueError("type_noise must be 'constant', 'row_wise', or 'column_wise'")
+                raise ValueError("type_noise must be 'constant', 'row_wise', 'column_wise', or 'known'")
 
         self._update_tau(R2, dim=dim)
 
@@ -430,7 +496,15 @@ class cEBMF:
         self.L2 = torch.zeros(self.N, self.model.K, device=self.device)
         self.F = torch.zeros(self.P, self.model.K, device=self.device)
         self.F2 = torch.zeros(self.P, self.model.K, device=self.device)
-        self.tau = torch.tensor(1.0, device=self.device)  # precision (1/var)
+
+        if self.noise.type == NoiseType.KNOWN:
+            # Build tau_map from user-supplied S; may further reduce self.mask / self.Y0.
+            self._setup_known_variance()
+        else:
+            # Initial precision guess for learned-noise modes; refined by update_tau().
+            self.S = None
+            self.tau = torch.tensor(1.0, device=self.device)
+
         self.kl_l = torch.zeros(self.model.K, device=self.device)
         self.kl_f = torch.zeros(self.model.K, device=self.device)
         self.pi0_L: list[Tensor | float | None] = [
@@ -438,6 +512,74 @@ class cEBMF:
         ] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
         self.pi0_F: list[Tensor | float | None] = [None] * self.model.K
         self.obj = []
+
+    @torch.no_grad()
+    def _setup_known_variance(self) -> None:
+        """
+        Materialise the user-supplied standard-error matrix into ``self.S`` and
+        the corresponding precision matrix ``self.tau_map = 1 / S**2``.
+
+        Accepts a scalar (broadcast to ``(N, P)``) or any tensor broadcastable to
+        ``(N, P)``. Entries of S that are NaN, infinite, or non-positive are folded
+        into ``self.mask`` (treated as missing) and replaced with 1 internally so
+        downstream multiplications by ``mask=0`` cleanly zero out their contribution.
+        """
+        S_in = self._S_input
+        target_shape = (self.N, self.P)
+        target_dtype = self.Y.dtype
+
+        # --- Normalise S to an (N, P) tensor on the right device/dtype.
+        if isinstance(S_in, (int, float)):
+            S_val = float(S_in)
+            if not math.isfinite(S_val) or S_val <= 0.0:
+                raise ValueError(
+                    f"Scalar S must be a positive, finite number, got {S_in!r}"
+                )
+            S = torch.full(target_shape, S_val, device=self.device, dtype=target_dtype)
+        else:
+            if not isinstance(S_in, torch.Tensor):
+                S = torch.as_tensor(S_in, dtype=target_dtype, device=self.device)
+            else:
+                S = S_in.to(device=self.device, dtype=target_dtype)
+            if S.shape != target_shape:
+                try:
+                    S = S.expand(target_shape).contiguous()
+                except RuntimeError as e:
+                    raise ValueError(
+                        f"S has shape {tuple(S.shape)}, which is not broadcastable "
+                        f"to data shape {target_shape}"
+                    ) from e
+            else:
+                S = S.contiguous()
+
+        # --- Fold non-finite / non-positive entries into the mask.
+        bad = ~torch.isfinite(S) | (S <= 0)
+        if bool(bad.any()):
+            # Only warn about bad-S entries that align with currently-observed data:
+            # those are the ones that actually change the likelihood.
+            observed_and_bad = bad & self.mask.bool()
+            n_observed_bad = int(observed_and_bad.sum().item())
+            if n_observed_bad > 0:
+                warn(
+                    f"S has {n_observed_bad} non-finite or non-positive entries "
+                    f"at observed positions in `data`; these entries will be treated "
+                    f"as missing.",
+                    stacklevel=3,
+                )
+            # Drop them from the mask and zero the corresponding Y0 entries.
+            good_f = (~bad).to(self.mask.dtype)
+            self.mask = self.mask * good_f
+            self.Y0 = self.Y0 * self.mask
+            # Replace bad S entries with 1.0 internally (any finite positive value works
+            # because mask=0 there annihilates their contribution).
+            S = torch.where(bad, torch.ones_like(S), S)
+
+        self.S = S
+        self.tau_map = 1.0 / (S * S)
+        # Downstream code (e.g. _update_factors elementwise branch, _cal_obj
+        # elementwise branch) reads self.tau_map; set self.tau to the same tensor
+        # for consistency with the structured-noise convention.
+        self.tau = self.tau_map
 
     @torch.no_grad()
     def _update_tau(self, R2: Tensor, dim: None | int) -> None:
