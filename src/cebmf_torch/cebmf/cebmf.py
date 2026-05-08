@@ -355,6 +355,7 @@ class cEBMF:
                 internal_epoch=self.internal_epoch,
                 sebetahat=se_l,
                 model_param=self.model_state_L[k],
+                device=self.device,
             )
 
         # write back

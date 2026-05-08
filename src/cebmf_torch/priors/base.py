@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+import torch
 from torch import Tensor
 
 
@@ -47,6 +48,7 @@ class PriorBuilder(ABC):
         sebetahat: Tensor,
         model_param: Any | None = None,
         internal_epoch: Any | None = None,
+        device: torch.device | None = None,
     ) -> Prior:
         """
         Fit the prior and return posterior estimates.
@@ -61,6 +63,12 @@ class PriorBuilder(ABC):
             Standard errors of effect sizes.
         model_param : Any or None, optional
             Additional model parameters (for warm starts).
+        internal_epoch : Any or None, optional
+            Number of inner training epochs (used by learned priors).
+        device : torch.device or None, optional
+            Target device. If not provided, the implementation should infer
+            it from the input tensors (the conventional GPU-friendly behaviour
+            inside cEBMF). Builders may ignore this argument when not relevant.
 
         Returns
         -------

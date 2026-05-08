@@ -73,46 +73,73 @@ def convolved_logpdf_normal_torch(
     """
     Compute the log-likelihood matrix for a normal prior convolved with normal noise.
 
+    Both ``location`` and ``scale`` may be either shared across observations
+    (shape ``(K,)``) or per-observation (shape ``(J, K)``). This makes the
+    routine usable both for classical fixed-grid ASH and for neural-net-based
+    priors (CASH / EMDN / spiked-EMDN) where the per-observation mixture is
+    different.
+
     Parameters
     ----------
     betahat : torch.Tensor
-        Observed effect size estimates, shape (J,).
+        Observed effect size estimates, shape ``(J,)``.
     sebetahat : torch.Tensor
-        Standard errors of the effect size estimates, shape (J,).
+        Standard errors of the effect size estimates, shape ``(J,)``.
     location : torch.Tensor
-        Prior means, shape (K,) or (J, K).
+        Prior means, shape ``(K,)`` or ``(J, K)``.
     scale : torch.Tensor
-        Prior standard deviations, shape (K,).
+        Prior standard deviations, shape ``(K,)`` or ``(J, K)``.
     clamp : float, optional
-        Clamp log-likelihood values to [-clamp, clamp] for numerical stability (default: 1e5).
+        Clamp log-likelihood values to ``[-clamp, clamp]`` for numerical
+        stability (default: ``1e5``).
 
     Returns
     -------
     torch.Tensor
-        Log-likelihood matrix of shape (J, K).
+        Log-likelihood matrix of shape ``(J, K)``.
     """
     betahat = torch.as_tensor(betahat)
-    sebetahat = torch.as_tensor(sebetahat, dtype=betahat.dtype, device=betahat.device)
-    scale = torch.as_tensor(scale, dtype=betahat.dtype, device=betahat.device)
-    location = torch.as_tensor(location, dtype=betahat.dtype, device=betahat.device)
+    dt, dev = betahat.dtype, betahat.device
+    sebetahat = torch.as_tensor(sebetahat, dtype=dt, device=dev)
+    scale = torch.as_tensor(scale, dtype=dt, device=dev)
+    location = torch.as_tensor(location, dtype=dt, device=dev)
 
     J = betahat.shape[0]
-    K = scale.shape[0]
+
+    # Resolve K from scale (1D or 2D), and shape sc2 to (J, K) or (1, K).
+    if scale.ndim == 1:
+        K = scale.shape[0]
+        sc2 = scale.pow(2).unsqueeze(0)  # (1, K), broadcasts across J
+    elif scale.ndim == 2:
+        if scale.shape[0] != J:
+            raise ValueError(
+                f"scale 2D first dim must be J={J}, got shape {tuple(scale.shape)}"
+            )
+        K = scale.shape[1]
+        sc2 = scale.pow(2)  # (J, K)
+    else:
+        raise ValueError(f"scale must be 1D or 2D, got ndim={scale.ndim}")
 
     # Broadcast sd_jk = sqrt(se_j^2 + scale_k^2)
-    se2 = sebetahat.pow(2).unsqueeze(1)  # (J,1)
-    sc2 = scale.pow(2).unsqueeze(0)  # (1,K)
-    sd = torch.sqrt(se2 + sc2)  # (J,K)
+    se2 = sebetahat.pow(2).unsqueeze(1)  # (J, 1)
+    sd = torch.sqrt(se2 + sc2)  # (J, K)
 
     if location.ndim == 1:
-        loc = location.unsqueeze(0).expand(J, K)  # (J,K)
+        if location.shape[0] != K:
+            raise ValueError(
+                f"location 1D length must be K={K}, got shape {tuple(location.shape)}"
+            )
+        loc = location.unsqueeze(0).expand(J, K)
     elif location.ndim == 2:
-        assert location.shape == (J, K), "location must be (K,) or (J,K)"
+        if location.shape != (J, K):
+            raise ValueError(
+                f"location 2D shape must be (J={J}, K={K}), got {tuple(location.shape)}"
+            )
         loc = location
     else:
-        raise ValueError("location must be (K,) or (J,K)")
+        raise ValueError(f"location must be 1D or 2D, got ndim={location.ndim}")
 
-    x = betahat.unsqueeze(1).expand(J, K)  # (J,K)
+    x = betahat.unsqueeze(1).expand(J, K)  # (J, K)
     logp = _logpdf_normal(x, loc, sd)
     logp = torch.clamp(logp, min=-clamp, max=clamp)
     return logp

@@ -209,8 +209,13 @@ def emdn_posterior_means(
     EmdnPosteriorMeanNorm
         Container with posterior means, standard deviations, and model parameters.
     """
-    # ---- device
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # ---- device: inherit from the input tensor if available, else fall back
+    # to CUDA-or-CPU. Inheriting avoids silent device hops when the caller
+    # (e.g. cEBMF) is on CPU/MPS but CUDA is also visible on the host.
+    if device is None:
+        device = betahat.device if isinstance(betahat, torch.Tensor) else (
+            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
     # ---- tensors on device
     X = torch.as_tensor(X, dtype=torch.float32, device=device)
@@ -261,41 +266,42 @@ def emdn_posterior_means(
             pi, mu, log_sigma = model(X_batch)
         sigma = torch.exp(log_sigma)  # (N, K)
 
-        # Posterior means per observation
-        J = betahat.shape[0]
-        post_mean = torch.empty(J, dtype=torch.float32, device=device)
-        post_mean2 = torch.empty(J, dtype=torch.float32, device=device)
-        post_sd = torch.empty(J, dtype=torch.float32, device=device)
-
-        for i in range(J):
-            data_loglik = get_data_loglik_normal_torch(
-                betahat=betahat[i : i + 1],
-                sebetahat=sebetahat[i : i + 1],
-                location=mu[i, :],
-                scale=sigma[i, :],
-            )
-            result = posterior_mean_norm(
-                betahat=betahat[i : i + 1],
-                sebetahat=sebetahat[i : i + 1],
-                log_pi=torch.log(pi[i, :].clamp_min(1e-300)),
-                data_loglik=data_loglik,
-                location=mu[i, :],
-                scale=sigma[i, :],
-            )
-            post_mean[i] = result.post_mean
-            post_mean2[i] = result.post_mean2
-            post_sd[i] = result.post_sd
-            # ---- proper full negative marginal log-likelihood (no penalty)
+        # ---- Vectorised posterior over all observations.
+        # The MDN emits per-observation mixture parameters (pi, mu, sigma) of
+        # shape (N, K). The vectorised posterior_mean_norm + per-obs (J, K)
+        # data_loglik path replaces the previous ``for i in range(J)`` loop,
+        # which created N kernel launches and dominated runtime on GPU.
         eps = 1e-12
-        # log N(b_i ; mu_{ik}, sqrt(se_i^2 + sigma_{ik}^2)) in log domain
-        total_sigma = torch.sqrt(sigma**2 + sebetahat.unsqueeze(1)**2)        # (N, K)
-        z = (betahat.unsqueeze(1) - mu) / total_sigma                          # (N, K)
-        log_sqrt_2pi = 0.5 * torch.log(torch.tensor(2.0 * torch.pi,
-                                                    device=betahat.device,
-                                                    dtype=betahat.dtype))
-        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi     # (N, K)
-        log_mix = torch.logsumexp(torch.log(pi.clamp_min(eps)) + log_comp, dim=1)  # (N,)
-        full_marginal_ll =  float(log_mix.sum().item())
+        data_loglik = get_data_loglik_normal_torch(
+            betahat=betahat,
+            sebetahat=sebetahat,
+            location=mu,      # (N, K) per-observation
+            scale=sigma,      # (N, K) per-observation
+        )  # (N, K)
+
+        log_pi_full = torch.log(pi.clamp_min(eps))  # (N, K)
+        result = posterior_mean_norm(
+            betahat=betahat,
+            sebetahat=sebetahat,
+            log_pi=log_pi_full,
+            data_loglik=data_loglik,
+            location=mu,
+            scale=sigma,
+        )
+        post_mean = result.post_mean
+        post_mean2 = result.post_mean2
+        post_sd = result.post_sd
+
+        # ---- Full marginal log-likelihood (no penalty).
+        # log N(b_i ; mu_{ik}, sqrt(se_i^2 + sigma_{ik}^2)) in log-domain.
+        total_sigma = torch.sqrt(sigma**2 + sebetahat.unsqueeze(1) ** 2)  # (N, K)
+        z = (betahat.unsqueeze(1) - mu) / total_sigma                     # (N, K)
+        log_sqrt_2pi = 0.5 * torch.log(
+            torch.tensor(2.0 * torch.pi, device=betahat.device, dtype=betahat.dtype)
+        )
+        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi  # (N, K)
+        log_mix = torch.logsumexp(log_pi_full + log_comp, dim=1)  # (N,)
+        full_marginal_ll = float(log_mix.sum().item())
 
 
     return EmdnPosteriorMeanNorm(

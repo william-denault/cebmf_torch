@@ -1,6 +1,7 @@
 from enum import StrEnum, auto
 from typing import Any
 
+import torch
 from torch import Tensor
 
 from cebmf_torch.ebnm.ash import ash
@@ -78,6 +79,7 @@ class ASHBuilder(PriorBuilder):
         sebetahat: Tensor,
         model_param: Any | None = None,
         internal_epoch: Any | None = None,
+        device: torch.device | None = None,
     ) -> Prior:
         """
         Fit the ASH mixture prior to the data.
@@ -92,12 +94,18 @@ class ASHBuilder(PriorBuilder):
             Standard errors of the effect size estimates.
         model_param : Any, optional
             Additional model parameters (default: None).
+        internal_epoch : Any, optional
+            Unused; kept for signature parity with the other builders.
+        device : torch.device, optional
+            Unused — ASH inherits its device from the input tensors directly.
+            Accepted for signature parity with :class:`LearnedBuilder`.
 
         Returns
         -------
         Prior
             Fitted prior object with posterior means and related quantities.
         """
+        del device  # ASH operates on the input tensors' device directly
         obj = ash(betahat, sebetahat, prior=str(self.type), **self.kwargs)
         return Prior(
             post_mean=obj.post_mean,

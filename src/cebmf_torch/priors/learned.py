@@ -2,6 +2,7 @@ from collections.abc import Callable
 from enum import StrEnum, auto
 from typing import Any
 
+import torch
 from torch import Tensor
 
 from cebmf_torch.cebnm.cash_solver import cash_posterior_means
@@ -110,6 +111,7 @@ class LearnedBuilder(PriorBuilder):
         sebetahat: Tensor,
         model_param: Any | None = None,
         internal_epoch: int | None = None,
+        device: torch.device | None = None,
     ) -> Prior:
         """
         Fit the learned prior to the data.
@@ -124,6 +126,13 @@ class LearnedBuilder(PriorBuilder):
             Standard errors of the effect size estimates.
         model_param : Any, optional
             Additional model parameters (default: None).
+        internal_epoch : int, optional
+            Number of training epochs for the underlying neural network.
+        device : torch.device, optional
+            Target device. Forwarded to the underlying cebnm builder so that
+            the neural network and its tensors live on the same device as the
+            caller (e.g. ``cEBMF``). When ``None``, the builder falls back to
+            inheriting from the input tensor.
 
         Returns
         -------
@@ -136,7 +145,13 @@ class LearnedBuilder(PriorBuilder):
             If the prior type is unknown or unsupported.
         """
         obj = builder_functions[self.type](
-            X, betahat, sebetahat, model_param=model_param, n_epochs=internal_epoch, **self.kwargs
+            X,
+            betahat,
+            sebetahat,
+            model_param=model_param,
+            n_epochs=internal_epoch,
+            device=device,
+            **self.kwargs,
         )
 
         # A bit annoying that the different types have different ways of handling pi0

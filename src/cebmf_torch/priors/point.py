@@ -2,6 +2,7 @@ from collections.abc import Callable
 from enum import StrEnum, auto
 from typing import Any
 
+import torch
 from torch import Tensor
 
 from cebmf_torch.ebnm.generalized_binary import ebnm_gb
@@ -89,6 +90,7 @@ class PointBuilder(PriorBuilder):
         sebetahat: Tensor,
         model_param: Any | None = None,
         internal_epoch: Any | None = None,
+        device: torch.device | None = None,
     ) -> Prior:
         """
         Fit the point prior to the data.
@@ -103,12 +105,18 @@ class PointBuilder(PriorBuilder):
             Standard errors of the effect size estimates.
         model_param : Any, optional
             Additional model parameters (default: None).
+        internal_epoch : Any, optional
+            Unused; kept for signature parity with the other builders.
+        device : torch.device, optional
+            Unused — point priors operate on the input tensors' device.
+            Accepted for signature parity with :class:`LearnedBuilder`.
 
         Returns
         -------
         Prior
             Fitted prior object with posterior means and related quantities.
         """
+        del device  # point priors run on the input tensors' device directly
         obj = builder_functions[self.type](betahat, sebetahat, **self.kwargs)
         # `obj.pi_slab` is the slab (non-null) weight by the convention of
         # EBNMPointExp / EBNMLaplaceResult / EBNMGBResult. The Prior.pi0_null
