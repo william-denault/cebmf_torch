@@ -172,10 +172,16 @@ class LearnedBuilder(PriorBuilder):
             case _:
                 raise ValueError(f"Default pi0 unknown for prior type: {self.type}")
 
+        # `obj.loss` is already on the prior's device; keep it that way so the
+        # ELBO term in cEBMF doesn't force a host sync. Wrap a Python float in
+        # a 0-d tensor (rare path: ash-style learned priors) for uniformity.
+        loss = obj.loss
+        if not isinstance(loss, torch.Tensor):
+            loss = torch.as_tensor(loss, device=obj.post_mean.device, dtype=obj.post_mean.dtype)
         return Prior(
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,
-            loss=float(obj.loss),
+            loss=loss,
             model_param=obj.model_param,
             pi0_null=pi0_null,
         )

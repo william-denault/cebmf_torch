@@ -1,15 +1,8 @@
 import torch
 
-from .maths import _LOG_SQRT_2PI, my_e2truncnorm, my_etruncnorm
-
-
-def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    z = (x - loc) / scale
-    return -0.5 * z.pow(2) + (-torch.log(scale) - _LOG_SQRT_2PI)
-
-
-def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
-    return torch.special.log_ndtr(z)
+# Re-export the canonical normal-density helpers so existing imports keep working.
+# The single source of truth lives in utils/maths.py.
+from .maths import _logcdf_normal, _logpdf_normal, my_e2truncnorm, my_etruncnorm  # noqa: F401
 
 
 class PosteriorMean:
@@ -59,11 +52,6 @@ def wpost_exp(x: torch.Tensor, s: torch.Tensor, w: torch.Tensor, scale: torch.Te
     w = torch.as_tensor(w, dtype=x.dtype, device=x.device)
     scale = torch.as_tensor(scale, dtype=x.dtype, device=x.device)
 
-    if torch.all(w[0] == 1):
-        out = torch.zeros_like(scale)
-        out[0] = 1.0
-        return out
-
     # spike log-lik
     lf = _logpdf_normal(x, torch.as_tensor(0.0, dtype=x.dtype, device=x.device), s)
 
@@ -79,6 +67,13 @@ def wpost_exp(x: torch.Tensor, s: torch.Tensor, w: torch.Tensor, scale: torch.Te
     bmax = torch.max(log_prob)
     num = w * torch.exp(log_prob - bmax)
     r = num / torch.clamp(num.sum(), min=1e-300)
+
+    # Degenerate case: w[0] >= 1 means all mass on the spike. Replace with the
+    # one-hot response, branchless to avoid `if torch.all(...):` host sync.
+    spike_only = w[0] >= 1.0
+    r_spike = torch.zeros_like(scale)
+    r_spike[0] = 1.0
+    r = torch.where(spike_only, r_spike, r)
     return r
 
 

@@ -121,14 +121,16 @@ class PointBuilder(PriorBuilder):
         # `obj.pi_slab` is the slab (non-null) weight by the convention of
         # EBNMPointExp / EBNMLaplaceResult / EBNMGBResult. The Prior.pi0_null
         # field expected by `cebmf._should_prune_factor` (cebmf.py:482) is
-        # the *null/spike* weight, so it is `1 - pi_slab`. Prior to this fix
-        # the two were equated by mistake (`pi0_null=obj.pi0` where `obj.pi0`
-        # was actually the slab weight), inverting the prune decision.
+        # the *null/spike* weight, so it is `1 - pi_slab`. Both `pi_slab` and
+        # `log_lik` are now 0-d tensors on-device — keeping them that way
+        # avoids the per-fit-call host sync that the previous `float(...)`
+        # casts forced.
+        pi_slab_t = obj.pi_slab
         return Prior(
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,
-            loss=-float(obj.log_lik),
+            loss=-obj.log_lik,
             model_param=model_param,
-            pi0_null=1.0 - float(obj.pi_slab),
-            pi_slab=float(obj.pi_slab),
+            pi0_null=1.0 - pi_slab_t,
+            pi_slab=pi_slab_t,
         )

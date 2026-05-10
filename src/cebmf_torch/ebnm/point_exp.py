@@ -71,13 +71,18 @@ class EBNMPointExp:
         post_mean: Tensor,
         post_mean2: Tensor,
         post_sd: Tensor,
-        scale: float,
-        pi_slab: float,
-        log_lik: float,
-        mode: float,
+        scale: Tensor,
+        pi_slab: Tensor,
+        log_lik: Tensor,
+        mode: Tensor,
     ):
         """
         Container for the results of the point-exponential EBNM posterior estimation.
+
+        All scalar fields are kept as 0-d tensors on the same device as the
+        input data so cEBMF can fold them into the ELBO without forcing a
+        host sync per factor update. Use ``float(field)`` if you need a
+        Python scalar.
 
         Parameters
         ----------
@@ -87,20 +92,14 @@ class EBNMPointExp:
             Posterior second moments for each observation.
         post_sd : torch.Tensor
             Posterior standard deviations for each observation.
-        scale : float
-            Estimated exponential scale parameter (a).
-        pi_slab : float
+        scale : torch.Tensor (0-d)
+            Estimated exponential rate parameter (a).
+        pi_slab : torch.Tensor (0-d)
             Estimated mixture weight for the Exp (slab) branch. Equal to
-            ``1 - pi_null``. The previous field name ``pi0`` was a misnomer:
-            inside this class ``pi0`` was the slab weight (the field that
-            multiplies the Exp branch in the loglik mixture), not the null
-            weight, which is the opposite of how the mixture-prior path
-            (``ebnm/ash.py``) uses ``pi0``. The rename eliminates the
-            cross-file naming collision and prevents the kind of inversion
-            that previously affected ``priors/point.py``.
-        log_lik : float
-            Final log-likelihood value.
-        mode : float
+            ``1 - pi_null``.
+        log_lik : torch.Tensor (0-d)
+            Final marginal log-likelihood value.
+        mode : torch.Tensor (0-d)
             Estimated mode (mu).
         """
         self.post_mean = post_mean
@@ -221,7 +220,6 @@ def ebnm_point_exp(
         pi_slab = torch.sigmoid(alpha).clamp(eps_t, 1 - eps_t)
         sig = torch.sigmoid(a_logit)
         a = a_lo_t + (a_hi_t - a_lo_t) * sig
-        mu_v = float(mu.item())
 
         xc = x - mu
         lf = _loglik_spike(xc, s)
@@ -237,25 +235,29 @@ def ebnm_point_exp(
 
         post_mean = post_mean_c + mu
         post_mean2 = post_mean2_c + _const_like(x, 2.0) * mu * post_mean_c + mu * mu
-        post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
 
         # pure observed marginal log-likelihood (no penalty)
         llik = torch.logaddexp(torch.log1p(-pi_slab) + lf, torch.log(pi_slab.clamp_min(eps_t)) + lg).sum()
 
-        # Optional spike-only shortcut (post hoc only, keeps training objective smooth)
-        if float(pi_slab.item()) < tresh_pi0:
-            post_mean = torch.zeros_like(x) + mu
-            post_mean2 = torch.zeros_like(x) + mu * mu + _const_like(x, 1e-4)
-            post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
-            llik = lf.sum()
-            # leave pi_slab tiny (or set to exact 0.0 if preferred)
+        # Optional spike-only shortcut — branchless to avoid a per-call host sync.
+        tresh_pi0_t = _const_like(x, tresh_pi0)
+        spike_only = pi_slab < tresh_pi0_t  # 0-d bool tensor
+        post_mean_so = torch.zeros_like(x) + mu
+        post_mean2_so = torch.zeros_like(x) + mu * mu + _const_like(x, 1e-4)
+        llik_so = lf.sum()
+        post_mean = torch.where(spike_only, post_mean_so, post_mean)
+        post_mean2 = torch.where(spike_only, post_mean2_so, post_mean2)
+        post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
+        llik = torch.where(spike_only, llik_so, llik)
 
+    # Keep scalar fields on-device as 0-d tensors — `cebmf.py` consumes them
+    # via `priors/point.py` which now stays in tensor space.
     return EBNMPointExp(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        scale=float(a.item()),  # 'a' is the *rate*; field name kept as 'scale' for compatibility
-        pi_slab=float(pi_slab.item()),
-        log_lik=float(llik.item()),
-        mode=mu_v,
+        scale=a.detach(),  # 'a' is the *rate*; field name kept as 'scale' for compatibility
+        pi_slab=pi_slab.detach(),
+        log_lik=llik.detach(),
+        mode=mu.detach(),
     )

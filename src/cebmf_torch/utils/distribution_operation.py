@@ -2,7 +2,10 @@
 
 import torch
 
-from .maths import _LOG_SQRT_2PI
+# Canonical normal helpers live in utils/maths.py; re-exported here so existing
+# imports (`from cebmf_torch.utils.distribution_operation import _logpdf_normal`)
+# keep working.
+from .maths import _logcdf_normal, _logpdf_normal  # noqa: F401
 
 
 def _const_like(c, ref: torch.Tensor) -> torch.Tensor:
@@ -13,50 +16,6 @@ def _const_like(c, ref: torch.Tensor) -> torch.Tensor:
         return c.to(device=ref.device, dtype=ref.dtype)
     # assume Python scalar
     return torch.tensor(c, device=ref.device, dtype=ref.dtype)
-
-
-# ===== numerically-stable primitives =====
-
-
-def _logpdf_normal(x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    """
-    Compute the log-density of a normal distribution in a numerically stable way.
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Input tensor.
-    loc : torch.Tensor
-        Mean of the normal distribution.
-    scale : torch.Tensor
-        Standard deviation of the normal distribution.
-
-    Returns
-    -------
-    torch.Tensor
-        Log-density evaluated at x.
-    """
-    z = (x - loc) / scale
-    # make sure constant is on the right device/dtype
-    log_sqrt_2pi = _const_like(_LOG_SQRT_2PI, scale)
-    return -0.5 * z.pow(2) - torch.log(scale) - log_sqrt_2pi
-
-
-def _logcdf_normal(z: torch.Tensor) -> torch.Tensor:
-    """
-    Compute the log CDF of the standard normal distribution in a numerically stable way.
-
-    Parameters
-    ----------
-    z : torch.Tensor
-        Input tensor.
-
-    Returns
-    -------
-    torch.Tensor
-        Log CDF evaluated at z.
-    """
-    return torch.special.log_ndtr(z)
 
 
 # ===== convolved log-pdfs =====

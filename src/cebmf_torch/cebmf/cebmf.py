@@ -400,6 +400,7 @@ class cEBMF:
                 sebetahat=se_f,
                 internal_epoch=self.internal_epoch,
                 model_param=self.model_state_F[k],
+                device=self.device,
             )
 
         # write back
@@ -592,9 +593,13 @@ class cEBMF:
         tau = 1.0 / (mean_R2.clamp_min(NUMERICAL_EPS))
 
         if dim is None:
-            # scalar precision; also provide a full tau_map for convenience
-            self.tau = tau
-            self.tau_map = torch.full((self.N, self.P), tau.item(), device=self.device, dtype=R2.dtype)
+            # Scalar precision. Keep `self.tau` as a 0-d tensor (the loglik branch
+            # for CONSTANT noise uses it directly) and expose a broadcast-only
+            # tau_map for convenience. `expand` shares storage and avoids both
+            # the per-iteration host sync from `tau.item()` and the (N, P)
+            # materialisation that the previous `torch.full` triggered.
+            self.tau = tau  # 0-d tensor
+            self.tau_map = tau.view(1, 1).expand(self.N, self.P)  # (N, P) view, no copy
             return
 
         view = (-1, 1) if dim == 1 else (1, -1)
@@ -716,26 +721,32 @@ def normal_means_loglik(
     if mask is not None:
         valid = valid & mask.to(dtype=torch.bool, device=x.device)
 
-    if not valid.any():
-        if reduce == "none":
-            return torch.full_like(x, float("nan"))
-        return x.new_tensor(float("nan"))
-
-    # Stable variance and constant term
-    var = (s * s).clamp_min(eps)  # s^2 ≥ eps
+    # Stable variance and constant term. Use a safe `s` so log/quad never see 0
+    # at masked entries; the masking happens after via `torch.where`.
+    safe_s = torch.where(valid, s, torch.ones_like(s))
+    var = (safe_s * safe_s).clamp_min(eps)
     c2pi = x.new_tensor(math.log(2.0 * math.pi))  # stays on same device/dtype
 
-    # E[(x - theta)^2] = Et2 - 2*x*Et + x^2
-    quad = Et2 - 2.0 * x * Et + x * x
-    ll_el = -0.5 * (c2pi + torch.log(var) + quad / var)
+    # E[(x - theta)^2] = Et2 - 2*x*Et + x^2 (uses safe_x to keep finite)
+    safe_x = torch.where(valid, x, torch.zeros_like(x))
+    safe_Et = torch.where(valid, Et, torch.zeros_like(Et))
+    safe_Et2 = torch.where(valid, Et2, torch.zeros_like(Et2))
+    quad = safe_Et2 - 2.0 * safe_x * safe_Et + safe_x * safe_x
+    ll_el_raw = -0.5 * (c2pi + torch.log(var) + quad / var)
+
+    # Branchless: invalid entries contribute 0 to sum/mean (was previously a
+    # host-sync `if not valid.any(): return nan`). When literally every entry
+    # is invalid, sum=0 and mean returns NaN naturally via 0/0.
+    valid_f = valid.to(ll_el_raw.dtype)
+    ll_el_masked = ll_el_raw * valid_f
 
     if reduce == "sum":
-        return ll_el[valid].sum()
+        return ll_el_masked.sum()
     elif reduce == "mean":
-        return ll_el[valid].mean()
+        return ll_el_masked.sum() / valid_f.sum()
     elif reduce == "none":
         out = torch.full_like(x, float("nan"))
-        out[valid] = ll_el[valid]
+        out[valid] = ll_el_raw[valid]
         return out
     else:
         raise ValueError("reduce must be 'sum', 'mean', or 'none'")

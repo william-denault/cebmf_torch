@@ -17,19 +17,22 @@ class Prior:
         Posterior means for each observation.
     post_mean2 : torch.Tensor
         Posterior second moments for each observation.
-    loss : float
-        Final training loss or log-likelihood.
+    loss : torch.Tensor
+        Final training loss or negative log-likelihood, as a 0-d tensor on the
+        prior's device. Kept on-device so that cEBMF can fold it into the
+        ELBO without forcing a host sync per factor update.
     model_param : Any or None, optional
         Trained model parameters (state_dict) or other metadata.
     pi0_null : torch.Tensor, float, or None, optional
-        Null component probability (if applicable).
+        Null component probability. Either a 0-d tensor (point/mixture priors),
+        a vector (covariate-conditional priors) or None.
     pi_slab : torch.Tensor, float, or None, optional
-        Slab component probability (if applicable).
+        Slab component probability (if applicable). Either a 0-d tensor or None.
     """
 
     post_mean: Tensor
     post_mean2: Tensor
-    loss: float
+    loss: Tensor
     model_param: Any | None = None
     pi0_null: Tensor | float | None = None
     pi_slab: Tensor | float | None = None
