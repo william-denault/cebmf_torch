@@ -2,6 +2,7 @@ from collections.abc import Callable
 from enum import StrEnum, auto
 from typing import Any
 
+import torch
 from torch import Tensor
 
 from cebmf_torch.cebnm.cash_solver import cash_posterior_means
@@ -110,6 +111,7 @@ class LearnedBuilder(PriorBuilder):
         sebetahat: Tensor,
         model_param: Any | None = None,
         internal_epoch: int | None = None,
+        device: torch.device | None = None,
     ) -> Prior:
         """
         Fit the learned prior to the data.
@@ -124,6 +126,13 @@ class LearnedBuilder(PriorBuilder):
             Standard errors of the effect size estimates.
         model_param : Any, optional
             Additional model parameters (default: None).
+        internal_epoch : int, optional
+            Number of training epochs for the underlying neural network.
+        device : torch.device, optional
+            Target device. Forwarded to the underlying cebnm builder so that
+            the neural network and its tensors live on the same device as the
+            caller (e.g. ``cEBMF``). When ``None``, the builder falls back to
+            inheriting from the input tensor.
 
         Returns
         -------
@@ -135,8 +144,25 @@ class LearnedBuilder(PriorBuilder):
         ValueError
             If the prior type is unknown or unsupported.
         """
+        # Merge cEBMF-controlled ``internal_epoch`` with user-supplied kwargs.
+        # If the user explicitly set ``n_epochs`` in ``prior_*_kwargs`` (very
+        # common in tests/notebooks), keep that — otherwise fall back to the
+        # cEBMF-level ``internal_epoch``. Done this way to avoid the
+        # ``TypeError: got multiple values for keyword argument 'n_epochs'``
+        # collision that the previous ``n_epochs=internal_epoch, **self.kwargs``
+        # produced whenever the user passed ``n_epochs`` themselves.
+        call_kwargs = dict(self.kwargs)
+        if "n_epochs" not in call_kwargs and internal_epoch is not None:
+            call_kwargs["n_epochs"] = internal_epoch
+        # device is internal plumbing; user-passed values would be overridden anyway.
+        call_kwargs.pop("device", None)
         obj = builder_functions[self.type](
-            X, betahat, sebetahat, model_param=model_param, n_epochs=internal_epoch, **self.kwargs
+            X,
+            betahat,
+            sebetahat,
+            model_param=model_param,
+            device=device,
+            **call_kwargs,
         )
 
         # A bit annoying that the different types have different ways of handling pi0
@@ -157,10 +183,16 @@ class LearnedBuilder(PriorBuilder):
             case _:
                 raise ValueError(f"Default pi0 unknown for prior type: {self.type}")
 
+        # `obj.loss` is already on the prior's device; keep it that way so the
+        # ELBO term in cEBMF doesn't force a host sync. Wrap a Python float in
+        # a 0-d tensor (rare path: ash-style learned priors) for uniformity.
+        loss = obj.loss
+        if not isinstance(loss, torch.Tensor):
+            loss = torch.as_tensor(loss, device=obj.post_mean.device, dtype=obj.post_mean.dtype)
         return Prior(
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,
-            loss=float(obj.loss),
+            loss=loss,
             model_param=obj.model_param,
             pi0_null=pi0_null,
         )

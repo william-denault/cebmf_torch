@@ -13,13 +13,16 @@ from cebmf_torch.utils.maths import (
 
 @dataclass
 class EBNMGBResult:
+    """Generalized-binary EBNM result. Scalar fields are 0-d tensors on the
+    input device — no per-call host syncs."""
+
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    pi_slab: float  # slab weight π (= 1 - pi_null)
-    mode: float  # learned μ ≥ 0
-    scale: float  # fixed ω (σ = ω μ)
-    log_lik: float
+    pi_slab: Tensor  # slab weight π (= 1 - pi_null)
+    mode: Tensor  # learned μ ≥ 0
+    scale: Tensor  # fixed ω (σ = ω μ)
+    log_lik: Tensor
 
 
 def _log_normal_pdf(x: Tensor, mean: Tensor, sd: Tensor) -> Tensor:
@@ -141,8 +144,11 @@ def ebnm_gb(
             return torch.nn.functional.softplus(eta).clamp_min(1e-8)
 
     # ---- EM loop ----
+    # Convergence is checked every `check_every` iterations to keep most steps
+    # GPU-resident — see optimize_pi_logL for the same pattern.
+    check_every = 5
     prev_ll = -float("inf")
-    for _ in range(max_em):
+    for it in range(max_em):
         # E-step
         zeta, lg, lf, mu_tilde, sig_tilde2 = _E_step(mu, pi)
 
@@ -166,14 +172,16 @@ def ebnm_gb(
             lg_marg = lg0 + log_norm_cdf_ratio
 
             # log ∏ [ (1-π)N(x;0,s^2) + π * slab ]
-            ll = torch.logaddexp(torch.log1p(-pi_new) + lf, torch.log(pi_new) + lg_marg).sum().item()
+            ll_t = torch.logaddexp(torch.log1p(-pi_new) + lf, torch.log(pi_new) + lg_marg).sum()
 
-        # Check convergence
-        if ll - prev_ll < tol_em:
-            pi, mu = pi_new, mu_new
-            break
         pi, mu = pi_new, mu_new
-        prev_ll = ll
+        # Sync-light convergence check: only force a host comparison every
+        # `check_every` iterations.
+        if (it + 1) % check_every == 0:
+            ll = ll_t.item()
+            if ll - prev_ll < tol_em:
+                break
+            prev_ll = ll
 
     # ---- Posterior moments (eqs. (25)-(27)) ----
     with torch.no_grad():
@@ -191,7 +199,7 @@ def ebnm_gb(
         post_mean2 = zeta * EX2
         post_sd = (post_mean2 - post_mean**2).clamp_min(0).sqrt()
 
-        # Final marginal log-likelihood
+        # Final marginal log-likelihood (kept as a 0-d tensor on-device).
         sigma = omega_t * mu
         var_sum = s * s + sigma * sigma
         lg0 = _log_normal_pdf(x, mu, var_sum.sqrt())
@@ -199,14 +207,15 @@ def ebnm_gb(
             torch.tensor(1.0 / float(omega), device=device, dtype=dtype)
         )  # noqa: E501
         lg_marg = lg0 + log_norm_cdf_ratio
-        log_lik = torch.logaddexp(torch.log1p(-pi) + lf, torch.log(pi) + lg_marg).sum().item()
+        log_lik = torch.logaddexp(torch.log1p(-pi) + lf, torch.log(pi) + lg_marg).sum()
 
+    scale_t = torch.as_tensor(1.0 / (omega + 1e-8), device=device, dtype=dtype)
     return EBNMGBResult(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi_slab=float(pi),  # local `pi` is the slab weight
-        mode=float(mu),
-        scale=float(1 / (omega + 1e-8)),
-        log_lik=float(log_lik),
+        pi_slab=pi.detach(),  # local `pi` is the slab weight
+        mode=mu.detach(),
+        scale=scale_t,
+        log_lik=log_lik.detach(),
     )

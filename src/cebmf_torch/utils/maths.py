@@ -15,27 +15,36 @@ def _like(x: Tensor, val) -> Tensor:
     return torch.as_tensor(val, device=x.device, dtype=x.dtype)
 
 
-def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
+def _logpdf_normal(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
     """
-    Compute the log-density of a normal distribution.
+    Numerically-clean log-density of a normal distribution.
 
-    Parameters
-    ----------
-    x : torch.Tensor
-        Input tensor.
-    loc : torch.Tensor
-        Mean of the normal distribution.
-    scale : torch.Tensor
-        Standard deviation of the normal distribution.
+    log N(x | loc, scale^2) = -0.5*((x-loc)/scale)^2 - log(scale) - 0.5*log(2*pi)
 
-    Returns
-    -------
-    torch.Tensor
-        Log-density evaluated at x.
+    Callers are expected to ensure ``scale > 0`` (typically by clamping standard
+    errors). This is the canonical implementation used across the package; the
+    module-level aliases in ``utils/posterior.py`` and ``utils/distribution_operation.py``
+    re-export this one to avoid drifting copies.
+    """
+    z = (x - loc) / scale
+    return -0.5 * z.pow(2) - torch.log(scale) - _LOG_SQRT_2PI
+
+
+def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
+    """Backward-compatible alias for :func:`_logpdf_normal` with epsilon-padded scale.
+
+    Adds a tiny epsilon to ``scale`` before the log/division to tolerate degenerate
+    inputs (e.g., ``scale==0``). Prefer :func:`_logpdf_normal` and clamp ``scale``
+    upstream when the caller guarantees positivity.
     """
     eps = _like(scale, 1e-32)
-    z = (x - loc) / (scale + eps)
-    return -0.5 * _like(x, _LOG_2PI) - torch.log(scale + eps) - 0.5 * z * z
+    safe_scale = scale + eps
+    return _logpdf_normal(x, loc, safe_scale)
+
+
+def _logcdf_normal(z: Tensor) -> Tensor:
+    """Numerically-stable log Φ(z) (standard normal CDF). Wraps torch.special.log_ndtr."""
+    return torch.special.log_ndtr(z)
 
 
 def norm_cdf(x: Tensor) -> Tensor:
@@ -319,20 +328,29 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
 
     res = mean + sd * scaled_res
 
-    if (sd == 0).any():
-        a_rep = a.expand_as(res).to(res)
-        b_rep = b.expand_as(res).to(res)
-        mean_rep = mean.expand_as(res)
-        sd_zero = sd == 0
+    # Branchless degenerate-sd handling. Previous code wrapped these where()
+    # calls in `if (sd == 0).any():`, which forced a host sync on every call.
+    # The where-chain is a no-op when no entries have sd=0, so we just always
+    # run it (a tiny constant cost on healthy inputs, vs. a real GPU stall).
+    res = _apply_degenerate_sd_first_moment(res, a, b, mean, sd)
 
-        cond1 = sd_zero & (b_rep <= mean_rep)
-        cond2 = sd_zero & (a_rep >= mean_rep)
-        cond3 = sd_zero & (a_rep < mean_rep) & (b_rep > mean_rep)
+    return res
 
-        res = torch.where(cond1, b_rep, res)
-        res = torch.where(cond2, a_rep, res)
-        res = torch.where(cond3, mean_rep, res)
 
+def _apply_degenerate_sd_first_moment(
+    res: torch.Tensor, a: torch.Tensor, b: torch.Tensor, mean: torch.Tensor, sd: torch.Tensor
+) -> torch.Tensor:
+    """Replace entries of `res` corresponding to sd==0 with the limiting first moment."""
+    a_rep = a.expand_as(res).to(res)
+    b_rep = b.expand_as(res).to(res)
+    mean_rep = mean.expand_as(res)
+    sd_zero = sd == 0
+    cond1 = sd_zero & (b_rep <= mean_rep)
+    cond2 = sd_zero & (a_rep >= mean_rep)
+    cond3 = sd_zero & (a_rep < mean_rep) & (b_rep > mean_rep)
+    res = torch.where(cond1, b_rep, res)
+    res = torch.where(cond2, a_rep, res)
+    res = torch.where(cond3, mean_rep, res)
     return res
 
 
@@ -369,9 +387,10 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     alpha = torch.where(flip, -beta, alpha)
     beta = torch.where(flip, -orig_alpha, beta)
 
-    # absolute mean handling
-    if not torch.all(mean == 0):
-        mean = mean.abs()
+    # Absolute mean handling. `mean.abs()` is a no-op for mean==0, so we don't
+    # need the previous `if not torch.all(mean == 0): mean = mean.abs()` guard
+    # — that guard fired a host sync on every call.
+    mean = mean.abs()
 
     pnorm_diff = logscale_sub(logPhi(beta), logPhi(alpha))
 
@@ -402,18 +421,17 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     # NOTE: my_etruncnorm expects (a,b,mean,sd). For standardized alpha/beta, use mean=0, sd=1
     res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta, 0.0, 1.0) + sd**2 * scaled_res
 
-    if (sd == 0).any():
-        a_rep = a.expand_as(res).to(res)
-        b_rep = b.expand_as(res).to(res)
-        mean_rep = mean.expand_as(res)
-        sd_zero = sd == 0
-
-        cond1 = sd_zero & (b_rep <= mean_rep)
-        cond2 = sd_zero & (a_rep >= mean_rep)
-        cond3 = sd_zero & (a_rep < mean_rep) & (b_rep > mean_rep)
-
-        res = torch.where(cond1, b_rep**2, res)
-        res = torch.where(cond2, a_rep**2, res)
-        res = torch.where(cond3, mean_rep**2, res)
+    # Branchless degenerate-sd handling — see _apply_degenerate_sd_first_moment
+    # for the rationale (no host sync per call).
+    a_rep = a.expand_as(res).to(res)
+    b_rep = b.expand_as(res).to(res)
+    mean_rep = mean.expand_as(res)
+    sd_zero = sd == 0
+    cond1 = sd_zero & (b_rep <= mean_rep)
+    cond2 = sd_zero & (a_rep >= mean_rep)
+    cond3 = sd_zero & (a_rep < mean_rep) & (b_rep > mean_rep)
+    res = torch.where(cond1, b_rep**2, res)
+    res = torch.where(cond2, a_rep**2, res)
+    res = torch.where(cond3, mean_rep**2, res)
 
     return res

@@ -32,7 +32,7 @@ class PriorType(StrEnum):
 class AshConfig:
     mult: float = math.sqrt(2.0)
     penalty: float = 10.0
-    verbose: bool = True
+    verbose: bool = False  # off by default: ash() runs once per factor update inside cEBMF
     threshold_loglikelihood: float = -300.0
     mode: float = 0.0  # only for PriorType.NORM
     batch_size: int | None = 128
@@ -59,8 +59,10 @@ def _optimize_mixture_weights(L: torch.Tensor, config: AshConfig) -> torch.Tenso
             shuffle=config.shuffle,
             seed=config.seed,
         )
-    eps = torch.tensor(1e-32, device=L.device, dtype=L.dtype)
-    return torch.log(torch.clamp(pi0, min=eps.item()))
+    # Use a Python literal floor: torch.clamp accepts a scalar without forcing
+    # a host sync (the previous `eps = torch.tensor(...); ...; min=eps.item()`
+    # did force one per call).
+    return torch.log(torch.clamp(pi0, min=1e-32))
 
 
 def _ash_normal(
@@ -105,14 +107,17 @@ ash_optimisers: dict[
 class ASHResult:
     """Result from ASH (Adaptive SHrinkage) algorithm.
 
+    Scalar fields are kept on-device as 0-d tensors so cEBMF's inner loop
+    doesn't pay a host sync per factor update.
+
     Attributes:
         post_mean: Posterior means for each observation
         post_mean2: Posterior second moments for each observation
         post_sd: Posterior standard deviations for each observation
         scale: Mixture component scales/standard deviations
-        pi0: Null component probability (spike at zero)
+        pi0: Null component probability (0-d tensor, spike at zero)
         prior: Prior type used ("norm" or "exp")
-        log_lik: Total log-likelihood of the fitted model
+        log_lik: Total log-likelihood of the fitted model (0-d tensor)
         mode: Mode parameter used (only relevant for normal prior)
     """
 
@@ -120,10 +125,10 @@ class ASHResult:
     post_mean2: torch.Tensor
     post_sd: torch.Tensor
     scale: torch.Tensor
-    pi0: torch.Tensor | float
+    pi0: torch.Tensor
     prior: str
     pi: torch.Tensor | None = None  # full (K,) mixture weight vector
-    log_lik: float = 0.0
+    log_lik: torch.Tensor = None  # type: ignore[assignment]  # 0-d tensor; populated in from_data
     mode: float = 0.0
 
     @classmethod
@@ -136,9 +141,9 @@ class ASHResult:
         threshold = torch.tensor(config.threshold_loglikelihood, dtype=L.dtype, device=L.device)
         Lc = torch.maximum(L, threshold)
 
-        eps = torch.tensor(1e-300, dtype=L.dtype, device=L.device)
-        log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=eps.item())).unsqueeze(0), dim=1)
-        log_lik = float(log_lik_rows.sum().item())
+        # Python-literal floor avoids a host sync from `eps.item()`.
+        log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
+        log_lik = log_lik_rows.sum()  # 0-d tensor on-device
         return cls(
             post_mean=pm_obj.post_mean,
             post_mean2=pm_obj.post_mean2,
@@ -160,7 +165,7 @@ def ash(
     prior: PriorType = PriorType.NORM,
     mult: float = math.sqrt(2.0),
     penalty: float = 10.0,
-    verbose: bool = True,
+    verbose: bool = False,
     threshold_loglikelihood: float = -300.0,
     mode: float = 0.0,
     *,

@@ -9,10 +9,11 @@ def optimize_pi_logL(
     penalty: float | torch.Tensor,
     max_iters: int = 100,
     tol: float = 1e-6,
-    verbose: bool = True,
+    verbose: bool = False,
     batch_size: int | None = None,
     shuffle: bool = False,
     seed: int | None = None,
+    check_every: int = 10,
 ) -> torch.Tensor:
     """
     EM algorithm for optimizing mixture weights on the simplex given a log-likelihood matrix.
@@ -29,13 +30,18 @@ def optimize_pi_logL(
     tol : float, optional
         L2 tolerance on pi change for convergence. Default is 1e-6.
     verbose : bool, optional
-        Print convergence message if True. Default is True.
+        Print convergence message if True. Default is False (cEBMF calls this
+        in its inner loop and the convergence prints would spam stdout).
     batch_size : int or None, optional
         If None, do full-batch; else iterate over mini-batches each epoch. Default is None.
     shuffle : bool, optional
         Whether to shuffle rows each epoch when using batches. Default is False.
     seed : int or None, optional
         RNG seed used when shuffle=True. Default is None.
+    check_every : int, optional
+        How many EM steps to run between convergence checks. Each check forces a
+        host sync, so checking every step (the previous behaviour) cost up to
+        ``max_iters`` syncs per call — bad inside cEBMF's hot loop. Default is 10.
 
     Returns
     -------
@@ -71,6 +77,11 @@ def optimize_pi_logL(
     if seed is not None:
         g.manual_seed(seed)
 
+    # Track convergence with a 0-d tensor so most EM iterations stay sync-free.
+    # We only force a host sync every `check_every` iterations.
+    eps_floor = 1e-12  # was eps.item(); a Python literal avoids the per-iter sync
+    converged_iter = -1
+
     for it in range(max_iters):
         pi_old = pi.clone()
 
@@ -98,14 +109,18 @@ def optimize_pi_logL(
             n_k += r.sum(dim=0)  # (K,)
 
         # M-step with Dirichlet prior α (as pseudo-counts)
-        n_k = torch.clamp(n_k + (vec_pen - 1.0), min=eps.item())
+        n_k = torch.clamp(n_k + (vec_pen - 1.0), min=eps_floor)
         pi = n_k / n_k.sum()
 
-        # convergence check
-        if torch.linalg.norm(pi - pi_old).item() < tol:
-            if verbose:
-                print(f"Converged after {it} iterations.")
-            break
+        # Sync-light convergence check: only force host comparison every
+        # `check_every` iterations so the inner EM loop stays GPU-resident.
+        if (it + 1) % check_every == 0:
+            if torch.linalg.norm(pi - pi_old).item() < tol:
+                converged_iter = it
+                break
+
+    if verbose and converged_iter >= 0:
+        print(f"Converged after {converged_iter} iterations.")
 
     return pi
 
@@ -171,10 +186,13 @@ def autoselect_scales_mix_norm(betahat: torch.Tensor, sebetahat: torch.Tensor, m
     dtype = betahat.dtype
 
     sigmaamin = torch.min(sebetahat) / 10.0
-    if torch.all(betahat**2 < sebetahat**2):
-        sigmaamax = 8.0 * sigmaamin
-    else:
-        sigmaamax = 2.0 * torch.sqrt(torch.max(betahat**2 - sebetahat**2))
+    # Branchless max-scale selection: sigmaamax is `2 * sqrt(max(0, max(b^2 - s^2)))`
+    # when the data shows signal, else `8 * sigmaamin`. Computing both arms with
+    # `torch.where` avoids the host sync from `if torch.all(...)`.
+    diff_sq = (betahat**2 - sebetahat**2).clamp_min(0.0)
+    sig_sigmaamax = 2.0 * torch.sqrt(torch.max(diff_sq))
+    no_signal = torch.max(diff_sq) <= 0
+    sigmaamax = torch.where(no_signal, 8.0 * sigmaamin, sig_sigmaamax)
 
     if mult == 0:
         return torch.stack([torch.tensor(0.0, device=device, dtype=dtype), (sigmaamax / 2.0).to(dtype)], dim=0)
@@ -218,10 +236,12 @@ def autoselect_scales_mix_exp(
     dtype = betahat.dtype
 
     sigmaamin = torch.maximum(torch.min(sebetahat) / 10.0, torch.tensor(1e-3, device=device, dtype=dtype))
-    if torch.all(betahat**2 < sebetahat**2):
-        sigmaamax = 8.0 * sigmaamin
-    else:
-        sigmaamax = tt * torch.sqrt(torch.max(betahat**2))
+    # Branchless max-scale selection (mirrors autoselect_scales_mix_norm); no
+    # host sync from `if torch.all(...)`.
+    diff_sq = (betahat**2 - sebetahat**2).clamp_min(0.0)
+    no_signal = torch.max(diff_sq) <= 0
+    sig_sigmaamax = tt * torch.sqrt(torch.max(betahat**2))
+    sigmaamax = torch.where(no_signal, 8.0 * sigmaamin, sig_sigmaamax)
 
     if mult == 0:
         return torch.stack([torch.tensor(0.0, device=device, dtype=dtype), (sigmaamax / 2.0).to(dtype)], dim=0)
