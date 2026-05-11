@@ -166,11 +166,17 @@ def posterior_mean_exp(
     post_mean2 = (r_exp * e2).sum(dim=1)  # (J,)
     post_mean2 = torch.maximum(post_mean2, post_mean)  # original guard
 
-    # Infinite-s rows: collapse to the prior mixture mean/second moment.
-    # Computed unconditionally (cheap) and selected via torch.where so we
-    # avoid a host-side ``.any()`` sync.
-    inf_post_mean = (post_assign[:, 1:] / a_row).sum(dim=1)  # (J,)
-    inf_post_mean2 = (2.0 * post_assign[:, 1:] / a_row.pow(2)).sum(dim=1)  # (J,)
+    # Infinite-s rows: collapse to the *prior* mixture mean / second moment.
+    # With s = inf the data contributes no information, so the posterior
+    # equals the prior. We must use the prior weights ``assignment`` here, not
+    # ``post_assign`` — the latter is NaN at inf-s rows because the per-row
+    # log-prob terms (``lf`` from ``log N(x|0, inf^2)`` and ``lg`` from the
+    # Exp⊗Normal convolution at s=inf) are ill-defined. Both summaries are
+    # scalars (0-d) and broadcast cleanly through ``torch.where``.
+    a_flat = a  # (K-1,) Exp rates
+    prior_slab = assignment[1:]  # (K-1,) prior weights on the Exp components
+    inf_post_mean = (prior_slab / a_flat).sum()           # scalar
+    inf_post_mean2 = (2.0 * prior_slab / a_flat.pow(2)).sum()  # scalar
     inf_mask = torch.isinf(sebetahat)  # (J,)
     post_mean = torch.where(inf_mask, inf_post_mean, post_mean)
     post_mean2 = torch.where(inf_mask, inf_post_mean2, post_mean2)
