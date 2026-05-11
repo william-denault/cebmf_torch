@@ -120,9 +120,6 @@ def posterior_mean_exp(
     log_pi = torch.as_tensor(log_pi, dtype=dt, device=dev)
     scale = torch.as_tensor(scale, dtype=dt, device=dev)
 
-    J = betahat.shape[0]
-    K = scale.shape[0]
-
     # Normalise pi out of log-space (still shared across observations).
     assignment = torch.exp(log_pi)
     assignment = assignment / torch.clamp(assignment.sum(), min=1e-300)  # (K,)

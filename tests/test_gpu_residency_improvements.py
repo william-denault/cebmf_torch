@@ -13,13 +13,11 @@ import warnings
 from contextlib import redirect_stdout
 
 import numpy as np
-import pytest
 import torch
 
 from cebmf_torch import ash, cEBMF, ebnm_point_exp, ebnm_point_laplace
-from cebmf_torch.ebnm.ash import AshConfig
 from cebmf_torch.cebmf import NoiseType
-
+from cebmf_torch.ebnm.ash import AshConfig
 
 # --- shared helpers ---------------------------------------------------------
 
@@ -159,7 +157,6 @@ def test_constant_tau_updates_propagate_to_tau_map():
     model = cEBMF(Y, K=3)
     model.initialise_factors("svd")
     model.update_tau()
-    tau_before = model.tau.item()
     # do one factor sweep, then update_tau again
     model.iter_once()
     tau_after = model.tau.item()
@@ -306,8 +303,7 @@ def test_autoselect_scales_with_signal():
 def test_logpdf_normal_is_single_canonical_definition():
     """All three _logpdf_normal symbols must be the same object (re-exported)."""
     from cebmf_torch.utils import distribution_operation as dop
-    from cebmf_torch.utils import maths
-    from cebmf_torch.utils import posterior
+    from cebmf_torch.utils import maths, posterior
 
     assert dop._logpdf_normal is maths._logpdf_normal
     assert posterior._logpdf_normal is maths._logpdf_normal
@@ -328,7 +324,7 @@ def test_logpdf_normal_matches_torch_distributions():
 
 def test_log_norm_pdf_back_compat_alias_still_works():
     """log_norm_pdf must still exist and produce the same answer for healthy inputs."""
-    from cebmf_torch.utils.maths import log_norm_pdf, _logpdf_normal
+    from cebmf_torch.utils.maths import _logpdf_normal, log_norm_pdf
 
     x = torch.tensor([0.0, 1.0, -1.0])
     loc = torch.tensor([0.0, 0.0, 0.0])
@@ -597,6 +593,7 @@ def test_no_per_observation_loops_in_cebnm_or_posterior():
     posterior or cebnm modules. We check by reading the source."""
     import re
     from pathlib import Path
+
     import cebmf_torch
 
     pkg_root = Path(cebmf_torch.__file__).parent

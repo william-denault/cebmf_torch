@@ -23,7 +23,6 @@ import torch
 from cebmf_torch import cEBMF
 from cebmf_torch.cebmf import NoiseType
 
-
 # ----------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------

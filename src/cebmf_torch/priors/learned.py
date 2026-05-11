@@ -144,14 +144,25 @@ class LearnedBuilder(PriorBuilder):
         ValueError
             If the prior type is unknown or unsupported.
         """
+        # Merge cEBMF-controlled ``internal_epoch`` with user-supplied kwargs.
+        # If the user explicitly set ``n_epochs`` in ``prior_*_kwargs`` (very
+        # common in tests/notebooks), keep that — otherwise fall back to the
+        # cEBMF-level ``internal_epoch``. Done this way to avoid the
+        # ``TypeError: got multiple values for keyword argument 'n_epochs'``
+        # collision that the previous ``n_epochs=internal_epoch, **self.kwargs``
+        # produced whenever the user passed ``n_epochs`` themselves.
+        call_kwargs = dict(self.kwargs)
+        if "n_epochs" not in call_kwargs and internal_epoch is not None:
+            call_kwargs["n_epochs"] = internal_epoch
+        # device is internal plumbing; user-passed values would be overridden anyway.
+        call_kwargs.pop("device", None)
         obj = builder_functions[self.type](
             X,
             betahat,
             sebetahat,
             model_param=model_param,
-            n_epochs=internal_epoch,
             device=device,
-            **self.kwargs,
+            **call_kwargs,
         )
 
         # A bit annoying that the different types have different ways of handling pi0

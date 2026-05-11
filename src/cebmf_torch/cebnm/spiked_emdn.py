@@ -300,7 +300,6 @@ def spiked_emdn_posterior_means(
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     # ---- train
-    running_loss = 0.0
     for epoch in range(n_epochs):
         model.train()
         epoch_loss = 0.0
@@ -319,7 +318,6 @@ def spiked_emdn_posterior_means(
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-        running_loss = epoch_loss
         if (epoch + 1) % print_every == 0:
             print(f"[Spiked-EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {epoch_loss / max(1, len(dataloader)):.4f}")
 

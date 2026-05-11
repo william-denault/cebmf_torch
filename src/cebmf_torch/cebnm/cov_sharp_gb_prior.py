@@ -192,7 +192,7 @@ def sharp_cgb_posterior_means(
     sebetahat,
     n_epochs=50,
     n_layers=2,
-    
+
     omega=0.02,
     hidden_dim=32,
     batch_size=128,
@@ -268,7 +268,7 @@ def sharp_cgb_posterior_means(
     for epoch in range(n_epochs):
         total_loss = 0.0
         for xb, xhat, se in dataloader:  # already device tensors
-            pi1, pi2, mu2 = model(xb) 
+            pi1, pi2, mu2 = model(xb)
             with torch.no_grad():
                 gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
                 sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se)*omega
