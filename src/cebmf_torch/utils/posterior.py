@@ -136,10 +136,7 @@ def posterior_mean_exp(
     a_row = a.unsqueeze(0)  # (1, K-1)
 
     lg = (
-        torch.log(a_row)
-        + 0.5 * (s_col * a_row).pow(2)
-        - a_row * x_col
-        + _logcdf_normal(x_col / s_col - s_col * a_row)
+        torch.log(a_row) + 0.5 * (s_col * a_row).pow(2) - a_row * x_col + _logcdf_normal(x_col / s_col - s_col * a_row)
     )  # (J, K-1)
 
     log_prob = torch.cat([lf.unsqueeze(1), lg], dim=1)  # (J, K)

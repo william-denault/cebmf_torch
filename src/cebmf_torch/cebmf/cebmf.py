@@ -534,9 +534,7 @@ class cEBMF:
         if isinstance(S_in, (int, float)):
             S_val = float(S_in)
             if not math.isfinite(S_val) or S_val <= 0.0:
-                raise ValueError(
-                    f"Scalar S must be a positive, finite number, got {S_in!r}"
-                )
+                raise ValueError(f"Scalar S must be a positive, finite number, got {S_in!r}")
             S = torch.full(target_shape, S_val, device=self.device, dtype=target_dtype)
         else:
             if not isinstance(S_in, torch.Tensor):
@@ -548,8 +546,7 @@ class cEBMF:
                     S = S.expand(target_shape).contiguous()
                 except RuntimeError as e:
                     raise ValueError(
-                        f"S has shape {tuple(S.shape)}, which is not broadcastable "
-                        f"to data shape {target_shape}"
+                        f"S has shape {tuple(S.shape)}, which is not broadcastable to data shape {target_shape}"
                     ) from e
             else:
                 S = S.contiguous()

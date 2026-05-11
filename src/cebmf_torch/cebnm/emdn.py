@@ -213,8 +213,10 @@ def emdn_posterior_means(
     # to CUDA-or-CPU. Inheriting avoids silent device hops when the caller
     # (e.g. cEBMF) is on CPU/MPS but CUDA is also visible on the host.
     if device is None:
-        device = betahat.device if isinstance(betahat, torch.Tensor) else (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = (
+            betahat.device
+            if isinstance(betahat, torch.Tensor)
+            else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         )
 
     # ---- tensors on device
@@ -273,8 +275,8 @@ def emdn_posterior_means(
         data_loglik = get_data_loglik_normal_torch(
             betahat=betahat,
             sebetahat=sebetahat,
-            location=mu,      # (N, K) per-observation
-            scale=sigma,      # (N, K) per-observation
+            location=mu,  # (N, K) per-observation
+            scale=sigma,  # (N, K) per-observation
         )  # (N, K)
 
         log_pi_full = torch.log(pi.clamp_min(eps))  # (N, K)
@@ -293,14 +295,11 @@ def emdn_posterior_means(
         # ---- Full marginal log-likelihood (no penalty).
         # log N(b_i ; mu_{ik}, sqrt(se_i^2 + sigma_{ik}^2)) in log-domain.
         total_sigma = torch.sqrt(sigma**2 + sebetahat.unsqueeze(1) ** 2)  # (N, K)
-        z = (betahat.unsqueeze(1) - mu) / total_sigma                     # (N, K)
-        log_sqrt_2pi = 0.5 * torch.log(
-            torch.tensor(2.0 * torch.pi, device=betahat.device, dtype=betahat.dtype)
-        )
+        z = (betahat.unsqueeze(1) - mu) / total_sigma  # (N, K)
+        log_sqrt_2pi = 0.5 * torch.log(torch.tensor(2.0 * torch.pi, device=betahat.device, dtype=betahat.dtype))
         log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi  # (N, K)
         log_mix = torch.logsumexp(log_pi_full + log_comp, dim=1)  # (N,)
         full_marginal_ll = float(log_mix.sum().item())
-
 
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
@@ -309,6 +308,6 @@ def emdn_posterior_means(
         location=mu,
         pi_np=pi,
         scale=sigma,
-        loss= -full_marginal_ll,
+        loss=-full_marginal_ll,
         model_param=model.state_dict(),
     )

@@ -21,6 +21,7 @@ from cebmf_torch.ebnm.ash import AshConfig
 
 # --- shared helpers ---------------------------------------------------------
 
+
 def _rmse(a: torch.Tensor, b: torch.Tensor) -> float:
     return float(torch.sqrt(((a - b) ** 2).mean()).item())
 
@@ -38,11 +39,10 @@ def _make_lowrank(n=80, p=60, rank=2, sigma=0.1, seed=0):
 # Task 2: AshConfig.verbose default is False
 # ============================================================================
 
+
 def test_ashconfig_verbose_defaults_false():
     cfg = AshConfig()
-    assert cfg.verbose is False, (
-        "verbose should default to False so cEBMF's inner loop doesn't spam stdout"
-    )
+    assert cfg.verbose is False, "verbose should default to False so cEBMF's inner loop doesn't spam stdout"
 
 
 def test_ash_default_does_not_print_convergence():
@@ -54,14 +54,13 @@ def test_ash_default_does_not_print_convergence():
     buf = io.StringIO()
     with redirect_stdout(buf):
         ash(betahat, se, prior="norm")  # no verbose=True, no batch
-    assert "Converged" not in buf.getvalue(), (
-        f"ash() printed unexpectedly: {buf.getvalue()!r}"
-    )
+    assert "Converged" not in buf.getvalue(), f"ash() printed unexpectedly: {buf.getvalue()!r}"
 
 
 # ============================================================================
 # Task 3: spike-only shortcut in point_exp / point_laplace is branchless
 # ============================================================================
+
 
 def test_point_exp_pure_spike_data_runs_clean():
     """
@@ -107,7 +106,7 @@ def test_point_exp_signal_data_not_all_spike():
     x = torch.cat([torch.zeros(n // 2), torch.randn(n // 2).abs() + 1.0])
     res = ebnm_point_exp(x, s)
     assert torch.isfinite(res.post_mean).all()
-    assert res.post_mean[n // 2:].mean().item() > 0.1
+    assert res.post_mean[n // 2 :].mean().item() > 0.1
 
 
 def test_point_laplace_signal_data_not_all_spike():
@@ -118,12 +117,13 @@ def test_point_laplace_signal_data_not_all_spike():
     res = ebnm_point_laplace(x, s)
     assert torch.isfinite(res.post_mean).all()
     # signal half should have nonzero posterior magnitude on average
-    assert res.post_mean[n // 2:].abs().mean().item() > 0.1
+    assert res.post_mean[n // 2 :].abs().mean().item() > 0.1
 
 
 # ============================================================================
 # Task 4: tau in CONSTANT mode is a 0-d tensor; tau_map is a broadcast view
 # ============================================================================
+
 
 def test_constant_tau_is_zero_d_tensor():
     """In CONSTANT mode, self.tau should be a 0-d tensor (not (N,P))."""
@@ -161,9 +161,9 @@ def test_constant_tau_updates_propagate_to_tau_map():
     model.iter_once()
     tau_after = model.tau.item()
     # tau_map should reflect the new scalar
-    assert torch.allclose(
-        model.tau_map, torch.full_like(model.tau_map, tau_after)
-    ), f"tau_map={model.tau_map[0,0].item()} but tau={tau_after}"
+    assert torch.allclose(model.tau_map, torch.full_like(model.tau_map, tau_after)), (
+        f"tau_map={model.tau_map[0, 0].item()} but tau={tau_after}"
+    )
 
 
 def test_constant_loglik_unaffected_by_tau_map_view_change():
@@ -181,6 +181,7 @@ def test_constant_loglik_unaffected_by_tau_map_view_change():
 # ============================================================================
 # Task 5: branchless tensor-conditional handling (no `if tensor:` host syncs)
 # ============================================================================
+
 
 def test_my_etruncnorm_handles_zero_sd_branchlessly():
     """sd==0 case must still return correct degenerate values."""
@@ -300,6 +301,7 @@ def test_autoselect_scales_with_signal():
 # Task 6: single canonical _logpdf_normal across the package
 # ============================================================================
 
+
 def test_logpdf_normal_is_single_canonical_definition():
     """All three _logpdf_normal symbols must be the same object (re-exported)."""
     from cebmf_torch.utils import distribution_operation as dop
@@ -337,6 +339,7 @@ def test_log_norm_pdf_back_compat_alias_still_works():
 # ============================================================================
 # Task 7: optimize_pi_logL converges with sync-light check
 # ============================================================================
+
 
 def test_optimize_pi_logL_converges_with_sync_light_check():
     """The check_every-iter convergence path should still find a sensible pi."""
@@ -379,6 +382,7 @@ def test_ash_default_check_runs_without_extra_eps_sync():
 # ============================================================================
 # Task 8: device threads cleanly through learned priors
 # ============================================================================
+
 
 def test_cebmf_with_learned_prior_stays_on_input_device():
     """When cEBMF is built on CPU, all factor tensors must remain on CPU
@@ -452,6 +456,7 @@ def test_emdn_builder_inherits_device_from_betahat():
 # Task 9: Prior.loss and EBNM scalar fields are 0-d tensors
 # ============================================================================
 
+
 def test_ebnm_point_exp_scalars_are_tensors():
     torch.manual_seed(0)
     n = 200
@@ -497,9 +502,7 @@ def test_prior_loss_is_tensor_through_builder():
     for name in ("norm", "exp", "laplace"):
         builder = PRIOR_REGISTRY.get_builder(name)
         prior_obj = builder.fit(X=None, betahat=bh, sebetahat=se)
-        assert isinstance(prior_obj.loss, torch.Tensor), (
-            f"{name} prior's loss should be a tensor"
-        )
+        assert isinstance(prior_obj.loss, torch.Tensor), f"{name} prior's loss should be a tensor"
         assert prior_obj.loss.ndim == 0
 
 
@@ -518,6 +521,7 @@ def test_cebmf_with_tensor_prior_loss_runs():
 # ============================================================================
 # Task 10: vectorised posterior helpers (no per-observation Python loops)
 # ============================================================================
+
 
 def test_posterior_mean_exp_vectorised_recovers_signal():
     """The vectorised exp posterior should track a clear signal."""
@@ -560,7 +564,13 @@ def test_cebmf_with_emdn_prior_runs_vectorised():
     X_l = torch.randn(n, 2)
     X_f = torch.randn(p, 2)
     model = cEBMF(
-        Y, K=2, prior_L="emdn", prior_F="emdn", X_l=X_l, X_f=X_f, device=torch.device("cpu"),
+        Y,
+        K=2,
+        prior_L="emdn",
+        prior_F="emdn",
+        X_l=X_l,
+        X_f=X_f,
+        device=torch.device("cpu"),
         prior_L_kwargs={"n_epochs": 2, "n_layers": 1, "hidden_dim": 4, "n_gaussians": 3, "batch_size": 16},
         prior_F_kwargs={"n_epochs": 2, "n_layers": 1, "hidden_dim": 4, "n_gaussians": 3, "batch_size": 16},
     )
@@ -578,7 +588,13 @@ def test_cebmf_with_cash_prior_runs_vectorised():
     X_l = torch.randn(n, 2)
     X_f = torch.randn(p, 2)
     model = cEBMF(
-        Y, K=2, prior_L="cash", prior_F="cash", X_l=X_l, X_f=X_f, device=torch.device("cpu"),
+        Y,
+        K=2,
+        prior_L="cash",
+        prior_F="cash",
+        X_l=X_l,
+        X_f=X_f,
+        device=torch.device("cpu"),
         prior_L_kwargs={"n_epochs": 2, "n_layers": 1, "hidden_dim": 4, "num_classes": 4, "batch_size": 16},
         prior_F_kwargs={"n_epochs": 2, "n_layers": 1, "hidden_dim": 4, "num_classes": 4, "batch_size": 16},
     )
@@ -606,9 +622,7 @@ def test_no_per_observation_loops_in_cebnm_or_posterior():
     ):
         text = fname.read_text()
         # strip comments before scanning
-        clean = "\n".join(
-            line.split("#", 1)[0] for line in text.splitlines()
-        )
+        clean = "\n".join(line.split("#", 1)[0] for line in text.splitlines())
         for m in re.finditer(r"^\s*for\s+(\w+)\s+in\s+range\(([^)]+)\)", clean, re.MULTILINE):
             var, expr = m.group(1), m.group(2)
             # epoch / start / k / batch loops are fine; only flag i/j/n loops
@@ -620,6 +634,7 @@ def test_no_per_observation_loops_in_cebnm_or_posterior():
 # ============================================================================
 # Cross-check: known-S and verbose changes don't regress prior tests
 # ============================================================================
+
 
 def test_cebmf_with_S_still_runs_quietly():
     """cEBMF.fit with known S should not flood stdout."""

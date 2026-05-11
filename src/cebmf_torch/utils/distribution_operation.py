@@ -71,9 +71,7 @@ def convolved_logpdf_normal_torch(
         sc2 = scale.pow(2).unsqueeze(0)  # (1, K), broadcasts across J
     elif scale.ndim == 2:
         if scale.shape[0] != J:
-            raise ValueError(
-                f"scale 2D first dim must be J={J}, got shape {tuple(scale.shape)}"
-            )
+            raise ValueError(f"scale 2D first dim must be J={J}, got shape {tuple(scale.shape)}")
         K = scale.shape[1]
         sc2 = scale.pow(2)  # (J, K)
     else:
@@ -85,15 +83,11 @@ def convolved_logpdf_normal_torch(
 
     if location.ndim == 1:
         if location.shape[0] != K:
-            raise ValueError(
-                f"location 1D length must be K={K}, got shape {tuple(location.shape)}"
-            )
+            raise ValueError(f"location 1D length must be K={K}, got shape {tuple(location.shape)}")
         loc = location.unsqueeze(0).expand(J, K)
     elif location.ndim == 2:
         if location.shape != (J, K):
-            raise ValueError(
-                f"location 2D shape must be (J={J}, K={K}), got {tuple(location.shape)}"
-            )
+            raise ValueError(f"location 2D shape must be (J={J}, K={K}), got {tuple(location.shape)}")
         loc = location
     else:
         raise ValueError(f"location must be 1D or 2D, got ndim={location.ndim}")

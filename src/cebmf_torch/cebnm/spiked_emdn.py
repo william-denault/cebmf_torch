@@ -270,8 +270,10 @@ def spiked_emdn_posterior_means(
     # CUDA-or-CPU. Inheriting avoids silent device hops when the caller (e.g.
     # cEBMF) is on CPU/MPS but CUDA is also visible on the host.
     if device is None:
-        device = betahat.device if isinstance(betahat, torch.Tensor) else (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = (
+            betahat.device
+            if isinstance(betahat, torch.Tensor)
+            else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         )
 
     # ---- tensors on device
@@ -343,8 +345,8 @@ def spiked_emdn_posterior_means(
         data_loglik = get_data_loglik_normal_torch(
             betahat=betahat,
             sebetahat=sebetahat,
-            location=mu_full,    # (N, K) per-observation
-            scale=sigma_full,    # (N, K) — 0 in column 0 for spike
+            location=mu_full,  # (N, K) per-observation
+            scale=sigma_full,  # (N, K) — 0 in column 0 for spike
         )  # (N, K)
 
         log_pi_full = torch.log(pi_pred.clamp_min(eps))  # (N, K)
@@ -364,14 +366,11 @@ def spiked_emdn_posterior_means(
         # total sd per obs/component: sqrt(se_i^2 + sigma_{ik}^2); spike has
         # sigma=0 ⇒ total sd = se.
         total_sigma = torch.sqrt(sigma_full**2 + sebetahat.unsqueeze(1) ** 2)  # (N, K)
-        z = (betahat.unsqueeze(1) - mu_full) / total_sigma                     # (N, K)
-        log_sqrt_2pi = 0.5 * torch.log(
-            torch.tensor(2.0 * torch.pi, device=betahat.device, dtype=betahat.dtype)
-        )
-        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi     # (N, K)
-        log_mix = torch.logsumexp(log_pi_full + log_comp, dim=1)               # (N,)
+        z = (betahat.unsqueeze(1) - mu_full) / total_sigma  # (N, K)
+        log_sqrt_2pi = 0.5 * torch.log(torch.tensor(2.0 * torch.pi, device=betahat.device, dtype=betahat.dtype))
+        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi  # (N, K)
+        log_mix = torch.logsumexp(log_pi_full + log_comp, dim=1)  # (N,)
         full_marginal_ll = float(log_mix.sum().item())
-
 
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
@@ -380,6 +379,6 @@ def spiked_emdn_posterior_means(
         location=mu_full,
         pi_np=pi_pred,
         scale=sigma_full,
-        loss= -full_marginal_ll,
+        loss=-full_marginal_ll,
         model_param=model.state_dict(),
     )
