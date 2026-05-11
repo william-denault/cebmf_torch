@@ -27,6 +27,7 @@ from cebmf_torch.cebmf import NoiseType
 # helpers
 # ----------------------------------------------------------------------
 
+
 def _make_lowrank(n: int = 60, p: int = 50, rank: int = 2, sigma: float = 0.1, seed: int = 0):
     """Generate an (n, p) matrix of rank ``rank`` plus i.i.d. Gaussian noise."""
     rng = np.random.default_rng(seed)
@@ -44,6 +45,7 @@ def _rmse(a: torch.Tensor, b: torch.Tensor) -> float:
 # ----------------------------------------------------------------------
 # constructor / dispatch
 # ----------------------------------------------------------------------
+
 
 def test_scalar_S_sets_known_noise_type_and_unit_precision():
     """Passing S=1.0 (z-score case) -> tau_map is 1 everywhere."""
@@ -145,6 +147,7 @@ def test_no_S_means_no_S_attribute_set():
 # missingness merging
 # ----------------------------------------------------------------------
 
+
 def test_nan_in_S_is_folded_into_mask():
     torch.manual_seed(0)
     n, p = 6, 5
@@ -195,6 +198,7 @@ def test_bad_S_at_already_missing_Y_does_not_warn():
 
     # Should not warn (the pytest.warns context would fail if we did)
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # turn any warning into an error
         model = cEBMF(data=Y, K=2, S=S)
@@ -205,6 +209,7 @@ def test_bad_S_at_already_missing_Y_does_not_warn():
 # ----------------------------------------------------------------------
 # behavioural: variance is not learned
 # ----------------------------------------------------------------------
+
 
 def test_tau_map_is_invariant_under_iter_once():
     """With known S, tau_map must NOT change as we iterate."""
@@ -233,6 +238,7 @@ def test_update_tau_is_noop_for_known():
 # ----------------------------------------------------------------------
 # behavioural: recovery
 # ----------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("S_kind", ["scalar", "matrix"])
 def test_recovers_lowrank_with_known_variance(S_kind: str):

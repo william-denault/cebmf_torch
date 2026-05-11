@@ -174,8 +174,10 @@ def cash_posterior_means(
         Container with posterior means, standard deviations, and model parameters.
     """
     if device is None:
-        device = betahat.device if isinstance(betahat, torch.Tensor) else (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = (
+            betahat.device
+            if isinstance(betahat, torch.Tensor)
+            else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         )
 
     # ---- to tensors on device

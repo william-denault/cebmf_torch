@@ -236,8 +236,10 @@ def cgb_posterior_means(
     # Inherit from input tensor when available; avoids silent device hops if
     # the caller (e.g. cEBMF) is on CPU/MPS but CUDA is also visible.
     if device is None:
-        device = betahat.device if isinstance(betahat, torch.Tensor) else (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = (
+            betahat.device
+            if isinstance(betahat, torch.Tensor)
+            else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         )
 
     # ---- to tensor on device

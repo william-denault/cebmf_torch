@@ -192,7 +192,6 @@ def sharp_cgb_posterior_means(
     sebetahat,
     n_epochs=50,
     n_layers=2,
-
     omega=0.02,
     hidden_dim=32,
     batch_size=128,
@@ -237,8 +236,10 @@ def sharp_cgb_posterior_means(
     # Inherit from input tensor when available; avoids silent device hops if
     # the caller (e.g. cEBMF) is on CPU/MPS but CUDA is also visible.
     if device is None:
-        device = betahat.device if isinstance(betahat, torch.Tensor) else (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = (
+            betahat.device
+            if isinstance(betahat, torch.Tensor)
+            else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         )
 
     # ---- to tensor on device
@@ -271,7 +272,7 @@ def sharp_cgb_posterior_means(
             pi1, pi2, mu2 = model(xb)
             with torch.no_grad():
                 gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
-                sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se)*omega
+                sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se) * omega
             loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
             optimizer.zero_grad()
             loss.backward()
