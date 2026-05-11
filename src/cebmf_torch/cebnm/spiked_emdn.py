@@ -266,8 +266,13 @@ def spiked_emdn_posterior_means(
     EmdnPosteriorMeanNorm
         Container with posterior means, standard deviations, and model parameters.
     """
-    # ---- device
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # ---- device: inherit from input tensor if available, else fall back to
+    # CUDA-or-CPU. Inheriting avoids silent device hops when the caller (e.g.
+    # cEBMF) is on CPU/MPS but CUDA is also visible on the host.
+    if device is None:
+        device = betahat.device if isinstance(betahat, torch.Tensor) else (
+            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
     # ---- tensors on device
     X = torch.as_tensor(X, dtype=torch.float32, device=device)
@@ -295,7 +300,6 @@ def spiked_emdn_posterior_means(
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     # ---- train
-    running_loss = 0.0
     for epoch in range(n_epochs):
         model.train()
         epoch_loss = 0.0
@@ -314,7 +318,6 @@ def spiked_emdn_posterior_means(
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-        running_loss = epoch_loss
         if (epoch + 1) % print_every == 0:
             print(f"[Spiked-EMDN] Epoch {epoch + 1}/{n_epochs}, Loss: {epoch_loss / max(1, len(dataloader)):.4f}")
 
@@ -329,48 +332,45 @@ def spiked_emdn_posterior_means(
         mu_full = torch.cat([torch.zeros_like(mu_pred[:, :1]), mu_pred], dim=1)  # (N, K)
         sigma_full = torch.cat([torch.zeros_like(log_sigma_pred[:, :1]), torch.exp(log_sigma_pred)], dim=1)  # (N, K)
 
-        # Posterior moments per observation
-        N = betahat.shape[0]
-        post_mean = torch.empty(N, dtype=torch.float32, device=device)
-        post_mean2 = torch.empty(N, dtype=torch.float32, device=device)
-        post_sd = torch.empty(N, dtype=torch.float32, device=device)
-
+        # ---- Vectorised posterior over all observations.
+        # Replaces the previous ``for i in range(N)`` loop with a single
+        # (N, K) tensor pipeline. ``posterior_mean_norm`` and the convolved
+        # log-likelihood routine accept per-observation (N, K) ``location``
+        # and ``scale``, so the spike-and-slab structure is preserved exactly:
+        # ``sigma_full[:, 0] = 0`` keeps column 0 as a point mass at
+        # ``mu_full[:, 0] = 0``.
         eps = 1e-300
-        for i in range(N):
-            data_loglik = get_data_loglik_normal_torch(
-                betahat=betahat[i : i + 1],
-                sebetahat=sebetahat[i : i + 1],
-                location=mu_full[i, :],
-                scale=sigma_full[i, :],  # 0 for spike ⇒ total sd = se
-            )
-            result = posterior_mean_norm(
-                betahat=betahat[i : i + 1],
-                sebetahat=sebetahat[i : i + 1],
-                log_pi=torch.log(pi_pred[i, :].clamp_min(eps)),
-                data_loglik=data_loglik,
-                location=mu_full[i, :],
-                scale=sigma_full[i, :],
-            )
-            post_mean[i] = result.post_mean
-            post_mean2[i] = result.post_mean2
-            post_sd[i] = result.post_sd
+        data_loglik = get_data_loglik_normal_torch(
+            betahat=betahat,
+            sebetahat=sebetahat,
+            location=mu_full,    # (N, K) per-observation
+            scale=sigma_full,    # (N, K) — 0 in column 0 for spike
+        )  # (N, K)
 
+        log_pi_full = torch.log(pi_pred.clamp_min(eps))  # (N, K)
+        result = posterior_mean_norm(
+            betahat=betahat,
+            sebetahat=sebetahat,
+            log_pi=log_pi_full,
+            data_loglik=data_loglik,
+            location=mu_full,
+            scale=sigma_full,
+        )
+        post_mean = result.post_mean
+        post_mean2 = result.post_mean2
+        post_sd = result.post_sd
 
-# ---- proper full negative marginal log-likelihood (no penalty)
-        
-        # total sd per obs/component: sqrt(se_i^2 + sigma_{ik}^2); spike has sigma=0 ⇒ total sd = se
-        total_sigma = torch.sqrt(sigma_full**2 + sebetahat.unsqueeze(1)**2)          # (N, K)
-        z = (betahat.unsqueeze(1) - mu_full) / total_sigma                            # (N, K)
-
-        # log N(b_i ; mu_{ik}, total_sigma_{ik}) = -0.5 z^2 - log(total_sigma) - 0.5 log(2π)
-        log_sqrt_2pi = 0.5 * torch.log(torch.tensor(2.0 * torch.pi,
-                                                    device=betahat.device,
-                                                    dtype=betahat.dtype))
-        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi           # (N, K)
-
-        # log ∑_k π_{ik} * N_k
-        log_mix = torch.logsumexp(torch.log(pi_pred.clamp_min(eps)) + log_comp, dim=1)  # (N,)
-        full_marginal_ll =  float(log_mix.sum().item())
+        # ---- Full marginal log-likelihood (no penalty).
+        # total sd per obs/component: sqrt(se_i^2 + sigma_{ik}^2); spike has
+        # sigma=0 ⇒ total sd = se.
+        total_sigma = torch.sqrt(sigma_full**2 + sebetahat.unsqueeze(1) ** 2)  # (N, K)
+        z = (betahat.unsqueeze(1) - mu_full) / total_sigma                     # (N, K)
+        log_sqrt_2pi = 0.5 * torch.log(
+            torch.tensor(2.0 * torch.pi, device=betahat.device, dtype=betahat.dtype)
+        )
+        log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi     # (N, K)
+        log_mix = torch.logsumexp(log_pi_full + log_comp, dim=1)               # (N,)
+        full_marginal_ll = float(log_mix.sum().item())
 
 
     return EmdnPosteriorMeanNorm(

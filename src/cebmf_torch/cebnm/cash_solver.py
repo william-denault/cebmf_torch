@@ -161,13 +161,22 @@ def cash_posterior_means(
         Pre-trained model parameters to initialize the network.
     penalty : float, optional
         Penalty for spike probability (default=1.5).
+    device : torch.device, optional
+        Target device for tensors and the model. If ``None``, inherits from
+        ``betahat`` when it is already a tensor; otherwise falls back to CUDA
+        (if available) or CPU. Inheriting from the input avoids silent
+        cross-device hops when the caller (e.g. ``cEBMF``) is on CPU/MPS but
+        CUDA is also visible on the host.
 
     Returns
     -------
     cash_PosteriorMeanNorm
         Container with posterior means, standard deviations, and model parameters.
     """
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device is None:
+        device = betahat.device if isinstance(betahat, torch.Tensor) else (
+            torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
     # ---- to tensors on device
     X = torch.as_tensor(X, dtype=torch.float32, device=device)
@@ -227,34 +236,28 @@ def cash_posterior_means(
             betahat=betahat, sebetahat=sebetahat, location=0 * scale, scale=scale
         )  # (N, K)
 
-        # Allocate outputs on device
-        J = betahat.shape[0]
-        post_mean = torch.empty(J, dtype=torch.float32, device=device)
-        post_mean2 = torch.empty(J, dtype=torch.float32, device=device)
-        post_sd = torch.empty(J, dtype=torch.float32, device=device)
-
-        # Per-observation posterior (kept as-is; can be vectorized later)
+        # ---- Vectorised posterior over all observations in a single call.
+        # ``posterior_mean_norm`` accepts (J, K) ``log_pi`` directly, so we no
+        # longer iterate over observations. Replaces the previous
+        # ``for i in range(J): ...`` loop, which caused J kernel launches and
+        # made GPU execution dramatically slower than CPU for large J.
         eps = 1e-300
-        for i in range(J):
-            log_pi_i = torch.log(torch.clamp(all_pi_values[i, :], min=eps))
-            res_i = posterior_mean_norm(
-                betahat=betahat[i : i + 1],
-                sebetahat=sebetahat[i : i + 1],
-                log_pi=log_pi_i,
-                data_loglik=data_loglik[i, :],
-                location=[0],  # your routine expects this form
-                scale=scale,
-            )
-            post_mean[i] = res_i.post_mean
-            post_mean2[i] = res_i.post_mean2
-            post_sd[i] = res_i.post_sd
-
-        # ---- proper full negative marginal log-likelihood (no penalty).
-        # Computed in log space via logsumexp (no `clamp(min=1e-10)` floor on
-        # the inner density). This is what `cebmf.py:299`'s `kl_l[k] = (-loss)
-        # - nm_ll_L` formula expects, and matches the `cebnm/emdn.py:288-298`
-        # convention.
         log_pi_full = torch.log(all_pi_values.clamp_min(eps))  # (N, K)
+        result = posterior_mean_norm(
+            betahat=betahat,
+            sebetahat=sebetahat,
+            log_pi=log_pi_full,
+            data_loglik=data_loglik,
+            location=torch.zeros_like(scale),  # shared (K,) zero location
+            scale=scale,
+        )
+        post_mean = result.post_mean
+        post_mean2 = result.post_mean2
+        post_sd = result.post_sd
+
+        # ---- Full marginal log-likelihood (no penalty). Same logsumexp formula
+        # as before; this matches the convention expected by ``cebmf.py``'s
+        # ``self.kl_l[k] = (-resL.loss) - nm_ll_L`` accumulator.
         log_marginal_per_obs = torch.logsumexp(data_loglik + log_pi_full, dim=1)  # (N,)
         full_marginal_ll = float(log_marginal_per_obs.sum().item())
 
