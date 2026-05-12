@@ -277,7 +277,34 @@ def safe_tensor_to_float(
 # ------------------------
 
 
-def my_etruncnorm(a, b, mean=0.0, sd=1.0):
+def _resolve_truncnorm_dtype(precision: str, *tensors: torch.Tensor) -> torch.dtype:
+    """Pick the internal compute dtype for the truncnorm helpers.
+
+    ``precision`` is one of:
+
+    - ``"auto"`` (default): use the highest-precision floating dtype among the
+      provided tensors, defaulting to ``float32``. This keeps everything on the
+      caller's device/dtype, which on CUDA consumer cards is ~30x faster than
+      float64 with no observable accuracy loss for typical EBNM workloads.
+    - ``"float64"``: force ``torch.float64``. Slower on CUDA but matches the
+      historical behaviour of these helpers exactly. Use this when you have
+      extreme bounds (``|alpha|, |beta| > 10``) that benefit from the extra
+      precision.
+    """
+    if precision == "float64":
+        return torch.float64
+    if precision != "auto":
+        raise ValueError(f"precision must be 'auto' or 'float64', got {precision!r}")
+    # Pick the highest-precision floating dtype from inputs, default float32.
+    best = torch.float32
+    rank = {torch.float16: 0, torch.bfloat16: 0, torch.float32: 1, torch.float64: 2}
+    for t in tensors:
+        if t.dtype.is_floating_point and rank.get(t.dtype, 1) > rank.get(best, 1):
+            best = t.dtype
+    return best
+
+
+def my_etruncnorm(a, b, mean=0.0, sd=1.0, precision: str = "auto"):
     """
     Compute E[Z | a < Z < b] for Z ~ N(mean, sd^2), the mean of a truncated normal.
 
@@ -291,20 +318,28 @@ def my_etruncnorm(a, b, mean=0.0, sd=1.0):
         Mean of the normal distribution. Default is 0.0.
     sd : float or torch.Tensor, optional
         Standard deviation of the normal distribution. Default is 1.0.
+    precision : str, optional
+        Internal compute dtype. ``"auto"`` (default) follows the input dtype
+        (typically ``float32``), which is fast on CUDA. ``"float64"`` forces
+        double precision — slower on CUDA but matches the pre-2026 behaviour.
 
     Returns
     -------
     torch.Tensor
-        Mean of the truncated normal distribution.
+        Mean of the truncated normal distribution. Dtype matches the chosen
+        ``precision``.
     """
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
     device = a.device
-    # keep high precision but on the correct device
-    mean = torch.as_tensor(mean, dtype=torch.float64, device=device)
-    sd = torch.as_tensor(sd, dtype=torch.float64, device=device)
+    mean_t = torch.as_tensor(mean)
+    sd_t = torch.as_tensor(sd)
+    work_dtype = _resolve_truncnorm_dtype(precision, a, b, mean_t, sd_t)
 
-    alpha = (a.to(dtype=torch.float64, device=device) - mean) / sd
-    beta = (b.to(dtype=torch.float64, device=device) - mean) / sd
+    mean = mean_t.to(dtype=work_dtype, device=device)
+    sd = sd_t.to(dtype=work_dtype, device=device)
+
+    alpha = (a.to(dtype=work_dtype, device=device) - mean) / sd
+    beta = (b.to(dtype=work_dtype, device=device) - mean) / sd
 
     flip = ((alpha > 0) & (beta > 0)) | (beta > alpha.abs())
     orig_alpha = alpha.clone()
@@ -354,7 +389,7 @@ def _apply_degenerate_sd_first_moment(
     return res
 
 
-def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
+def my_e2truncnorm(a, b, mean=0.0, sd=1.0, precision: str = "auto"):
     """
     Compute E[Z^2 | a < Z < b] for Z ~ N(mean, sd^2), the second moment of a truncated normal.
 
@@ -368,19 +403,28 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
         Mean of the normal distribution. Default is 0.0.
     sd : float or torch.Tensor, optional
         Standard deviation of the normal distribution. Default is 1.0.
+    precision : str, optional
+        Internal compute dtype. See :func:`my_etruncnorm` for the contract.
+        ``"auto"`` (default) keeps the caller's dtype (fast on CUDA);
+        ``"float64"`` matches the pre-2026 behaviour.
 
     Returns
     -------
     torch.Tensor
-        Second moment of the truncated normal distribution.
+        Second moment of the truncated normal distribution. Dtype matches the
+        chosen ``precision``.
     """
     a, b = do_truncnorm_argchecks(torch.as_tensor(a), torch.as_tensor(b))
     device = a.device
-    mean = torch.as_tensor(mean, dtype=torch.float64, device=device)
-    sd = torch.as_tensor(sd, dtype=torch.float64, device=device)
+    mean_t = torch.as_tensor(mean)
+    sd_t = torch.as_tensor(sd)
+    work_dtype = _resolve_truncnorm_dtype(precision, a, b, mean_t, sd_t)
 
-    alpha = (a.to(dtype=torch.float64, device=device) - mean) / sd
-    beta = (b.to(dtype=torch.float64, device=device) - mean) / sd
+    mean = mean_t.to(dtype=work_dtype, device=device)
+    sd = sd_t.to(dtype=work_dtype, device=device)
+
+    alpha = (a.to(dtype=work_dtype, device=device) - mean) / sd
+    beta = (b.to(dtype=work_dtype, device=device) - mean) / sd
 
     flip = (alpha > 0) & (beta > 0)
     orig_alpha = alpha.clone()
@@ -418,8 +462,9 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0):
     bad_idx = (~torch.isnan(beta)) & (beta < 0) & ((scaled_res < beta**2) | (scaled_res > upper_bd))
     scaled_res = torch.where(bad_idx, upper_bd, scaled_res)
 
-    # NOTE: my_etruncnorm expects (a,b,mean,sd). For standardized alpha/beta, use mean=0, sd=1
-    res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta, 0.0, 1.0) + sd**2 * scaled_res
+    # NOTE: my_etruncnorm expects (a,b,mean,sd). For standardized alpha/beta, use mean=0, sd=1.
+    # Forward the same ``precision`` so the inner call doesn't silently re-upcast back to float64.
+    res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta, 0.0, 1.0, precision=precision) + sd**2 * scaled_res
 
     # Branchless degenerate-sd handling — see _apply_degenerate_sd_first_moment
     # for the rationale (no host sync per call).

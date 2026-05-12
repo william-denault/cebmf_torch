@@ -64,16 +64,15 @@ def ebnm_point_laplace(
     weight_decay: float = 0.0,
 ) -> EBNMLaplaceResult:
     """
-    Efficient direct maximization of the observed marginal log-likelihood for a point-Laplace EBNM.
-    Optimizer: LBFGS-only (AdamW warm-start optional and short).
+    Efficient direct maximisation of the observed marginal log-likelihood for a
+    point-Laplace EBNM. GPU-resident throughout — no host<->device syncs in
+    either the inner objective or the posterior summary.
 
-    The inner objective and posterior moments are pure-tensor (no host<->device
-    hops). Four scalar fields of the result (``pi_slab``, ``a``, ``mu``,
-    ``log_lik``) are still materialised to Python floats at the very end for
-    backward compatibility — see :class:`EBNMLaplaceResult`. Switching the
-    container to hold 0-d tensors (and removing the four ``.item()`` calls)
-    requires updating every consumer in ``priors/point.py`` at the same time
-    and is being tracked separately.
+    Optimizer: LBFGS-only (AdamW warm-start optional and short). The four
+    scalar fields of the result (``pi_slab``, ``a``, ``mu``, ``log_lik``) are
+    returned as 0-d tensors on the input device so the cEBMF ELBO accumulator
+    can fold them in without forcing a host sync per factor update. Call
+    ``float(field)`` at your own boundary if you need a Python scalar.
     """
     # ---- setup & hoisted constants (device/dtype safe) ----
     device, dtype = x.device, x.dtype

@@ -218,8 +218,11 @@ def ash(
     if prior not in ash_optimisers:
         raise ValueError("prior must be either 'norm' or 'exp'.")
 
-    # keep on-device and numerically safe
-    s = torch.as_tensor(s, dtype=x.dtype, device=x.device).clamp_(min=1e-12)
+    # Keep on-device and numerically safe. Use ``clamp`` (out-of-place) rather
+    # than ``clamp_``: when ``s`` already has the matching dtype/device,
+    # ``torch.as_tensor`` returns the same object and the in-place form mutates
+    # the caller's tensor, which is observable across repeated calls.
+    s = torch.as_tensor(s, dtype=x.dtype, device=x.device).clamp(min=1e-12)
 
     config = AshConfig(
         mult=mult,

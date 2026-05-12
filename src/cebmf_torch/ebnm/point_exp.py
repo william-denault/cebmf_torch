@@ -135,7 +135,10 @@ def ebnm_point_exp(
     """
     device, dtype = x.device, x.dtype
     x = torch.as_tensor(x, device=device, dtype=dtype)
-    s = torch.as_tensor(s, device=device, dtype=dtype).clamp_(min=_const_like(x, 1e-6))
+    # Use ``clamp`` (out-of-place) — ``torch.as_tensor`` returns the same tensor
+    # when ``s`` already has the matching dtype/device, so ``clamp_`` would
+    # mutate the caller's tensor across repeated calls.
+    s = torch.as_tensor(s, device=device, dtype=dtype).clamp(min=_const_like(x, 1e-6))
 
     # -------- init (keep same API but use a smooth bounded map for 'a') --------
     a_lo, a_hi = a_bounds
