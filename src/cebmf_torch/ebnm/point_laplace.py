@@ -35,13 +35,15 @@ def logg_laplace_convolved_with_normal(x: Tensor, s: Tensor, a: Tensor) -> Tenso
 
 @dataclass
 class EBNMLaplaceResult:
+    """All scalar fields are 0-d tensors on the input device (no host syncs)."""
+
     post_mean: Tensor
     post_mean2: Tensor
     post_sd: Tensor
-    pi_slab: float  # mixture weight of the Laplace branch (slab); = 1 - pi_null
-    a: float  # Laplace rate (1/scale)
-    mu: float
-    log_lik: float  # pure marginal log-likelihood (no penalties)
+    pi_slab: Tensor  # mixture weight of the Laplace branch (slab); = 1 - pi_null
+    a: Tensor  # Laplace rate (1/scale)
+    mu: Tensor
+    log_lik: Tensor  # pure marginal log-likelihood (no penalties)
 
 
 def ebnm_point_laplace(
@@ -62,8 +64,15 @@ def ebnm_point_laplace(
     weight_decay: float = 0.0,
 ) -> EBNMLaplaceResult:
     """
-    Efficient direct maximization of the observed marginal log-likelihood for a point-Laplace EBNM.
-    Optimizer: LBFGS-only (AdamW warm-start optional and short). GPU-safe (no host<->device hops).
+    Efficient direct maximisation of the observed marginal log-likelihood for a
+    point-Laplace EBNM. GPU-resident throughout — no host<->device syncs in
+    either the inner objective or the posterior summary.
+
+    Optimizer: LBFGS-only (AdamW warm-start optional and short). The four
+    scalar fields of the result (``pi_slab``, ``a``, ``mu``, ``log_lik``) are
+    returned as 0-d tensors on the input device so the cEBMF ELBO accumulator
+    can fold them in without forcing a host sync per factor update. Call
+    ``float(field)`` at your own boundary if you need a Python scalar.
     """
     # ---- setup & hoisted constants (device/dtype safe) ----
     device, dtype = x.device, x.dtype
@@ -255,19 +264,23 @@ def ebnm_point_laplace(
         # PURE marginal log-likelihood
         llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w.clamp_min(eps_t)) + lg).sum()
 
-        # spike-only shortcut if slab weight is tiny
-        if float(w.item()) < float(thresh_pi_slab_t.item()):
-            post_mean = torch.zeros_like(x) + mu
-            post_mean2 = torch.zeros_like(x) + mu * mu + torch.tensor(1e-4, device=device, dtype=dtype)
-            post_sd = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
-            llik = lf.sum()
+        # spike-only shortcut if slab weight is tiny — branchless so we never
+        # block on a host-side comparison (that was a per-call CPU sync before).
+        spike_only = w < thresh_pi_slab_t  # 0-d bool tensor
+        post_mean_so = torch.zeros_like(x) + mu
+        post_mean2_so = torch.zeros_like(x) + mu * mu + torch.tensor(1e-4, device=device, dtype=dtype)
+        llik_so = lf.sum()
+        post_mean = torch.where(spike_only, post_mean_so, post_mean)
+        post_mean2 = torch.where(spike_only, post_mean2_so, post_mean2)
+        post_sd = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
+        llik = torch.where(spike_only, llik_so, llik)
 
     return EBNMLaplaceResult(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
-        pi_slab=float(w.item()),  # mixture weight of the Laplace branch (slab)
-        a=float(a.item()),
-        mu=float(mu.item()),
-        log_lik=float(llik.item()),
+        pi_slab=w.detach(),  # mixture weight of the Laplace branch (slab)
+        a=a.detach(),
+        mu=mu.detach(),
+        log_lik=llik.detach(),
     )
