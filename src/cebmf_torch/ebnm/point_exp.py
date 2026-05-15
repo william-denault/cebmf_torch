@@ -196,7 +196,20 @@ def ebnm_point_exp(
 
         loss = -(llik_sum - penalty)  # maximize llik_sum -> minimize negative
 
-        # Strict: don't mask NaNs on the value; let failures surface. Gradients only from autograd.
+        # NaN safeguard for the line search. When LBFGS probes an extreme
+        # (s*a)^2 region in float32, `lg` can underflow / overflow inside
+        # `_loglik_exp_convolved` and the loss comes back non-finite; the
+        # strong-Wolfe line search then has no way to make a sensible step.
+        # Feeding it a large finite penalty instead lets the optimizer back
+        # off without aborting, matching the long-standing behaviour in
+        # `point_laplace.py` and `generalized_binary.py`. Gradients still
+        # flow from the un-clipped expression above via autograd.
+        loss = torch.nan_to_num(
+            loss,
+            nan=_const_like(loss, 1e30),
+            posinf=_const_like(loss, 1e30),
+            neginf=_const_like(loss, 1e30),
+        )
         loss.backward()
         return loss
 
@@ -250,8 +263,19 @@ def ebnm_point_exp(
         llik_so = lf.sum()
         post_mean = torch.where(spike_only, post_mean_so, post_mean)
         post_mean2 = torch.where(spike_only, post_mean2_so, post_mean2)
-        post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
         llik = torch.where(spike_only, llik_so, llik)
+
+        # Per-element NaN/Inf safeguard. Even with the line-search guard above,
+        # the float32 path through `my_etruncnorm` / `my_e2truncnorm` can
+        # return non-finite moments when `m_tilt = xc - s^2 * a` is extreme
+        # (logphi underflow in `logscale_sub`). Falling back element-wise to
+        # the spike values that the existing `spike_only` branch uses keeps
+        # the ELBO finite without introducing a new approximation: healthy
+        # fits are unaffected because `isfinite(...)` is True everywhere.
+        post_mean = torch.where(torch.isfinite(post_mean), post_mean, post_mean_so)
+        post_mean2 = torch.where(torch.isfinite(post_mean2), post_mean2, post_mean2_so)
+        llik = torch.where(torch.isfinite(llik), llik, llik_so)
+        post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
 
     # Keep scalar fields on-device as 0-d tensors — `cebmf.py` consumes them
     # via `priors/point.py` which now stays in tensor space.
