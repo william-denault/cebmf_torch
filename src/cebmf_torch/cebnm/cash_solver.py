@@ -258,8 +258,9 @@ def cash_posterior_means(
         post_sd = result.post_sd
 
         # ---- Full marginal log-likelihood (no penalty). Same logsumexp formula
-        # as before; this matches the convention expected by ``cebmf.py``'s
-        # ``self.kl_l[k] = (-resL.loss) - nm_ll_L`` accumulator.
+        # as before; ``cebmf.py``'s ELBO accumulator expects ``loss`` to equal
+        # ``-log p(y | fitted prior)`` so that
+        # ``kl_l[k] = nm_ll_L + resL.loss`` evaluates to +KL(q || p).
         log_marginal_per_obs = torch.logsumexp(data_loglik + log_pi_full, dim=1)  # (N,)
         full_marginal_ll = float(log_marginal_per_obs.sum().item())
 

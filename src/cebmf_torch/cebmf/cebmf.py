@@ -363,7 +363,12 @@ class cEBMF:
         self.L[:, k] = resL.post_mean
         self.L2[:, k] = resL.post_mean2
         nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
-        self.kl_l[k] = torch.as_tensor((-resL.loss) - nm_ll_L, device=self.device, dtype=self.L.dtype)
+        # KL(q(L_k) || p(L_k)) — non-negative. By the EBNM identity, when q is the
+        # exact posterior under the fitted prior π̂,
+        #   log p(lhat | s, π̂) = E_q log N(lhat | θ, s²) − KL(q || p)
+        # so KL = nm_ll_L − log_lik = nm_ll_L − (−resL.loss) = nm_ll_L + resL.loss.
+        # This is the value the −ELBO accumulator in `_cal_obj` adds to −ll.
+        self.kl_l[k] = torch.as_tensor(nm_ll_L + resL.loss, device=self.device, dtype=self.L.dtype)
         self.pi0_L[k] = resL.pi0_null
 
     @torch.no_grad()
@@ -408,7 +413,8 @@ class cEBMF:
         self.F[:, k] = resF.post_mean
         self.F2[:, k] = resF.post_mean2
         nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
-        self.kl_f[k] = torch.as_tensor((-resF.loss) - nm_ll_F, device=self.device, dtype=self.F.dtype)
+        # KL(q(F_k) || p(F_k)) — see the matching note in `_update_L_factor`.
+        self.kl_f[k] = torch.as_tensor(nm_ll_F + resF.loss, device=self.device, dtype=self.F.dtype)
         self.pi0_F[k] = resF.pi0_null
 
     @torch.no_grad()
@@ -420,6 +426,9 @@ class cEBMF:
         else:
             ll = self._compute_elementwise_loglik(ER2)
 
+        # KL terms are non-negative under the EBNM identity (see
+        # `_update_L_factor` / `_update_F_factor`); the negative ELBO is
+        # therefore -ll + sum_k KL(q(L_k)||p) + sum_k KL(q(F_k)||p).
         KL = self.kl_l.sum() + self.kl_f.sum()
         loss = (-ll + KL).item()  # minimize this (negative ELBO)
         self.obj.append(loss)

@@ -378,9 +378,10 @@ def _compute_posteriors(
         ``marginal_loglik`` is the full-data marginal log-likelihood
         ``sum_g logsumexp_k (log pi_g,k + log p(beta_g | 0, sqrt(se_g^2 + scale_k^2)))``,
         i.e. ``log p(y | fitted prior)`` without any spike Dirichlet penalty.
-        It is what the cebmf consumer at ``cebmf.py:299``
-        (``self.kl_l[k] = (-resL.loss) - nm_ll_L``) requires of the loss
-        field on this object.
+        It is what the cebmf consumer (``self.kl_l[k] = nm_ll_L + resL.loss``)
+        requires of the loss field on this object: the returned ``loss``
+        must equal ``-marginal_loglik`` so that ``kl_l`` evaluates to the
+        non-negative KL(q || p) of the variational posterior.
     """
     model.eval()
     loc = torch.zeros_like(scale)
@@ -532,7 +533,8 @@ def _fit_lcash(
     # `loss` is the negative full-data marginal log-likelihood under the
     # fitted prior, *without* the spike Dirichlet penalty. This matches
     # the convention used by `cebnm/emdn.py` and is the meaning required
-    # by `cebmf.py`'s per-factor `kl_l[k] = (-loss) - nm_ll_L` formula.
+    # by `cebmf.py`'s per-factor `kl_l[k] = nm_ll_L + loss` formula, which
+    # evaluates to the non-negative KL(q(L_k) || p(L_k)).
     # The previous training-loss-on-final-epoch return value was an
     # unfinished refactor (cf. the `# compute proper full negative
     # marginal log-likelihood (no penalty)` TODO comments that used to
