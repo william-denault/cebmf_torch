@@ -89,7 +89,11 @@ def ebnm_point_laplace(
     half = torch.tensor(0.5, device=device, dtype=dtype)
     two = torch.tensor(2.0, device=device, dtype=dtype)
     eps_t = torch.tensor(eps, device=device, dtype=dtype)
-    thresh_pi_slab_t = torch.tensor(tresh_pi0, device=device, dtype=dtype)
+    # NOTE: ``tresh_pi0`` is retained in the public signature for API
+    # compatibility but no longer used internally. The R-style boundary
+    # check at the end of the function decides whether to prefer the
+    # all-spike solution based on marginal log-likelihood rather than a
+    # magic threshold on the slab weight.
 
     # normalizing constant (reuse tensor if given, else make one)
     c_norm = _LOG_SQRT_2PI if isinstance(_LOG_SQRT_2PI, torch.Tensor) else _const_like(s, _LOG_SQRT_2PI)
@@ -264,16 +268,35 @@ def ebnm_point_laplace(
         # PURE marginal log-likelihood
         llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w.clamp_min(eps_t)) + lg).sum()
 
-        # spike-only shortcut if slab weight is tiny — branchless so we never
-        # block on a host-side comparison (that was a per-call CPU sync before).
-        spike_only = w < thresh_pi_slab_t  # 0-d bool tensor
+        # Spike-only fallback values. Matches Stephens-lab `ebnm` exactly:
+        # under w = 0 the posterior is a point mass at mu, so E[θ] = mu and
+        # E[θ²] = mu² (no +1e-4 fudge — that was an unprincipled offset that
+        # biased `tau` in cEBMF).
         post_mean_so = torch.zeros_like(x) + mu
-        post_mean2_so = torch.zeros_like(x) + mu * mu + torch.tensor(1e-4, device=device, dtype=dtype)
+        post_mean2_so = torch.zeros_like(x) + mu * mu
         llik_so = lf.sum()
-        post_mean = torch.where(spike_only, post_mean_so, post_mean)
-        post_mean2 = torch.where(spike_only, post_mean2_so, post_mean2)
+
+        # Boundary check, ported from R's `pe_postcomp`: prefer the all-spike
+        # solution whenever its marginal log-likelihood is strictly higher than
+        # the LBFGS result, or whenever the LBFGS llik is non-finite. This
+        # replaces the old `w < thresh_pi_slab_t` magic threshold (which only
+        # fired when LBFGS happened to drive w near zero on its own) with a
+        # principled comparison that's a no-op on healthy fits.
+        prefer_spike = (~torch.isfinite(llik)) | (llik_so > llik)
+        post_mean = torch.where(prefer_spike, post_mean_so, post_mean)
+        post_mean2 = torch.where(prefer_spike, post_mean2_so, post_mean2)
+        llik = torch.where(prefer_spike, llik_so, llik)
+        # Force w toward 0 when the spike branch wins so downstream cEBMF
+        # factor pruning / pi0_null reporting sees the right thing.
+        w = torch.where(prefer_spike, eps_t, w)
+
+        # Per-element NaN guard: a few extreme observations can still produce
+        # non-finite posterior moments even when the aggregate llik is finite
+        # (float32 logphi underflow in `my_etruncnorm`). Route those entries to
+        # the spike values that the boundary check already validated.
+        post_mean = torch.where(torch.isfinite(post_mean), post_mean, post_mean_so)
+        post_mean2 = torch.where(torch.isfinite(post_mean2), post_mean2, post_mean2_so)
         post_sd = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
-        llik = torch.where(spike_only, llik_so, llik)
 
     return EBNMLaplaceResult(
         post_mean=post_mean,
