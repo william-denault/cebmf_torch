@@ -261,9 +261,23 @@ def ebnm_point_laplace(
         EX = lam * EX_pos + (one - lam) * EX_neg
         EX2 = lam * EX2_pos + (one - lam) * EX2_neg
 
-        post_mean = gamma * (EX + mu) + (one - gamma) * mu
-        post_mean2 = gamma * (EX2 + two * mu * EX + mu * mu) + (one - gamma) * (mu * mu)
-        post_sd = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
+        # Centered posterior moments (E[θ_c|·] and E[θ_c²|·] with θ_c = θ-μ).
+        # The `torch.maximum` floor matches R `ebnm`'s `pmax(post_mean2_c,
+        # post_mean_c^2)` — it enforces Var ≥ 0 against float32 round-off in
+        # the truncated-normal moments. Without it, `post_mean2 - post_mean^2`
+        # can go slightly negative; the trailing `clamp_min(0).sqrt()` hides
+        # it for `post_sd`, but the unclipped `post_mean2` still flows into
+        # cEBMF as `L^2` and biases `tau`. Same safeguard exists in
+        # `point_exp.py` (line 250).
+        post_mean_c = gamma * EX
+        post_mean2_c = torch.maximum(gamma * EX2, post_mean_c**2)
+
+        # Re-apply the μ-correction (location shift): adding μ moves both
+        # moments, but variance is invariant — so `post_sd` is built from the
+        # centered quantities for numerical cleanliness.
+        post_mean = post_mean_c + mu
+        post_mean2 = post_mean2_c + two * mu * post_mean_c + mu * mu
+        post_sd = (post_mean2_c - post_mean_c**2).clamp_min(zero).sqrt()
 
         # PURE marginal log-likelihood
         llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w.clamp_min(eps_t)) + lg).sum()
