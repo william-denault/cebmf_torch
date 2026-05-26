@@ -7,6 +7,7 @@ from torch import Tensor
 
 from cebmf_torch.cebnm.cash_solver import cash_posterior_means
 from cebmf_torch.cebnm.cov_gb_prior import cgb_posterior_means
+from cebmf_torch.cebnm.cov_sharp_2gb_prior import sharp_2cgb_posterior_means
 from cebmf_torch.cebnm.cov_sharp_gb_prior import sharp_cgb_posterior_means
 from cebmf_torch.cebnm.emdn import emdn_posterior_means
 from cebmf_torch.cebnm.lcash import lcash_posterior_means, po_lcash_posterior_means
@@ -27,6 +28,9 @@ class LearnedPriorType(StrEnum):
         Covariate Generalized-binary prior.
     CGB_SHARP : str
         Covariate sharp Generalized-binary prior.
+    CGB_SHARP_2 : str
+        Two-sided Covariate sharp Generalized-binary prior with separate
+        positive and negative slabs (spike + N(mu_+, .) + N(mu_-, .)).
     EMDN : str
         Empirical Mixture Density Network prior.
     LCASH : str
@@ -40,6 +44,7 @@ class LearnedPriorType(StrEnum):
     CASH = auto()
     CGB = auto()
     CGB_SHARP = auto()
+    CGB_SHARP_2 = auto()
     EMDN = auto()
     LCASH = auto()
     PO_LCASH = auto()
@@ -50,6 +55,7 @@ builder_functions: dict[LearnedPriorType, Callable] = {
     LearnedPriorType.CASH: cash_posterior_means,
     LearnedPriorType.CGB: cgb_posterior_means,
     LearnedPriorType.CGB_SHARP: sharp_cgb_posterior_means,
+    LearnedPriorType.CGB_SHARP_2: sharp_2cgb_posterior_means,
     LearnedPriorType.EMDN: emdn_posterior_means,
     LearnedPriorType.LCASH: lcash_posterior_means,
     LearnedPriorType.PO_LCASH: po_lcash_posterior_means,
@@ -175,7 +181,7 @@ class LearnedBuilder(PriorBuilder):
             ):
                 # optional: could expose from obj.pi_np
                 pi0_null = obj.pi_np[:, 0]
-            case LearnedPriorType.CGB | LearnedPriorType.CGB_SHARP:
+            case LearnedPriorType.CGB | LearnedPriorType.CGB_SHARP | LearnedPriorType.CGB_SHARP_2:
                 # π₀(x) from the covariate model
                 pi0_null = obj.pi
             case LearnedPriorType.EMDN:

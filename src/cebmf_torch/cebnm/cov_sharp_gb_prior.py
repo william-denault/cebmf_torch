@@ -192,7 +192,7 @@ def sharp_cgb_posterior_means(
     sebetahat,
     n_epochs=50,
     n_layers=2,
-    omega=0.02,
+    omega=0.005,
     hidden_dim=32,
     batch_size=128,
     lr=1e-3,

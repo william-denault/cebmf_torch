@@ -86,10 +86,15 @@ def test_point_builder_pi0_null_is_null_for_noise_factor():
 def test_point_builder_pi0_null_consistent_with_ebnm_directly():
     """The Prior.pi_slab returned by the registry path must equal the
     EBNM class's own pi_slab field, exactly. (This catches any future
-    drift between the registry's bridging line and the EBNM convention.)"""
+    drift between the registry's bridging line and the EBNM convention.)
+
+    The PointBuilder must be constructed with the same kwargs as the
+    direct ``ebnm_gb`` call — the test is about whether the wrapper drifts
+    from the underlying function, not about what the defaults are.
+    """
     _, x, s = _simulate_gb(n=2000, pi=0.4, mu=2.0, omega=0.2, s_val=0.5, seed=22)
     res = ebnm_gb(x, s, omega=0.2)
-    builder = PointBuilder(PointPriorType.GBINARY)
+    builder = PointBuilder(PointPriorType.GBINARY, omega=0.2)
     prior: Prior = builder.fit(X=None, betahat=x, sebetahat=s)
     # Both calls deterministic; if not, this assertion will surface it.
     assert abs(_to_float(prior.pi_slab) - _to_float(res.pi_slab)) < 1e-6
