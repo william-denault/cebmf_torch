@@ -179,7 +179,7 @@ class cEBMF:
         # Stash raw S input; normalised to an (N, P) tensor inside _initialise_tensors
         self._S_input = S
         self._validate_inputs()
-        self.Y = self.data.to(self.device).float()
+        _d = self.data.to(self.device); self.Y = _d if _d.dtype.is_floating_point else _d.float()  # keep float64 if user supplied it; ELBO bookkeeping needs the precision
         self.N, self.P = self.Y.shape
         self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
@@ -501,12 +501,12 @@ class cEBMF:
 
     @torch.no_grad()
     def _initialise_tensors(self):
-        self.mask = (~torch.isnan(self.Y)).float()  # 1 where observed, 0 where NaN
+        self.mask = (~torch.isnan(self.Y)).to(self.Y.dtype)  # 1 where observed, 0 where NaN; match Y dtype
         self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
-        self.L = torch.zeros(self.N, self.model.K, device=self.device)
-        self.L2 = torch.zeros(self.N, self.model.K, device=self.device)
-        self.F = torch.zeros(self.P, self.model.K, device=self.device)
-        self.F2 = torch.zeros(self.P, self.model.K, device=self.device)
+        self.L = torch.zeros(self.N, self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.L2 = torch.zeros(self.N, self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.F = torch.zeros(self.P, self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.F2 = torch.zeros(self.P, self.model.K, device=self.device, dtype=self.Y.dtype)
 
         if self.noise.type == NoiseType.KNOWN:
             # Build tau_map from user-supplied S; may further reduce self.mask / self.Y0.
@@ -514,10 +514,10 @@ class cEBMF:
         else:
             # Initial precision guess for learned-noise modes; refined by update_tau().
             self.S = None
-            self.tau = torch.tensor(1.0, device=self.device)
+            self.tau = torch.tensor(1.0, device=self.device, dtype=self.Y.dtype)
 
-        self.kl_l = torch.zeros(self.model.K, device=self.device)
-        self.kl_f = torch.zeros(self.model.K, device=self.device)
+        self.kl_l = torch.zeros(self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.kl_f = torch.zeros(self.model.K, device=self.device, dtype=self.Y.dtype)
         self.pi0_L: list[Tensor | float | None] = [
             None
         ] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None

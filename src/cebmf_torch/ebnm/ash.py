@@ -142,7 +142,7 @@ class ASHResult:
         Lc = torch.maximum(L, threshold)
 
         # Python-literal floor avoids a host sync from `eps.item()`.
-        log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
+        log_lik_rows = torch.logsumexp(L + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)  # use unclipped L: posterior also uses unclipped L, so log_lik must match for EBNM identity
         log_lik = log_lik_rows.sum()  # 0-d tensor on-device
         return cls(
             post_mean=pm_obj.post_mean,

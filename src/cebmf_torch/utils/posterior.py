@@ -161,7 +161,7 @@ def posterior_mean_exp(
     r_exp = post_assign[:, 1:]  # (J, K-1) — responsibilities of the Exp components
     post_mean = (r_exp * e1).sum(dim=1)  # (J,)
     post_mean2 = (r_exp * e2).sum(dim=1)  # (J,)
-    post_mean2 = torch.maximum(post_mean2, post_mean)  # original guard
+    post_mean2 = torch.maximum(post_mean2, post_mean.pow(2))  # Var >= 0 floor (was comparing against post_mean, not post_mean^2, which inflated post_mean2 and broke EBNM identity)
 
     # Infinite-s rows: collapse to the *prior* mixture mean / second moment.
     # With s = inf the data contributes no information, so the posterior
