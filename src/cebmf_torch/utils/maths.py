@@ -4,7 +4,6 @@ import torch
 from torch import Tensor
 
 _TWOPI = 2.0 * math.pi
-_SQRT_2PI = math.sqrt(_TWOPI)
 _EPS = 1e-12
 _LOG_2PI = math.log(_TWOPI)
 _LOG_SQRT_2PI = 0.5 * _LOG_2PI
@@ -45,40 +44,6 @@ def log_norm_pdf(x: Tensor, loc: Tensor, scale: Tensor) -> Tensor:
 def _logcdf_normal(z: Tensor) -> Tensor:
     """Numerically-stable log Φ(z) (standard normal CDF). Wraps torch.special.log_ndtr."""
     return torch.special.log_ndtr(z)
-
-
-def norm_cdf(x: Tensor) -> Tensor:
-    """
-    Compute the standard normal cumulative distribution function (CDF).
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Input tensor.
-
-    Returns
-    -------
-    torch.Tensor
-        CDF evaluated at x.
-    """
-    return torch.distributions.Normal(_like(x, 0.0), _like(x, 1.0)).cdf(x)
-
-
-def norm_pdf(x: Tensor) -> Tensor:
-    """
-    Compute the standard normal probability density function (PDF).
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Input tensor.
-
-    Returns
-    -------
-    torch.Tensor
-        PDF evaluated at x.
-    """
-    return torch.exp(-0.5 * x * x) / _like(x, _SQRT_2PI)
 
 
 def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
@@ -197,25 +162,6 @@ def logscale_sub(logx: torch.Tensor, logy: torch.Tensor) -> torch.Tensor:
     """
     max_log = torch.maximum(logx, logy)
     return max_log + torch.log(torch.exp(logx - max_log) - torch.exp(logy - max_log))
-
-
-def logscale_add(logx: Tensor, logy: Tensor) -> Tensor:
-    """
-    Compute log(exp(logx) + exp(logy)) in a numerically stable way.
-
-    Parameters
-    ----------
-    logx : torch.Tensor
-        Logarithm of x.
-    logy : torch.Tensor
-        Logarithm of y.
-
-    Returns
-    -------
-    torch.Tensor
-        Logarithm of (exp(logx) + exp(logy)).
-    """
-    return torch.logaddexp(logx, logy)
 
 
 def do_truncnorm_argchecks(a: torch.Tensor, b: torch.Tensor):

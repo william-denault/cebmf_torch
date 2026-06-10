@@ -26,58 +26,6 @@ class PosteriorMean:
 
 
 @torch.no_grad()
-def wpost_exp(x: torch.Tensor, s: torch.Tensor, w: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    """
-    Compute responsibilities for a spike+exponential mixture prior on (theta >= 0).
-
-    Parameters
-    ----------
-    x : torch.Tensor
-        Observed betahat (scalar tensor or shape ()).
-    s : torch.Tensor
-        Standard error (scalar tensor or shape ()).
-    w : torch.Tensor
-        (K,) mixture weights (sum to 1), w[0] for spike at 0, w[1:] for Exp scales.
-    scale : torch.Tensor
-        (K,) with scale[0]=0 for spike, scale[1:]>0 as Exp scales (rate = 1/scale).
-
-    Returns
-    -------
-    torch.Tensor
-        (K,) posterior responsibilities.
-    """
-    # ensure tensors stay on the same device/dtype
-    x = torch.as_tensor(x)
-    s = torch.as_tensor(s, dtype=x.dtype, device=x.device)
-    w = torch.as_tensor(w, dtype=x.dtype, device=x.device)
-    scale = torch.as_tensor(scale, dtype=x.dtype, device=x.device)
-
-    # spike log-lik
-    lf = _logpdf_normal(x, torch.as_tensor(0.0, dtype=x.dtype, device=x.device), s)
-
-    # exp components
-    a = 1.0 / scale[1:]  # rates
-    lg = torch.log(a) + 0.5 * (s * a).pow(2) - a * x + _logcdf_normal(x / s - s * a)
-
-    log_prob = torch.empty_like(scale)
-    log_prob[0] = lf
-    log_prob[1:] = lg
-
-    # posterior responsibilities with log-sum-exp stabilization
-    bmax = torch.max(log_prob)
-    num = w * torch.exp(log_prob - bmax)
-    r = num / torch.clamp(num.sum(), min=1e-300)
-
-    # Degenerate case: w[0] >= 1 means all mass on the spike. Replace with the
-    # one-hot response, branchless to avoid `if torch.all(...):` host sync.
-    spike_only = w[0] >= 1.0
-    r_spike = torch.zeros_like(scale)
-    r_spike[0] = 1.0
-    r = torch.where(spike_only, r_spike, r)
-    return r
-
-
-@torch.no_grad()
 def posterior_mean_exp(
     betahat: torch.Tensor,
     sebetahat: torch.Tensor,

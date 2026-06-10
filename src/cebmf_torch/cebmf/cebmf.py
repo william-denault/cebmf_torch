@@ -451,10 +451,6 @@ class cEBMF:
         self._prune_indices(to_drop_sorted)
 
     @torch.no_grad()
-    def _update_fitted_value(self):
-        self.Y_fit = self.L @ self.F.T
-
-    @torch.no_grad()
     def _expected_residuals_squared(self):
         """
         E[(Y - sum_k L_k F_k)^2] on observed entries.
@@ -602,14 +598,6 @@ class cEBMF:
         view = (-1, 1) if dim == 1 else (1, -1)
         self.tau_map = tau.view(*view).expand(self.N, self.P)  # (N,P)
         self.tau = self.tau_map  # downstream uses elementwise in structured noise
-
-    @torch.no_grad()
-    def _partial_residual_masked(self, k: int) -> Tensor:
-        # Rk for observed entries only
-        recon = self.L @ self.F.T
-        k_contrib = torch.outer(self.L[:, k], self.F[:, k])
-        Rk = (self.Y0 - (recon - k_contrib)) * self.mask
-        return Rk
 
     @torch.no_grad()
     def _should_prune_factor(self, k: int) -> bool:

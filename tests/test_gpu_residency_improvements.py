@@ -212,33 +212,6 @@ def test_my_etruncnorm_no_zero_sd_path_unchanged():
     assert torch.isfinite(out).all()
 
 
-def test_wpost_exp_spike_only_branchless():
-    """w[0]==1 must still give one-hot spike response."""
-    from cebmf_torch.utils.posterior import wpost_exp
-
-    x = torch.tensor(0.1)
-    s = torch.tensor(0.5)
-    w = torch.tensor([1.0, 0.0, 0.0])
-    scale = torch.tensor([0.0, 1.0, 2.0])
-    r = wpost_exp(x, s, w, scale)
-    expected = torch.tensor([1.0, 0.0, 0.0])
-    assert torch.allclose(r, expected, atol=1e-6)
-
-
-def test_wpost_exp_normal_case():
-    """Mixed weights should produce a normal distribution of responsibility."""
-    from cebmf_torch.utils.posterior import wpost_exp
-
-    x = torch.tensor(2.0)
-    s = torch.tensor(0.5)
-    w = torch.tensor([0.3, 0.5, 0.2])
-    scale = torch.tensor([0.0, 1.0, 2.0])
-    r = wpost_exp(x, s, w, scale)
-    assert r.shape == (3,)
-    assert torch.allclose(r.sum(), torch.tensor(1.0), atol=1e-5)
-    assert (r >= 0).all() and (r <= 1).all()
-
-
 def test_normal_means_loglik_branchless_invalid_inputs():
     """All-invalid input must give a finite (zero) result via the branchless path."""
     from cebmf_torch.cebmf.cebmf import normal_means_loglik
