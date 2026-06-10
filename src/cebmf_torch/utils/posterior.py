@@ -2,7 +2,13 @@ import torch
 
 # Re-export the canonical normal-density helpers so existing imports keep working.
 # The single source of truth lives in utils/maths.py.
-from .maths import _logcdf_normal, _logpdf_normal, my_e2truncnorm, my_etruncnorm  # noqa: F401
+from .maths import (  # noqa: F401
+    _logcdf_normal,
+    _logpdf_normal,
+    logg_exp_convolved_with_normal,
+    my_e2truncnorm,
+    my_etruncnorm,
+)
 
 
 class PosteriorMean:
@@ -135,9 +141,7 @@ def posterior_mean_exp(
     a = 1.0 / scale[1:]  # (K-1,) — rates of the Exp components
     a_row = a.unsqueeze(0)  # (1, K-1)
 
-    lg = (
-        torch.log(a_row) + 0.5 * (s_col * a_row).pow(2) - a_row * x_col + _logcdf_normal(x_col / s_col - s_col * a_row)
-    )  # (J, K-1)
+    lg = logg_exp_convolved_with_normal(x_col, s_col, a_row)  # (J, K-1)
 
     log_prob = torch.cat([lf.unsqueeze(1), lg], dim=1)  # (J, K)
 

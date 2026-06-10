@@ -17,12 +17,16 @@ def _const_like(x: Tensor, val) -> Tensor:
     return torch.as_tensor(val, device=x.device, dtype=x.dtype)
 
 
-def logg_laplace_convolved_with_normal(x: Tensor, s: Tensor, a: Tensor) -> Tensor:
+def _laplace_slab_terms(x: Tensor, s: Tensor, a: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    """Shared terms for the Laplace ⊗ Normal slab marginal.
+
+    Returns ``(lg, lg1, lsum)`` where ``lg`` is the slab log-density and
+    ``lg1``/``lsum`` are the positive-branch log-term and the log-sum of the
+    two sign branches. The posterior computation reuses ``lg1``/``lsum`` to
+    form the within-slab sign-mixture weight ``lam = exp(lg1 - lsum)``.
+
+    Assumes x, s, a already on the correct device/dtype; s already clamped.
     """
-    log (Laplace(0, rate=a) ⊗ Normal(0, s^2)) at x.
-    = log(a/2) + 0.5*(s a)^2 + log( Φ((x - s^2 a)/s) e^{-a x} + Φ(-(x + s^2 a)/s) e^{a x} )
-    """
-    # assume x, s, a already on correct device/dtype; s already clamped outside
     z1 = (x - (s * s) * a) / s
     z2 = -(x + (s * s) * a) / s
     lg1 = -a * x + logPhi(z1)
@@ -30,7 +34,17 @@ def logg_laplace_convolved_with_normal(x: Tensor, s: Tensor, a: Tensor) -> Tenso
     lsum = torch.logaddexp(lg1, lg2)
     half = torch.tensor(0.5, device=x.device, dtype=x.dtype)
     two = torch.tensor(2.0, device=x.device, dtype=x.dtype)
-    return safe_log(a / two) + half * (s * a) ** 2 + lsum
+    lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
+    return lg, lg1, lsum
+
+
+def logg_laplace_convolved_with_normal(x: Tensor, s: Tensor, a: Tensor) -> Tensor:
+    """
+    log (Laplace(0, rate=a) ⊗ Normal(0, s^2)) at x.
+    = log(a/2) + 0.5*(s a)^2 + log( Φ((x - s^2 a)/s) e^{-a x} + Φ(-(x + s^2 a)/s) e^{a x} )
+    """
+    lg, _, _ = _laplace_slab_terms(x, s, a)
+    return lg
 
 
 @dataclass
@@ -130,13 +144,8 @@ def ebnm_point_laplace(
             # spike log-lik
             lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
-            # slab log-lik (fused helper)
-            z1 = (xc - s2 * a) / s
-            z2 = -(xc + s2 * a) / s
-            lg1 = -a * xc + logPhi(z1)
-            lg2 = a * xc + logPhi(z2)
-            lsum = torch.logaddexp(lg1, lg2)
-            lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
+            # slab log-lik
+            lg, _, _ = _laplace_slab_terms(xc, s, a)
 
             llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg).sum()
 
@@ -171,13 +180,8 @@ def ebnm_point_laplace(
             # spike log-lik (reuses log_s, c_norm)
             lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
-            # slab log-lik (inline for speed)
-            z1 = (xc - s2 * a) / s
-            z2 = -(xc + s2 * a) / s
-            lg1 = -a * xc + logPhi(z1)
-            lg2 = a * xc + logPhi(z2)
-            lsum = torch.logaddexp(lg1, lg2)
-            lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
+            # slab log-lik
+            lg, _, _ = _laplace_slab_terms(xc, s, a)
 
             llik = torch.logaddexp(torch.log1p(-w) + lf, torch.log(w) + lg).sum()
 
@@ -227,12 +231,7 @@ def ebnm_point_laplace(
         lf = -(half * (xc / s) ** 2) - log_s - c_norm
 
         # slab
-        z1 = (xc - s2 * a) / s
-        z2 = -(xc + s2 * a) / s
-        lg1 = -a * xc + logPhi(z1)
-        lg2 = a * xc + logPhi(z2)
-        lsum = torch.logaddexp(lg1, lg2)
-        lg = safe_log(a / two) + half * (s * a) ** 2 + lsum
+        lg, lg1, lsum = _laplace_slab_terms(xc, s, a)
 
         # posterior inclusion prob (slab)
         log_num = torch.log(w) + lg
