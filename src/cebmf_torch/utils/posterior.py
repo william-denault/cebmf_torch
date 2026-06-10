@@ -161,7 +161,11 @@ def posterior_mean_exp(
     r_exp = post_assign[:, 1:]  # (J, K-1) — responsibilities of the Exp components
     post_mean = (r_exp * e1).sum(dim=1)  # (J,)
     post_mean2 = (r_exp * e2).sum(dim=1)  # (J,)
-    post_mean2 = torch.maximum(post_mean2, post_mean)  # original guard
+    # Numerical floor: E[theta^2] >= E[theta]^2 holds exactly (the exp
+    # responsibilities sum to <= 1), so this only catches float error. Guarding
+    # against ``post_mean`` (rather than ``post_mean**2``) wrongly inflated the
+    # second moment whenever post_mean < 1.
+    post_mean2 = torch.maximum(post_mean2, post_mean.pow(2))
 
     # Infinite-s rows: collapse to the *prior* mixture mean / second moment.
     # With s = inf the data contributes no information, so the posterior
