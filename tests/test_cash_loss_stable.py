@@ -5,8 +5,6 @@ log-likelihoods before summing, overflowing to inf/NaN in float32 for small
 standard errors. It now reduces in log-space via logsumexp.
 """
 
-import math
-
 import torch
 
 from cebmf_torch.cebnm.cash_solver import pen_loglik_loss
