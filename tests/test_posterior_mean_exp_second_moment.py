@@ -25,9 +25,9 @@ def _brute_exp_posterior(x, s, pi, scale, n=400_001):
     lik = np.exp(-0.5 * ((x - theta) / s) ** 2) / (s * math.sqrt(2 * math.pi))
     spike = pi[0] * (np.exp(-0.5 * (x / s) ** 2) / (s * math.sqrt(2 * math.pi)))
     unnorm = slab_pdf * lik
-    z = np.trapz(unnorm, theta) + spike
-    m1 = np.trapz(theta * unnorm, theta) / z
-    m2 = np.trapz(theta * theta * unnorm, theta) / z
+    z = np.trapezoid(unnorm, theta) + spike
+    m1 = np.trapezoid(theta * unnorm, theta) / z
+    m2 = np.trapezoid(theta * theta * unnorm, theta) / z
     return m1, m2
 
 
