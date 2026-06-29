@@ -47,19 +47,6 @@ def _logcdf_normal(z: Tensor) -> Tensor:
     return torch.special.log_ndtr(z)
 
 
-def logg_exp_convolved_with_normal(x: Tensor, s: Tensor, rate: Tensor) -> Tensor:
-    r"""log density of Exp(rate) convolved with Normal(0, s^2) at ``x``, for theta >= 0.
-
-    = log(rate) + 0.5*(s*rate)^2 - rate*x + log \Phi(x/s - s*rate)
-
-    Inputs broadcast against one another, so ``x``/``s`` may be ``(J, 1)`` and
-    ``rate`` ``(1, K-1)`` (or any broadcast-compatible shapes). This is the single
-    source of truth for the Exp-prior marginal log-density; callers must ensure
-    ``s > 0`` and ``rate > 0`` (the spike component is handled separately).
-    """
-    return torch.log(rate) + 0.5 * (s * rate).pow(2) - rate * x + _logcdf_normal(x / s - s * rate)
-
-
 def norm_cdf(x: Tensor) -> Tensor:
     """
     Compute the standard normal cumulative distribution function (CDF).
@@ -113,6 +100,19 @@ def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
         Result of log-sum-exp operation.
     """
     return torch.logsumexp(x, dim=dim, keepdim=keepdim)
+
+
+def logg_exp_convolved_with_normal(x: Tensor, s: Tensor, rate: Tensor) -> Tensor:
+    r"""log density of Exp(rate) convolved with Normal(0, s^2) at ``x``, for theta >= 0.
+
+    = log(rate) + 0.5*(s*rate)^2 - rate*x + log \Phi(x/s - s*rate)
+
+    Inputs broadcast against one another, so ``x``/``s`` may be ``(J, 1)`` and
+    ``rate`` ``(1, K-1)`` (or any broadcast-compatible shapes). This is the single
+    source of truth for the Exp-prior marginal log-density; callers must ensure
+    ``s > 0`` and ``rate > 0`` (the spike component is handled separately).
+    """
+    return torch.log(rate) + 0.5 * (s * rate).pow(2) - rate * x + _logcdf_normal(x / s - s * rate)
 
 
 def safe_log(x: Tensor, eps: float = _EPS) -> Tensor:
