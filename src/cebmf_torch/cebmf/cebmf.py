@@ -451,6 +451,10 @@ class cEBMF:
         self._prune_indices(to_drop_sorted)
 
     @torch.no_grad()
+    def _update_fitted_value(self):
+        self.Y_fit = self.L @ self.F.T
+
+    @torch.no_grad()
     def _expected_residuals_squared(self):
         """
         E[(Y - sum_k L_k F_k)^2] on observed entries.
