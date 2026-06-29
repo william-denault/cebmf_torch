@@ -20,7 +20,7 @@ def _brute_exp_posterior(x, s, pi, scale, n=400_001):
     theta = np.linspace(0.0, max(scale) * 40 + 20 * s, n)
     rates = 1.0 / np.asarray(scale[1:])
     slab_pdf = np.zeros_like(theta)
-    for w, a in zip(pi[1:], rates):
+    for w, a in zip(pi[1:], rates, strict=False):
         slab_pdf += w * a * np.exp(-a * theta)
     lik = np.exp(-0.5 * ((x - theta) / s) ** 2) / (s * math.sqrt(2 * math.pi))
     spike = pi[0] * (np.exp(-0.5 * (x / s) ** 2) / (s * math.sqrt(2 * math.pi)))
@@ -38,7 +38,9 @@ def test_second_moment_not_inflated_matches_brute_force():
     bh = torch.tensor(xs, dtype=torch.float64, device=CPU)
     se = torch.ones(8, dtype=torch.float64, device=CPU)
     out = posterior_mean_exp(
-        bh, se, torch.log(torch.tensor(pi, dtype=torch.float64, device=CPU)),
+        bh,
+        se,
+        torch.log(torch.tensor(pi, dtype=torch.float64, device=CPU)),
         torch.tensor(scale, dtype=torch.float64, device=CPU),
     )
     for j, x in enumerate(xs):
@@ -54,7 +56,9 @@ def test_second_moment_at_least_first_moment_squared():
     bh = torch.linspace(-1.0, 1.0, 11, dtype=torch.float64, device=CPU)
     se = torch.ones(11, dtype=torch.float64, device=CPU)
     out = posterior_mean_exp(
-        bh, se, torch.log(torch.tensor(pi, dtype=torch.float64, device=CPU)),
+        bh,
+        se,
+        torch.log(torch.tensor(pi, dtype=torch.float64, device=CPU)),
         torch.tensor(scale, dtype=torch.float64, device=CPU),
     )
     assert torch.all(out.post_mean2 >= out.post_mean.pow(2) - 1e-9)
