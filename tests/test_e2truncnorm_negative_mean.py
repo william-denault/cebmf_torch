@@ -31,8 +31,8 @@ def _brute_e2(a, b, mean, sd, n=200_001):
     hi = mean + 12.0 * sd if math.isinf(b) else b
     x = np.linspace(lo, hi, n)
     pdf = np.exp(-0.5 * ((x - mean) / sd) ** 2) / (sd * math.sqrt(2.0 * math.pi))
-    z = np.trapz(pdf, x)
-    m2 = np.trapz(x * x * pdf, x)
+    z = np.trapezoid(pdf, x)
+    m2 = np.trapezoid(x * x * pdf, x)
     return m2 / z
 
 
