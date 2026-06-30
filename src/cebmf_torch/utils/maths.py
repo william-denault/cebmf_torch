@@ -102,6 +102,19 @@ def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
     return torch.logsumexp(x, dim=dim, keepdim=keepdim)
 
 
+def logg_exp_convolved_with_normal(x: Tensor, s: Tensor, rate: Tensor) -> Tensor:
+    r"""log density of Exp(rate) convolved with Normal(0, s^2) at ``x``, for theta >= 0.
+
+    = log(rate) + 0.5*(s*rate)^2 - rate*x + log \Phi(x/s - s*rate)
+
+    Inputs broadcast against one another, so ``x``/``s`` may be ``(J, 1)`` and
+    ``rate`` ``(1, K-1)`` (or any broadcast-compatible shapes). This is the single
+    source of truth for the Exp-prior marginal log-density; callers must ensure
+    ``s > 0`` and ``rate > 0`` (the spike component is handled separately).
+    """
+    return torch.log(rate) + 0.5 * (s * rate).pow(2) - rate * x + _logcdf_normal(x / s - s * rate)
+
+
 def safe_log(x: Tensor, eps: float = _EPS) -> Tensor:
     """
     Compute the logarithm of x with clamping for numerical stability.
@@ -174,7 +187,7 @@ def logPhi(z: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         Log CDF evaluated at z.
     """
-    return torch.special.log_ndtr(z)
+    return _logcdf_normal(z)
 
 
 def logscale_sub(logx: torch.Tensor, logy: torch.Tensor) -> torch.Tensor:
@@ -431,11 +444,6 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0, precision: str = "auto"):
     alpha = torch.where(flip, -beta, alpha)
     beta = torch.where(flip, -orig_alpha, beta)
 
-    # Absolute mean handling. `mean.abs()` is a no-op for mean==0, so we don't
-    # need the previous `if not torch.all(mean == 0): mean = mean.abs()` guard
-    # — that guard fired a host sync on every call.
-    mean = mean.abs()
-
     pnorm_diff = logscale_sub(logPhi(beta), logPhi(alpha))
 
     alpha_frac = alpha * torch.exp(torch.clamp(logphi(alpha) - pnorm_diff, max=300.0))
@@ -464,7 +472,12 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0, precision: str = "auto"):
 
     # NOTE: my_etruncnorm expects (a,b,mean,sd). For standardized alpha/beta, use mean=0, sd=1.
     # Forward the same ``precision`` so the inner call doesn't silently re-upcast back to float64.
-    res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta, 0.0, 1.0, precision=precision) + sd**2 * scaled_res
+    # alpha/beta were flipped for numerical stability when (alpha>0 & beta>0); the first
+    # moment of the *original* standardized interval is the negation in that case. We must
+    # keep ``mean`` signed here: the cross term is 2*mean*sd*E[Z], not 2*|mean|*sd*E[Z].
+    ez = my_etruncnorm(alpha, beta, 0.0, 1.0, precision=precision)
+    ez = torch.where(flip, -ez, ez)
+    res = mean**2 + 2 * mean * sd * ez + sd**2 * scaled_res
 
     # Branchless degenerate-sd handling — see _apply_degenerate_sd_first_moment
     # for the rationale (no host sync per call).

@@ -4,7 +4,12 @@ import math
 import torch
 from torch import Tensor
 
-from cebmf_torch.utils.maths import _LOG_SQRT_2PI, logPhi, my_e2truncnorm, my_etruncnorm
+from cebmf_torch.utils.maths import (
+    _LOG_SQRT_2PI,
+    logg_exp_convolved_with_normal,
+    my_e2truncnorm,
+    my_etruncnorm,
+)
 
 
 def _const_like(x: Tensor, val) -> Tensor:
@@ -25,8 +30,7 @@ def _loglik_spike(xc: Tensor, s: Tensor) -> Tensor:
 
 def _loglik_exp_convolved(xc: Tensor, s: Tensor, a: Tensor) -> Tensor:
     # lg = log a + (s a)^2 / 2 - a * xc + log Φ(xc/s - s a), θ_c ≥ 0
-    z = xc / s - s * a
-    return torch.log(a) + _const_like(xc, 0.5) * (s * a) ** 2 - a * xc + logPhi(z)
+    return logg_exp_convolved_with_normal(xc, s, a)
 
 
 def _posterior_moments_exp_branch(xc: Tensor, s: Tensor, a: Tensor) -> tuple[Tensor, Tensor]:

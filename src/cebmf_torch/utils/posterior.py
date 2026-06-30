@@ -2,7 +2,13 @@ import torch
 
 # Re-export the canonical normal-density helpers so existing imports keep working.
 # The single source of truth lives in utils/maths.py.
-from .maths import _logcdf_normal, _logpdf_normal, my_e2truncnorm, my_etruncnorm  # noqa: F401
+from .maths import (  # noqa: F401
+    _logcdf_normal,
+    _logpdf_normal,
+    logg_exp_convolved_with_normal,
+    my_e2truncnorm,
+    my_etruncnorm,
+)
 
 
 class PosteriorMean:
@@ -135,9 +141,7 @@ def posterior_mean_exp(
     a = 1.0 / scale[1:]  # (K-1,) — rates of the Exp components
     a_row = a.unsqueeze(0)  # (1, K-1)
 
-    lg = (
-        torch.log(a_row) + 0.5 * (s_col * a_row).pow(2) - a_row * x_col + _logcdf_normal(x_col / s_col - s_col * a_row)
-    )  # (J, K-1)
+    lg = logg_exp_convolved_with_normal(x_col, s_col, a_row)  # (J, K-1)
 
     log_prob = torch.cat([lf.unsqueeze(1), lg], dim=1)  # (J, K)
 
@@ -161,7 +165,11 @@ def posterior_mean_exp(
     r_exp = post_assign[:, 1:]  # (J, K-1) — responsibilities of the Exp components
     post_mean = (r_exp * e1).sum(dim=1)  # (J,)
     post_mean2 = (r_exp * e2).sum(dim=1)  # (J,)
-    post_mean2 = torch.maximum(post_mean2, post_mean.pow(2))  # Var >= 0 floor (was comparing against post_mean, not post_mean^2, which inflated post_mean2 and broke EBNM identity)
+    # Numerical floor: E[theta^2] >= E[theta]^2 by variance non-negativity
+    # (Jensen), so this only catches float error. Guarding against
+    # ``post_mean`` (rather than ``post_mean**2``) wrongly inflated the
+    # second moment whenever post_mean < 1.
+    post_mean2 = torch.maximum(post_mean2, post_mean.pow(2))
 
     # Infinite-s rows: collapse to the *prior* mixture mean / second moment.
     # With s = inf the data contributes no information, so the posterior
