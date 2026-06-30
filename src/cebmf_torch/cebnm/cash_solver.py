@@ -68,10 +68,14 @@ class CashNet(nn.Module):
 
 # Custom loss function
 def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
-    L_batch = torch.exp(marginal_log_lik)  # (B, K)
-    inner_sum = torch.sum(pred_pi * L_batch, dim=1)  # (B,)
-    inner_sum = torch.clamp(inner_sum, min=epsilon)
-    first_sum = torch.sum(torch.log(inner_sum))  # scalar
+    # log sum_k pi_k * exp(mll_k), reduced in log-space. The previous code
+    # exponentiated marginal_log_lik directly; exp() is unnecessary here and
+    # overflows float32 to inf for mll > ~88. marginal_log_lik is only clamped
+    # upstream to [-1e5, 1e5], so any such value would turn the loss into
+    # inf/NaN. logsumexp avoids exp() entirely and matches the reduction the
+    # EMDN / spiked-EMDN solvers already use.
+    log_pi = torch.log(torch.clamp(pred_pi, min=epsilon))  # (B, K)
+    first_sum = torch.logsumexp(log_pi + marginal_log_lik, dim=1).sum()  # scalar
 
     if penalty > 1:
         # penalize per-gene spike probability (Dirichlet-like prior on component 0)
