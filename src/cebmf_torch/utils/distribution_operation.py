@@ -5,7 +5,7 @@ import torch
 # Canonical normal helpers live in utils/maths.py; re-exported here so existing
 # imports (`from cebmf_torch.utils.distribution_operation import _logpdf_normal`)
 # keep working.
-from .maths import _logcdf_normal, _logpdf_normal  # noqa: F401
+from .maths import _logcdf_normal, _logpdf_normal, logg_exp_convolved_with_normal  # noqa: F401
 
 
 def _const_like(c, ref: torch.Tensor) -> torch.Tensor:
@@ -145,7 +145,7 @@ def convolved_logpdf_exp_torch(
     x = betahat.unsqueeze(1)  # (J,1)
     a = rate.unsqueeze(0)  # (1,K-1)
 
-    lg = torch.log(a) + 0.5 * (s * a).pow(2) - a * x + _logcdf_normal(x / s - s * a)  # (J,K-1)
+    lg = logg_exp_convolved_with_normal(x, s, a)  # (J,K-1)
 
     # Concatenate first column
     L = torch.empty((J, K), dtype=betahat.dtype, device=betahat.device)

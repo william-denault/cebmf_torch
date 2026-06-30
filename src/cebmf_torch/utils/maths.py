@@ -102,6 +102,19 @@ def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
     return torch.logsumexp(x, dim=dim, keepdim=keepdim)
 
 
+def logg_exp_convolved_with_normal(x: Tensor, s: Tensor, rate: Tensor) -> Tensor:
+    r"""log density of Exp(rate) convolved with Normal(0, s^2) at ``x``, for theta >= 0.
+
+    = log(rate) + 0.5*(s*rate)^2 - rate*x + log \Phi(x/s - s*rate)
+
+    Inputs broadcast against one another, so ``x``/``s`` may be ``(J, 1)`` and
+    ``rate`` ``(1, K-1)`` (or any broadcast-compatible shapes). This is the single
+    source of truth for the Exp-prior marginal log-density; callers must ensure
+    ``s > 0`` and ``rate > 0`` (the spike component is handled separately).
+    """
+    return torch.log(rate) + 0.5 * (s * rate).pow(2) - rate * x + _logcdf_normal(x / s - s * rate)
+
+
 def safe_log(x: Tensor, eps: float = _EPS) -> Tensor:
     """
     Compute the logarithm of x with clamping for numerical stability.
@@ -174,7 +187,7 @@ def logPhi(z: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         Log CDF evaluated at z.
     """
-    return torch.special.log_ndtr(z)
+    return _logcdf_normal(z)
 
 
 def logscale_sub(logx: torch.Tensor, logy: torch.Tensor) -> torch.Tensor:
