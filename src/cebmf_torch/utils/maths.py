@@ -444,11 +444,6 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0, precision: str = "auto"):
     alpha = torch.where(flip, -beta, alpha)
     beta = torch.where(flip, -orig_alpha, beta)
 
-    # Absolute mean handling. `mean.abs()` is a no-op for mean==0, so we don't
-    # need the previous `if not torch.all(mean == 0): mean = mean.abs()` guard
-    # — that guard fired a host sync on every call.
-    mean = mean.abs()
-
     pnorm_diff = logscale_sub(logPhi(beta), logPhi(alpha))
 
     alpha_frac = alpha * torch.exp(torch.clamp(logphi(alpha) - pnorm_diff, max=300.0))
@@ -477,7 +472,12 @@ def my_e2truncnorm(a, b, mean=0.0, sd=1.0, precision: str = "auto"):
 
     # NOTE: my_etruncnorm expects (a,b,mean,sd). For standardized alpha/beta, use mean=0, sd=1.
     # Forward the same ``precision`` so the inner call doesn't silently re-upcast back to float64.
-    res = mean**2 + 2 * mean * sd * my_etruncnorm(alpha, beta, 0.0, 1.0, precision=precision) + sd**2 * scaled_res
+    # alpha/beta were flipped for numerical stability when (alpha>0 & beta>0); the first
+    # moment of the *original* standardized interval is the negation in that case. We must
+    # keep ``mean`` signed here: the cross term is 2*mean*sd*E[Z], not 2*|mean|*sd*E[Z].
+    ez = my_etruncnorm(alpha, beta, 0.0, 1.0, precision=precision)
+    ez = torch.where(flip, -ez, ez)
+    res = mean**2 + 2 * mean * sd * ez + sd**2 * scaled_res
 
     # Branchless degenerate-sd handling — see _apply_degenerate_sd_first_moment
     # for the rationale (no host sync per call).
