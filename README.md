@@ -112,5 +112,20 @@ print(fit.L.shape, fit.F.shape, fit.tau.item())
 
 Contributions, bug reports, and feature requests are welcome! Please open an issue or pull request on GitHub.
 
+Each Python code block in `README.md` and `docs/source/examples.rst` must run
+independently, including its own imports and input setup. The
+[Examples Test workflow](.github/workflows/examples.yml) wraps each block in a
+separate pytest function, so a block cannot use variables defined in an earlier
+block. After changing these examples, generate and run their tests from the
+repository root:
+
+```bash
+uv run python tests/generate_doc_examples_test.py
+uv run pytest tests/doc_examples_test.py
+```
+
+Edit the source documentation, not `tests/doc_examples_test.py`, which is
+generated and ignored by Git. A normal pytest run does not generate these tests.
+
 For questions or help, open an issue or contact the maintainer.
 
