@@ -65,9 +65,16 @@ Separate options for L and F
 
 Use ``prior_L_kwargs`` for the row loadings and ``prior_F_kwargs`` for the
 column factors. These options are independent even when both sides use the
-same prior family. For example, using the data and covariates above:
+same prior family. For example:
 
 .. code-block:: python
+
+    import torch
+    from cebmf_torch import cEBMF
+
+    Y = torch.randn(50, 20)
+    row_covariates = torch.randn(50, 3)
+    col_covariates = torch.randn(20, 2)
 
     model = cEBMF(
         data=Y,
