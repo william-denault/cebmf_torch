@@ -60,6 +60,38 @@ The cEBMF interface is designed to be straightforward:
     from cebmf_torch.cebmf import NoiseType
     model = cEBMF(data=Y, K=5, noise_type=NoiseType.ROW_WISE)
 
+Separate options for L and F
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``prior_L_kwargs`` for the row loadings and ``prior_F_kwargs`` for the
+column factors. These options are independent even when both sides use the
+same prior family. For example, using the data and covariates above:
+
+.. code-block:: python
+
+    model = cEBMF(
+        data=Y,
+        K=3,
+        prior_L="lcash",
+        prior_F="lcash",
+        X_l=row_covariates,
+        X_f=col_covariates,
+        prior_L_kwargs={"penalty": 1.0},
+        prior_F_kwargs={"penalty": 1.5},
+        device="cpu",
+    )
+
+For LC-ASH and PO-LC-ASH, ``penalty=1`` disables the extra spike penalty;
+larger values encourage the fitted prior to assign more mass to zero. The
+example therefore uses different sparsity penalties for L and F. These values
+illustrate separate configuration, rather than recommended tuning settings.
+The separate ``weight_decay`` option regularizes the coefficients mapping
+covariates to mixture weights.
+
+Omitting a side's options adds no per-side overrides; learned priors still
+receive cEBMF's epoch and device settings. Constructing another cEBMF model
+does not change the options of this model.
+
 Empirical Bayes Normal Means (EBNM)
 ------------------------------------
 

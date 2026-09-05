@@ -1,4 +1,5 @@
 import math
+from copy import copy
 from dataclasses import dataclass
 from enum import StrEnum, auto
 from warnings import warn
@@ -115,7 +116,9 @@ class cEBMF:
         internal_epoch : int, optional
             Number of inner epochs for the prior fitting routine.
         prior_L_kwargs, prior_F_kwargs : dict or None, optional
-            Extra keyword arguments forwarded to the prior builders.
+            Independent keyword arguments for the L and F prior builders,
+            including when both sides use the same prior name. Omitted
+            dictionaries add no per-side overrides.
         allow_backfitting : bool, optional
             If True, allow factor pruning between iterations.
         prune_thresh : float, optional
@@ -483,9 +486,10 @@ class cEBMF:
 
     @torch.no_grad()
     def _initialise_priors(self, prior_L_kwargs: dict, prior_F_kwargs: dict) -> None:
-        self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.model.prior_L)
+        # Own each side's configuration; set_kwargs replaces the copied kwargs.
+        self.prior_L_fn = copy(PRIOR_REGISTRY.get_builder(self.model.prior_L))
         self.prior_L_fn.set_kwargs(**prior_L_kwargs)
-        self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.model.prior_F)
+        self.prior_F_fn = copy(PRIOR_REGISTRY.get_builder(self.model.prior_F))
         self.prior_F_fn.set_kwargs(**prior_F_kwargs)
         self.model_state_L = [None] * self.model.K
         self.model_state_F = [None] * self.model.K
