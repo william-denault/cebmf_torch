@@ -12,6 +12,8 @@ You can also open up the notebook [directly in Google Colab](https://colab.resea
 
 - Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
 
+- LC-ASH and PO-LC-ASH: See [component selection and fitted-state reuse](https://cebmf-torch.readthedocs.io/en/latest/examples.html#linear-covariate-adaptive-shrinkage).
+
 - Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
 
 - To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
@@ -113,4 +115,3 @@ print(fit.L.shape, fit.F.shape, fit.tau.item())
 Contributions, bug reports, and feature requests are welcome! Please open an issue or pull request on GitHub.
 
 For questions or help, open an issue or contact the maintainer.
-

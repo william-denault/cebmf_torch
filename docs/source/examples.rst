@@ -156,6 +156,77 @@ Using Covariates
     
     print(f"Posterior means shape: {result.post_mean.shape}")
 
+Linear Covariate Adaptive Shrinkage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+LC-ASH uses multinomial logistic regression to model the weights of a
+zero-centred normal mixture prior from covariates. PO-LC-ASH uses
+proportional odds regression. The component grid is the ordered set of
+mixture standard deviations; zero represents a point mass at zero (the spike).
+
+For a fresh fit, ``ash_init=True`` first fits adaptive shrinkage (ASH)
+without covariates. It retains components with weight above
+``ash_threshold`` (default ``1e-6``) and uses their weights to initialize
+the regression model. ``ash_init=False`` uses the full automatically
+selected component grid. The component standard deviations remain fixed
+during regression fitting.
+
+Selection raises ``ValueError`` if fewer than two components remain or
+the spike is removed. Inspect the ASH weights and consider lowering
+``ash_threshold``; ``0.0`` retains all positive returned weights. To inspect
+the initializer weights, call
+``ash(betahat, se, optimizer="lbfgs", zero_threshold=0.0)`` with the same
+``mult``. The ASH initializer uses a spike penalty of ``10.0``. The
+conditional solver's ``penalty`` controls subsequent regression fitting.
+
+The returned ``model_param`` contains the selected component grid, fitted
+regression parameters, covariate means and standard deviations used for
+standardization, and solver/version identifiers. The regression parameters are the
+component-specific coefficients and intercepts for LC-ASH, or the shared
+coefficients and parameters defining the ordered cut-points for PO-LC-ASH.
+The saved means and standard deviations define the standardized covariates
+to which these parameters apply.
+
+Pass ``model_param`` to the same solver to continue fitting with the saved
+component grid, regression parameters and covariate standardization.
+``ash_init``, ``ash_threshold`` and ``mult`` are then ignored. Effect
+estimates, standard errors and the number of observations may change.
+Covariate columns must retain their meaning, order and units. Missing
+entries and columns with zero standard deviation in the original fit are
+set to zero after standardization.
+
+Each call starts a new Adam optimizer. Use ``n_epochs=0`` to calculate
+posterior summaries with the saved prior. To select a new grid or estimate
+new covariate statistics, start a fresh fit without ``model_param``.
+Pass the complete returned dictionary as ``model_param``;
+``model_param["state_dict"]`` contains only the regression parameters.
+
+The example below continues fitting from saved state, using five training
+epochs per call. ``po_lcash_posterior_means`` supports the same calling pattern.
+
+.. code-block:: python
+
+    import torch
+    from cebmf_torch.cebnm import lcash_posterior_means
+
+    generator = torch.Generator().manual_seed(1)
+    X = torch.randn(128, 2, generator=generator)
+    betahat = 2.0 * X[:, 0] + 0.2 * torch.randn(128, generator=generator)
+    se = torch.full_like(betahat, 0.2)
+
+    first = lcash_posterior_means(
+        X, betahat, se, n_epochs=5, device="cpu", verbose=False
+    )
+    updated = lcash_posterior_means(
+        X, betahat + 0.05, se, model_param=first.model_param,
+        n_epochs=5, device="cpu", verbose=False
+    )
+    torch.testing.assert_close(updated.scale, first.scale)
+
+Within cEBMF, fitted state is passed between successive factor updates.
+If factor pruning changes the number of covariate columns, the next update
+raises ``ValueError`` because the saved state requires the original column count.
+
 Custom Initialization
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -278,4 +349,3 @@ notebooks in the `examples/` directory of the source code.
 
    notebooks/spiked_emdn.ipynb 
    notebooks/Tiled-clustering model.ipynb
-
