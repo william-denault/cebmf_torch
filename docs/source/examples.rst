@@ -156,6 +156,77 @@ Using Covariates
     
     print(f"Posterior means shape: {result.post_mean.shape}")
 
+Linear Covariate Adaptive Shrinkage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+LC-ASH and PO-LC-ASH use covariates to model the weights of a normal
+mixture prior. For a fresh fit, ``ash_init=True`` first fits ASH, retains
+components with weight above ``ash_threshold`` (default ``1e-6``), and
+uses their weights to initialize the conditional model. This is the only
+component-selection cutoff in this initialization path. ``ash_init=False``
+instead uses the full automatically selected grid. The grid remains fixed
+during conditional fitting.
+
+Selection raises ``ValueError`` if fewer than two components remain, or
+if the spike at zero is removed. It does not add components below the
+threshold. Inspect the ASH fit and consider lowering ``ash_threshold``;
+``0.0`` retains all positive returned weights. A selection failure is not
+itself evidence that the data contain no signal. To inspect the initializer
+weights, call ``ash(betahat, se, optimizer="lbfgs", zero_threshold=0.0)``
+with the same ``mult``. The initializer uses ASH's default spike penalty
+of ``10.0``, independently of the conditional solver's ``penalty``.
+
+Numerical floors used in log probabilities and PO-LC-ASH cut-points do
+not remove grid components. They can alter very small initialization
+weights, so retaining a component does not guarantee exact reproduction
+of its ASH weight.
+
+The returned ``model_param`` contains the ordered component scales, final
+network parameters, feature means and population standard deviations,
+and solver/version identifiers. Passing it to the same solver restores
+the fitted prior without repeating ASH, grid selection or estimation of
+feature statistics. ``ash_init``, ``ash_threshold`` and ``mult`` are then
+ignored. New effect estimates, standard errors and observation counts are
+allowed. Covariate columns must keep their meaning, order and units;
+tensor inputs cannot identify a column permutation. Missing entries and
+columns that had zero standard deviation in training contribute zero.
+
+Each call starts a new Adam optimizer. Use ``n_epochs=0`` to evaluate the
+saved prior without further training. To reselect the grid or estimate
+new feature statistics, start a fresh fit without ``model_param``.
+Older flat network state dictionaries lack scales and feature statistics
+and are rejected. Refit without ``model_param`` to obtain reusable state.
+The neural parameter dictionary is ``model_param["state_dict"]``;
+those coefficients alone do not specify the fitted prior.
+
+The following small example illustrates additional fitting from saved
+state. Its short training budget demonstrates the interface, not
+convergence. ``po_lcash_posterior_means`` supports the same calling pattern.
+
+.. code-block:: python
+
+    import torch
+    from cebmf_torch.cebnm import lcash_posterior_means
+
+    generator = torch.Generator().manual_seed(1)
+    X = torch.randn(128, 2, generator=generator)
+    betahat = 2.0 * X[:, 0] + 0.2 * torch.randn(128, generator=generator)
+    se = torch.full_like(betahat, 0.2)
+
+    first = lcash_posterior_means(
+        X, betahat, se, n_epochs=5, device="cpu", verbose=False
+    )
+    updated = lcash_posterior_means(
+        X, betahat + 0.05, se, model_param=first.model_param,
+        n_epochs=5, device="cpu", verbose=False
+    )
+    torch.testing.assert_close(updated.scale, first.scale)
+
+Within cEBMF, fitted state is passed between successive factor updates.
+If self-covariates change the number of feature columns after factor
+pruning, the saved state is incompatible and the fit raises rather than
+silently reinitializing or transferring a subset of coefficients.
+
 Custom Initialization
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -278,4 +349,3 @@ notebooks in the `examples/` directory of the source code.
 
    notebooks/spiked_emdn.ipynb 
    notebooks/Tiled-clustering model.ipynb
-

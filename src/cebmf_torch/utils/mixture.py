@@ -41,7 +41,7 @@ def optimize_pi_logL(
     check_every : int, optional
         How many EM steps to run between convergence checks. Each check forces a
         host sync, so checking every step (the previous behaviour) cost up to
-        ``max_iters`` syncs per call — bad inside cEBMF's hot loop. Default is 10.
+        ``max_iters`` syncs per call, adding overhead inside cEBMF's hot loop. Default is 10.
 
     Returns
     -------
@@ -53,12 +53,12 @@ def optimize_pi_logL(
     device = logL.device
     dtype = logL.dtype
 
-    # Initialize pi ∝ exp(-k)
+    # Initialize pi proportional to exp(-k).
     k = torch.arange(K, device=device, dtype=dtype)
     pi = torch.exp(-k)
     pi = pi / pi.sum()
 
-    # Penalty vector (Dirichlet α): default α = [penalty, 1, 1, ..., 1]
+    # Penalty vector (Dirichlet alpha): default [penalty, 1, 1, ..., 1].
     if isinstance(penalty, torch.Tensor):
         vec_pen = penalty.to(device=device, dtype=dtype)
         assert vec_pen.shape == (K,), "penalty tensor must have shape (K,)"
@@ -100,7 +100,7 @@ def optimize_pi_logL(
             idx = idx_all[start : start + batch_size]
             Lb = logL[idx]  # (B, K)
 
-            # E-step: responsibilities r_{jk} ∝ pi_k * exp(logL_{jk})
+            # E-step: responsibilities r_{jk} proportional to pi_k * exp(logL_{jk}).
             log_r = Lb + log_pi.unsqueeze(0)  # (B, K)
             log_norm = torch.logsumexp(log_r, dim=1, keepdim=True)  # (B,1)
             r = torch.exp(log_r - log_norm)  # (B, K)
@@ -108,7 +108,7 @@ def optimize_pi_logL(
             # accumulate expected counts
             n_k += r.sum(dim=0)  # (K,)
 
-        # M-step with Dirichlet prior α (as pseudo-counts)
+        # M-step with Dirichlet prior alpha (as pseudo-counts).
         n_k = torch.clamp(n_k + (vec_pen - 1.0), min=eps_floor)
         pi = n_k / n_k.sum()
 
@@ -268,9 +268,8 @@ def optimize_pi_logL_lbfgs(
 ) -> torch.Tensor:
     """Optimize mixture weights via L-BFGS with softmax reparameterisation.
 
-    An alternative to :func:`optimize_pi_logL` (EM) that produces
-    sparse solutions matching R ashr's convex optimizer (mixsqp) to
-    3-5 significant figures.
+    An alternative to :func:`optimize_pi_logL` (EM), with optional
+    thresholding of fitted mixture weights.
 
     The simplex constraint is eliminated by optimising unconstrained
     ``z`` where ``x = softmax(z)``.  L-BFGS builds a positive-definite
@@ -287,12 +286,10 @@ def optimize_pi_logL_lbfgs(
     logL : (n, K) tensor of log-likelihoods.
     penalty : float or (K,) tensor, Dirichlet pseudo-count.
     zero_threshold : float
-        Components with weight below this are set to exactly zero.
-        Default 1e-6: a component at this weight contributes at most
-        one-millionth of the mixture density for any observation,
-        which is negligible for posterior computation.  L-BFGS drives
-        inactive components to ~1e-30 via softmax, so any threshold
-        between 1e-10 and 1e-3 gives the same active set.
+        Components with fitted weight below this value are set to zero
+        and the remaining weights are renormalized. Default 1e-6;
+        0.0 disables thresholding. A small mixture weight does not bound
+        its posterior contribution for an individual observation.
 
     Returns
     -------

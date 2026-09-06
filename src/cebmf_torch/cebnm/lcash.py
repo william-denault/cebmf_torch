@@ -9,6 +9,8 @@ MLP-based CASH solver, with ash-based bias/cut-point initialisation and
 grid pruning.
 """
 
+import math
+
 import torch
 import torch.nn as nn
 
@@ -19,6 +21,8 @@ from cebmf_torch.cebnm.cash_solver import (
 from cebmf_torch.ebnm.ash import PriorType, ash
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
+
+_MODEL_PARAM_VERSION = 1
 
 # ============================================================
 # Model classes
@@ -183,31 +187,17 @@ def _prepare_inputs(
     sebetahat: torch.Tensor,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Convert inputs to float32 tensors on device and standardise X.
-
-    Uses NaN-aware standardisation: mean and std are computed on
-    non-NaN values only, then NaN positions are zero-filled.  This
-    ensures that missing features contribute nothing to the logits
-    (falling back to the intercept/global prior) and that the
-    statistics are not biased by the zero-fill.
-    """
+    """Convert inputs to float32 tensors without changing feature coordinates."""
     X = torch.as_tensor(X, dtype=torch.float32, device=device)
     if X.ndim == 1:
         X = X.reshape(-1, 1)
     betahat = torch.as_tensor(betahat, dtype=torch.float32, device=device)
     sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32, device=device)
-    X_scaled = _nanstandardise(X)
-    return X_scaled, betahat, sebetahat
+    return X, betahat, sebetahat
 
 
-def _nanstandardise(X: torch.Tensor) -> torch.Tensor:
-    """Standardise columns using non-NaN values, then zero-fill NaN.
-
-    Vectorised implementation. For each column, compute mean and
-    population std on observed (non-NaN) entries, standardise observed
-    values, and set NaN positions to 0. Columns with zero std
-    (constant or all-NaN) are set to 0.
-    """
+def _feature_statistics(X: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Estimate column means and population SDs from non-NaN entries."""
     mask = ~torch.isnan(X)
     counts = mask.sum(dim=0)  # (F,)
 
@@ -222,15 +212,60 @@ def _nanstandardise(X: torch.Tensor) -> torch.Tensor:
     diff = torch.where(mask, X - mu, torch.zeros_like(X))
     var = (diff**2).sum(dim=0) / safe_counts  # (F,)
     sd = var.sqrt()
+    return mu, sd
 
-    # Standardise observed, zero-fill missing
-    safe_sd = torch.where((sd > 0) & (counts > 1), sd, torch.ones_like(sd))
-    X_out = torch.where(
-        mask & (sd > 0).unsqueeze(0) & (counts > 1).unsqueeze(0),
-        diff / safe_sd,
+
+def _nanstandardise(
+    X: torch.Tensor,
+    feature_mean: torch.Tensor | None = None,
+    feature_sd: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Apply saved feature statistics, or estimate them for a fresh fit.
+
+    Missing entries and columns with zero training SD contribute zero.
+    Retaining zero SDs keeps constant and all-missing training columns
+    disabled when the saved model is applied to new observations.
+    """
+    if feature_mean is None:
+        feature_mean, feature_sd = _feature_statistics(X)
+    safe_sd = torch.where(feature_sd > 0, feature_sd, torch.ones_like(feature_sd))
+    return torch.where(
+        ~torch.isnan(X) & (feature_sd > 0),
+        (X - feature_mean) / safe_sd,
         torch.zeros_like(X),
     )
-    return X_out
+
+
+def _validate_grid(scale: torch.Tensor) -> None:
+    """Require an ordered spike-and-slab grid for conditional mixture fitting."""
+    if scale.ndim != 1 or scale.numel() < 2:
+        raise ValueError("LC-ASH and PO-LC-ASH require at least 2 mixture components.")
+    if not torch.isfinite(scale).all() or not torch.all(scale[1:] > scale[:-1]) or scale[0] != 0:
+        raise ValueError("Mixture scales must be finite and strictly increasing, starting with the spike at zero.")
+
+
+def _restore_model_param(
+    model_param: dict, label: str, X: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Validate fitted-state metadata before loading any network parameters."""
+    required = {"version", "solver", "scale", "feature_mean", "feature_sd", "state_dict"}
+    if not isinstance(model_param, dict) or not required.issubset(model_param):
+        raise ValueError(
+            "model_param must contain the fitted grid, network parameters and feature statistics. "
+            "Older flat state dictionaries are incompatible; refit with model_param=None."
+        )
+    if model_param["version"] != _MODEL_PARAM_VERSION or model_param["solver"] != label:
+        raise ValueError(f"model_param must be {label} fitted state with version {_MODEL_PARAM_VERSION}.")
+    scale, feature_mean, feature_sd = (
+        torch.as_tensor(model_param[key], dtype=X.dtype, device=X.device).detach().clone()
+        for key in ("scale", "feature_mean", "feature_sd")
+    )
+    _validate_grid(scale)
+    if feature_mean.shape != (X.shape[1],) or feature_sd.shape != feature_mean.shape:
+        raise ValueError("model_param feature statistics do not match the number of covariate columns in X.")
+    if not torch.isfinite(feature_mean).all() or not torch.isfinite(feature_sd).all() or (feature_sd < 0).any():
+        raise ValueError("model_param requires finite feature means and finite, nonnegative feature SDs.")
+    return scale, feature_mean, feature_sd
 
 
 def _select_grid(
@@ -243,17 +278,15 @@ def _select_grid(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Select mixture grid and (optionally) initialise from ash.
 
-    Always builds the grid via ``autoselect_scales_mix_norm(mult=mult)``.
-    When ``ash_init=True``, additionally runs a full ash fit (L-BFGS
-    optimizer) to determine which components are active and initialise
-    the bias/cut-points from the ash mixture weights.
+    Used only for fresh fits. When ``ash_init=True``, fit ASH with no
+    optimizer weight cutoff, select components once, and initialise the
+    bias/cut-points from their weights. Otherwise retain the full grid.
 
     Parameters
     ----------
     mult : float
         Multiplicative step between grid SDs.  Smaller values give a
-        finer grid with more components (sqrt(2) ≈ 27 components,
-        2.0 ≈ 15 components for typical data).
+        finer grid with more components.
     ash_init : bool
         If True, run ash internally with ``optimizer="lbfgs"`` to
         prune the grid to active components and initialise bias from
@@ -271,16 +304,36 @@ def _select_grid(
         None when ``ash_init=False``.
     """
     if ash_init:
-        ash_result = ash(betahat, sebetahat, prior=PriorType.NORM, verbose=False, optimizer="lbfgs", mult=mult)
+        if not math.isfinite(ash_threshold) or ash_threshold < 0:
+            raise ValueError("ash_threshold must be finite and nonnegative.")
+        ash_result = ash(
+            betahat,
+            sebetahat,
+            prior=PriorType.NORM,
+            verbose=False,
+            optimizer="lbfgs",
+            mult=mult,
+            zero_threshold=0.0,
+        )
         pi_full = ash_result.pi
         active = pi_full > ash_threshold
-        # Fallback: ensure at least K=2 (spike + one slab)
         if active.sum() < 2:
-            active = torch.zeros_like(pi_full, dtype=torch.bool)
-            active[0] = True
-            non_spike = pi_full.clone()
-            non_spike[0] = -1.0
-            active[non_spike.argmax()] = True
+            discarded = pi_full[~active]
+            largest_discarded = discarded.max().item() if discarded.numel() else 0.0
+            raise ValueError(
+                f"ASH initialization retained {int(active.sum())} components with ash_threshold={ash_threshold:g} "
+                f"(retained scales: {ash_result.scale[active].tolist()}; "
+                f"largest discarded weight: {largest_discarded:.6g}). "
+                "LC-ASH and PO-LC-ASH require at least 2 selected components to learn covariate-dependent weights. "
+                "Inspect the ASH fit and consider lowering ash_threshold."
+            )
+        if not active[0]:
+            raise ValueError(
+                f"ASH initialization removed the spike at zero with ash_threshold={ash_threshold:g} "
+                f"(spike weight: {pi_full[0].item():.6g}). "
+                "The spike is required for the null probability and spike penalty. "
+                "Inspect the ASH fit and consider lowering ash_threshold."
+            )
         scale = ash_result.scale[active].to(device=device, dtype=torch.float32)
         pi_active = pi_full[active]
         log_pi_init = torch.log(pi_active.clamp(min=1e-30))
@@ -459,8 +512,15 @@ def _fit_lcash(
     if n_epochs is None:
         n_epochs = 200
 
-    X_scaled, betahat, sebetahat = _prepare_inputs(X, betahat, sebetahat, device)
-    scale, log_pi_init = _select_grid(betahat, sebetahat, mult, ash_init, ash_threshold, device)
+    X, betahat, sebetahat = _prepare_inputs(X, betahat, sebetahat, device)
+    if model_param is None:
+        feature_mean, feature_sd = _feature_statistics(X)
+        scale, log_pi_init = _select_grid(betahat, sebetahat, mult, ash_init, ash_threshold, device)
+        _validate_grid(scale)
+    else:
+        scale, feature_mean, feature_sd = _restore_model_param(model_param, label, X)
+        log_pi_init = None
+    X_scaled = _nanstandardise(X, feature_mean, feature_sd)
 
     # Local RNG for reproducible weight init and batch ordering.
     # Does not mutate global torch RNG state.
@@ -470,7 +530,7 @@ def _fit_lcash(
     K = scale.shape[0]
     model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init, generator=rng).to(device)
     if model_param is not None:
-        model.load_state_dict(model_param)
+        model.load_state_dict(model_param["state_dict"])
 
     # Build optimizer: weight_decay on feature weights only.
     if model_class is LcashNet:
@@ -516,18 +576,22 @@ def _fit_lcash(
     # fitted prior, *without* the spike Dirichlet penalty. This matches
     # the convention used by `cebnm/emdn.py` and is the meaning required
     # by `cebmf.py`'s per-factor `kl_l[k] = (-loss) - nm_ll_L` formula.
-    # The previous training-loss-on-final-epoch return value was an
-    # unfinished refactor (cf. the `# compute proper full negative
-    # marginal log-likelihood (no penalty)` TODO comments that used to
-    # live in `cash_solver.py`).
+    fitted_state = {
+        "version": _MODEL_PARAM_VERSION,
+        "solver": label,
+        "scale": scale.detach().clone(),
+        "feature_mean": feature_mean.detach().clone(),
+        "feature_sd": feature_sd.detach().clone(),
+        "state_dict": {key: value.detach().clone() for key, value in model.state_dict().items()},
+    }
     return cash_PosteriorMeanNorm(
         post_mean=post_mean,
         post_mean2=post_mean2,
         post_sd=post_sd,
         pi_np=all_pi_values,
         loss=-marginal_loglik,
-        scale=scale,
-        model_param=model.state_dict(),
+        scale=fitted_state["scale"],
+        model_param=fitted_state,
     )
 
 
@@ -558,9 +622,11 @@ def lcash_posterior_means(
     Parameters
     ----------
     X : tensor (G, F)
-        Feature matrix. Standardised internally with NaN-aware
-        statistics (mean/std computed on non-NaN values, NaN positions
-        zero-filled). Pre-standardisation is not required.
+        Feature matrix. Fresh fits estimate column means and population
+        SDs from non-NaN values. Warm starts use the saved statistics.
+        Missing entries and columns with zero training SD contribute
+        zero. Covariate columns must keep their meaning, order and units;
+        tensor inputs do not identify reordered columns.
     betahat : tensor (G,)
         Effect estimates.
     sebetahat : tensor (G,)
@@ -576,23 +642,37 @@ def lcash_posterior_means(
     penalty : float
         Dirichlet spike penalty (lambda_pen). 1.0 = no penalty.
     mult : float
-        Multiplicative step between mixture grid SDs.  Smaller values
-        give a finer grid with more components.  Default sqrt(2)
-        matches R ashr and gives ~27 components before pruning.
+        Multiplicative step between mixture grid SDs for a fresh fit.
+        Smaller values give a finer grid. Default sqrt(2).
+        Ignored when ``model_param`` is supplied.
     ash_init : bool
-        If True (default), run ash internally (L-BFGS optimizer) to
-        prune the grid to active components and initialise the bias
-        from the ash weights, so the model starts at the exchangeable
-        ash solution when all feature coefficients are zero.
+        If True (default), fit ASH with L-BFGS, select components using
+        ``ash_threshold``, and initialise the bias from their retained
+        weights. At zero feature coefficients, the initial mixture
+        weights equal the retained ASH weights after renormalization
+        and numerical flooring.
         If False, use the full grid with uniform bias initialisation.
+        Ignored when ``model_param`` is supplied.
     ash_threshold : float
-        Pruning threshold: components with pi <= threshold are dropped.
-        Only used when ``ash_init=True``.
+        For fresh ASH initialization, remove components with fitted
+        weight at or below this value. Default 1e-6. This is the only
+        component-selection cutoff in this path. Initialization raises
+        if fewer than two components remain or the spike is removed.
+        Ignored when ``ash_init=False`` or ``model_param`` is supplied.
     model_param : dict or None
-        State dict from a previous call, for warm-starting.
-        Incompatible parameter names or shapes raise ``RuntimeError``.
+        Fitted model state returned by this solver: ordered component
+        scales, final network parameters, feature means and SDs, and
+        solver/version identifiers. Supplied state restores the prior
+        without repeating ASH or grid selection. Effect estimates,
+        standard errors and observation count may change; feature
+        columns must retain their meaning, order and units.
+        Older flat network state dictionaries are incompatible. Refit
+        with ``model_param=None`` to obtain complete state.
+        Each call creates a new Adam optimizer; optimizer history is
+        not restored. Use ``n_epochs=0`` to evaluate without training.
     device : torch.device or None
-        Compute device. Defaults to CUDA if available.
+        Compute device. Inherited from ``betahat`` when it is a tensor;
+        otherwise defaults to CUDA if available, then CPU.
     verbose : bool
         If True (default), print training progress every 50 epochs.
     seed : int
@@ -602,7 +682,16 @@ def lcash_posterior_means(
     -------
     cash_PosteriorMeanNorm
         Container with post_mean, post_mean2, post_sd, pi_np (G, K),
-        scale (K,), loss, model_param (state dict for warm-starting).
+        scale (K,), loss, and model_param (fitted state for warm-starting).
+
+    Raises
+    ------
+    ValueError
+        If component selection leaves fewer than two components or
+        removes the spike, or supplied state has incompatible metadata,
+        scales or feature statistics.
+    RuntimeError
+        If supplied network parameter names or shapes are incompatible.
     """
     return _fit_lcash(
         X,
@@ -650,23 +739,38 @@ def po_lcash_posterior_means(
     parameters (vs K * F for softmax LC-ASH), making it more parsimonious
     when K is large relative to F.
 
-    When ``ash_init=True``, the grid is pruned to ash's active components
-    and the cut-points are initialised from the ash weights, so the model
-    starts at the exchangeable ash solution.
+    On a fresh fit with ``ash_init=True``, select components from ASH
+    and initialise cut-points from their renormalized weights. Numerical
+    floors and small random feature coefficients make this an
+    approximation to the retained exchangeable mixture.
+    With ``ash_init=False``, retain the full grid and initialise
+    cut-points evenly between -2 and 2.
+
+    Supplied ``model_param`` restores the fitted grid, coefficients and
+    feature transformation without repeating ASH or component selection.
+    Each call creates a new Adam optimizer. Other parameters have the
+    same meaning as in :func:`lcash_posterior_means`.
 
     Parameters
     ----------
     X : tensor (G, F)
-        Feature matrix. Standardised internally with NaN-aware statistics.
-    betahat, sebetahat, n_epochs, batch_size, lr, weight_decay, penalty,
-    mult, ash_init, ash_threshold, model_param, device, verbose, seed :
-        See ``lcash_posterior_means``.
+        Feature matrix. Fresh fits estimate NaN-aware statistics;
+        warm starts use the saved transformation. Columns must retain
+        their meaning, order and units.
 
     Returns
     -------
     cash_PosteriorMeanNorm
         Container with post_mean, post_mean2, post_sd, pi_np (G, K),
-        scale (K,), loss, model_param (state dict for warm-starting).
+        scale (K,), loss, and model_param (fitted state for warm-starting).
+
+    Raises
+    ------
+    ValueError
+        If component selection or supplied fitted state is incompatible;
+        see :func:`lcash_posterior_means`.
+    RuntimeError
+        If supplied network parameter names or shapes are incompatible.
     """
     return _fit_lcash(
         X,

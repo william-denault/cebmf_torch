@@ -39,6 +39,7 @@ class AshConfig:
     shuffle: bool = False
     seed: int | None = None
     optimizer: str = "em"
+    zero_threshold: float | None = None
 
 
 _VALID_OPTIMIZERS = {"em", "lbfgs"}
@@ -49,7 +50,8 @@ def _optimize_mixture_weights(L: torch.Tensor, config: AshConfig) -> torch.Tenso
     if config.optimizer not in _VALID_OPTIMIZERS:
         raise ValueError(f"Unknown optimizer {config.optimizer!r}. Choose from {_VALID_OPTIMIZERS}.")
     if config.optimizer == "lbfgs":
-        pi0 = optimize_pi_logL_lbfgs(L, penalty=config.penalty)
+        options = {} if config.zero_threshold is None else {"zero_threshold": config.zero_threshold}
+        pi0 = optimize_pi_logL_lbfgs(L, penalty=config.penalty, **options)
     elif config.optimizer == "em":
         pi0 = optimize_pi_logL(
             L,
@@ -173,14 +175,14 @@ def ash(
     shuffle: bool = False,
     seed: int | None = None,
     optimizer: str = "em",
+    zero_threshold: float | None = None,
 ):
     """
     Adaptive shrinkage with mixture priors ("norm" or "exp") in pure PyTorch.
 
-    Uses EM for π by default (mini-batch capable via batch_size).
+    Uses EM for mixture weights by default (mini-batch capable via batch_size).
     Set ``optimizer="lbfgs"`` to use L-BFGS with softmax
-    reparameterisation, which produces sparse solutions matching
-    R ashr's convex optimiser.
+    reparameterisation and optional weight thresholding.
 
     Parameters
     ----------
@@ -207,8 +209,14 @@ def ash(
     seed : int or None, optional
         Random seed for reproducibility.
     optimizer : str, optional
-        ``"em"`` (default) or ``"lbfgs"``. L-BFGS produces sparse
-        solutions matching R ashr's convex optimiser.
+        ``"em"`` (default) or ``"lbfgs"``.
+    zero_threshold : float or None, optional
+        For L-BFGS, set optimizer weights below this value to zero and
+        renormalize. ``None`` uses the optimizer's default of 1e-6;
+        ``0.0`` disables this cutoff. Ignored by EM. ASH subsequently
+        applies a 1e-32 floor for log-probability calculations. That
+        floor does not select or remove grid components. Weight
+        thresholding does not bound posterior error.
 
     Returns
     -------
@@ -234,5 +242,6 @@ def ash(
         shuffle=shuffle,
         seed=seed,
         optimizer=optimizer,
+        zero_threshold=zero_threshold,
     )
     return ASHResult.from_data(torch.as_tensor(x, dtype=x.dtype, device=x.device), s, prior, config)

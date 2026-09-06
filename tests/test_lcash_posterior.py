@@ -62,7 +62,7 @@ def test_lcash_posterior_means_mse_inherit(n_samples):
         lr=1e-3,
         penalty=1.5,
         ash_init=True,
-        ash_threshold=0.0,
+        ash_threshold=1e-6,
     )
 
     mse = torch.mean((res.post_mean - xtrue).pow(2)).item()
@@ -177,7 +177,7 @@ def test_po_lcash_posterior_means_mse_inherit(n_samples):
         lr=1e-3,
         penalty=1.5,
         ash_init=True,
-        ash_threshold=0.0,
+        ash_threshold=1e-6,
     )
 
     mse = torch.mean((res.post_mean - xtrue).pow(2)).item()

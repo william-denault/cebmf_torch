@@ -107,7 +107,7 @@ class cash_PosteriorMeanNorm:
         loss : float, optional
             Final training loss or log-likelihood.
         model_param : dict, optional
-            Trained model parameters (state_dict).
+            Solver-specific fitted model state for warm-starting.
         """
         self.post_mean = post_mean
         self.post_mean2 = post_mean2
