@@ -69,8 +69,9 @@ def test_insufficient_components_raise_without_fallback(solver, weights, thresho
 def test_two_slabs_without_spike_raise(solver, controlled_ash):
     _, weights = controlled_ash
     weights.copy_(torch.tensor([1e-8, 0.5, 0.5]))
-    with pytest.raises(ValueError, match="removed the spike at zero"):
+    with pytest.raises(ValueError, match="spike at zero") as error:
         fit(solver, 1e-6)
+    assert "spike weight:" in str(error.value)
 
 
 def test_standalone_ash_lbfgs_default_cutoff_is_preserved():

@@ -39,9 +39,9 @@ def optimize_pi_logL(
     seed : int or None, optional
         RNG seed used when shuffle=True. Default is None.
     check_every : int, optional
-        How many EM steps to run between convergence checks. Each check forces a
-        host sync, so checking every step (the previous behaviour) cost up to
-        ``max_iters`` syncs per call, adding overhead inside cEBMF's hot loop. Default is 10.
+        Number of EM steps between convergence checks. Each check
+        synchronizes with the host. Larger intervals reduce synchronization
+        overhead. Default is 10.
 
     Returns
     -------
@@ -288,8 +288,7 @@ def optimize_pi_logL_lbfgs(
     zero_threshold : float
         Components with fitted weight below this value are set to zero
         and the remaining weights are renormalized. Default 1e-6;
-        0.0 disables thresholding. A small mixture weight does not bound
-        its posterior contribution for an individual observation.
+        0.0 disables thresholding.
 
     Returns
     -------

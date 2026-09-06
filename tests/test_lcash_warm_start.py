@@ -116,7 +116,7 @@ def test_incompatible_state_raises_without_mutation(solver, mismatch, fit_inputs
     error, message = ValueError, "model_param"
     if mismatch == "legacy":
         state = state["state_dict"]
-        message = "Older flat state dictionaries"
+        message = "complete fitted-state dictionary"
     elif mismatch == "solver":
         state["solver"] = "another solver"
     elif mismatch == "version":

@@ -214,9 +214,7 @@ def ash(
         For L-BFGS, set optimizer weights below this value to zero and
         renormalize. ``None`` uses the optimizer's default of 1e-6;
         ``0.0`` disables this cutoff. Ignored by EM. ASH subsequently
-        applies a 1e-32 floor for log-probability calculations. That
-        floor does not select or remove grid components. Weight
-        thresholding does not bound posterior error.
+        applies a 1e-32 floor for log-probability calculations.
 
     Returns
     -------

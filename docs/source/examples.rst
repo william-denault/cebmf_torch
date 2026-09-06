@@ -159,49 +159,50 @@ Using Covariates
 Linear Covariate Adaptive Shrinkage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-LC-ASH and PO-LC-ASH use covariates to model the weights of a normal
-mixture prior. For a fresh fit, ``ash_init=True`` first fits ASH, retains
-components with weight above ``ash_threshold`` (default ``1e-6``), and
-uses their weights to initialize the conditional model. This is the only
-component-selection cutoff in this initialization path. ``ash_init=False``
-instead uses the full automatically selected grid. The grid remains fixed
-during conditional fitting.
+LC-ASH uses multinomial logistic regression to model the weights of a
+zero-centred normal mixture prior from covariates. PO-LC-ASH uses
+proportional odds regression. The component grid is the ordered set of
+mixture standard deviations; zero represents a point mass at zero (the spike).
 
-Selection raises ``ValueError`` if fewer than two components remain, or
-if the spike at zero is removed. It does not add components below the
-threshold. Inspect the ASH fit and consider lowering ``ash_threshold``;
-``0.0`` retains all positive returned weights. A selection failure is not
-itself evidence that the data contain no signal. To inspect the initializer
-weights, call ``ash(betahat, se, optimizer="lbfgs", zero_threshold=0.0)``
-with the same ``mult``. The initializer uses ASH's default spike penalty
-of ``10.0``, independently of the conditional solver's ``penalty``.
+For a fresh fit, ``ash_init=True`` first fits adaptive shrinkage (ASH)
+without covariates. It retains components with weight above
+``ash_threshold`` (default ``1e-6``) and uses their weights to initialize
+the regression model. ``ash_init=False`` uses the full automatically
+selected component grid. The component standard deviations remain fixed
+during regression fitting.
 
-Numerical floors used in log probabilities and PO-LC-ASH cut-points do
-not remove grid components. They can alter very small initialization
-weights, so retaining a component does not guarantee exact reproduction
-of its ASH weight.
+Selection raises ``ValueError`` if fewer than two components remain or
+the spike is removed. Inspect the ASH weights and consider lowering
+``ash_threshold``; ``0.0`` retains all positive returned weights. To inspect
+the initializer weights, call
+``ash(betahat, se, optimizer="lbfgs", zero_threshold=0.0)`` with the same
+``mult``. The ASH initializer uses a spike penalty of ``10.0``. The
+conditional solver's ``penalty`` controls subsequent regression fitting.
 
-The returned ``model_param`` contains the ordered component scales, final
-network parameters, feature means and population standard deviations,
-and solver/version identifiers. Passing it to the same solver restores
-the fitted prior without repeating ASH, grid selection or estimation of
-feature statistics. ``ash_init``, ``ash_threshold`` and ``mult`` are then
-ignored. New effect estimates, standard errors and observation counts are
-allowed. Covariate columns must keep their meaning, order and units;
-tensor inputs cannot identify a column permutation. Missing entries and
-columns that had zero standard deviation in training contribute zero.
+The returned ``model_param`` contains the selected component grid, fitted
+regression parameters, covariate means and standard deviations used for
+standardization, and solver/version identifiers. The regression parameters are the
+component-specific coefficients and intercepts for LC-ASH, or the shared
+coefficients and parameters defining the ordered cut-points for PO-LC-ASH.
+The saved means and standard deviations define the standardized covariates
+to which these parameters apply.
 
-Each call starts a new Adam optimizer. Use ``n_epochs=0`` to evaluate the
-saved prior without further training. To reselect the grid or estimate
-new feature statistics, start a fresh fit without ``model_param``.
-Older flat network state dictionaries lack scales and feature statistics
-and are rejected. Refit without ``model_param`` to obtain reusable state.
-The neural parameter dictionary is ``model_param["state_dict"]``;
-those coefficients alone do not specify the fitted prior.
+Pass ``model_param`` to the same solver to continue fitting with the saved
+component grid, regression parameters and covariate standardization.
+``ash_init``, ``ash_threshold`` and ``mult`` are then ignored. Effect
+estimates, standard errors and the number of observations may change.
+Covariate columns must retain their meaning, order and units. Missing
+entries and columns with zero standard deviation in the original fit are
+set to zero after standardization.
 
-The following small example illustrates additional fitting from saved
-state. Its short training budget demonstrates the interface, not
-convergence. ``po_lcash_posterior_means`` supports the same calling pattern.
+Each call starts a new Adam optimizer. Use ``n_epochs=0`` to calculate
+posterior summaries with the saved prior. To select a new grid or estimate
+new covariate statistics, start a fresh fit without ``model_param``.
+Pass the complete returned dictionary as ``model_param``;
+``model_param["state_dict"]`` contains only the regression parameters.
+
+The example below continues fitting from saved state, using five training
+epochs per call. ``po_lcash_posterior_means`` supports the same calling pattern.
 
 .. code-block:: python
 
@@ -223,9 +224,8 @@ convergence. ``po_lcash_posterior_means`` supports the same calling pattern.
     torch.testing.assert_close(updated.scale, first.scale)
 
 Within cEBMF, fitted state is passed between successive factor updates.
-If self-covariates change the number of feature columns after factor
-pruning, the saved state is incompatible and the fit raises rather than
-silently reinitializing or transferring a subset of coefficients.
+If factor pruning changes the number of covariate columns, the next update
+raises ``ValueError`` because the saved state requires the original column count.
 
 Custom Initialization
 ~~~~~~~~~~~~~~~~~~~~~
