@@ -9,8 +9,6 @@ MLP-based CASH solver, with ash-based bias/cut-point initialisation and
 grid pruning.
 """
 
-import warnings
-
 import torch
 import torch.nn as nn
 
@@ -420,22 +418,6 @@ def _compute_posteriors(
     return post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik
 
 
-def _warm_start(
-    model: nn.Module,
-    model_param: dict | None,
-    label: str,
-) -> None:
-    """Load state dict with a guard against architecture mismatch."""
-    if model_param is not None:
-        try:
-            model.load_state_dict(model_param)
-        except RuntimeError:
-            warnings.warn(
-                f"{label} warm-start skipped: grid size changed between iterations",
-                stacklevel=3,
-            )
-
-
 def _fit_lcash(
     X: torch.Tensor,
     betahat: torch.Tensor,
@@ -487,7 +469,8 @@ def _fit_lcash(
 
     K = scale.shape[0]
     model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init, generator=rng).to(device)
-    _warm_start(model, model_param, label)
+    if model_param is not None:
+        model.load_state_dict(model_param)
 
     # Build optimizer: weight_decay on feature weights only.
     if model_class is LcashNet:
@@ -607,6 +590,7 @@ def lcash_posterior_means(
         Only used when ``ash_init=True``.
     model_param : dict or None
         State dict from a previous call, for warm-starting.
+        Incompatible parameter names or shapes raise ``RuntimeError``.
     device : torch.device or None
         Compute device. Defaults to CUDA if available.
     verbose : bool
