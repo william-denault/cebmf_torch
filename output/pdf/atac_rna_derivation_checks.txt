@@ -1,0 +1,24 @@
+Numerical verification of atac_rna_joint_inference.tex
+2026-09-14
+
+PASS CGB spike/slab probability and moments, child=False: maximum absolute error 1.110e-16 (tolerance 2.0e-09)
+PASS CGB no-child Gaussian integral moments: maximum absolute error 3.331e-16 (tolerance 2.0e-09)
+PASS CGB spike/slab probability and moments, child=True: maximum absolute error 1.110e-16 (tolerance 2.0e-09)
+PASS Positive Gaussian convolution, mu=-1.2: maximum absolute error 1.665e-16 (tolerance 2.0e-09)
+PASS Positive Gaussian convolution, mu=0.4: maximum absolute error 1.110e-16 (tolerance 2.0e-09)
+PASS Binary full conditional, child=0: maximum absolute error 2.776e-17 (tolerance 2.0e-09)
+PASS Binary full conditional, child=1: maximum absolute error 0.000e+00 (tolerance 2.0e-09)
+PASS Binary CAVI expected-log update: maximum absolute error 1.110e-16 (tolerance 2.0e-09)
+PASS binary CAVI ELBO increase: 0.02550134
+PASS MH coordinate 0 row sums: maximum absolute error 0.000e+00 (tolerance 2.0e-09)
+PASS MH coordinate 0 detailed balance: maximum absolute error 2.082e-17 (tolerance 2.0e-09)
+PASS MH coordinate 1 row sums: maximum absolute error 0.000e+00 (tolerance 2.0e-09)
+PASS MH coordinate 1 detailed balance: maximum absolute error 2.776e-17 (tolerance 2.0e-09)
+PASS Metropolis-within-Gibbs sweep stationary joint: maximum absolute error 2.776e-17 (tolerance 2.0e-09)
+PASS Augmented EMDN weights and moments with uncertain parent and EMDN child: maximum absolute error 1.388e-17 (tolerance 2.0e-09)
+PASS Augmented mixture atom plus slab weights sum to one: maximum absolute error 0.000e+00 (tolerance 2.0e-09)
+PASS RNA block mapping for ATAC states 00,01,10,11: maximum absolute error 0.000e+00 (tolerance 2.0e-09)
+PASS Noiseless RNA block rank: maximum absolute error 0.000e+00 (tolerance 2.0e-09)
+
+All identities passed.
+These are small deterministic mathematical checks, not a fitted joint model or a performance experiment.

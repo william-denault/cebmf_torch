@@ -1,0 +1,851 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=24mm,headheight=14pt]{geometry}
+\usepackage{amsmath,amssymb,mathtools,bm}
+\usepackage{booktabs,array,enumitem,microtype}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{hyperref,fancyhdr}
+\hypersetup{colorlinks=true,linkcolor=MidnightBlue,urlcolor=MidnightBlue,
+ citecolor=MidnightBlue,pdftitle={Hierarchical cEBMF: capacity and paper positioning},
+ pdfauthor={Research assessment for the cEBMF project}}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small Hierarchical cEBMF}
+\fancyhead[R]{\small Capacity and paper positioning}
+\fancyfoot[C]{\thepage}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlist{itemsep=3pt,topsep=4pt}
+\newcommand{\E}{\mathbb E}
+\newcommand{\R}{\mathbb R}
+\newcommand{\N}{\mathcal N}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\pa}{\operatorname{pa}}
+\newcommand{\ch}{\operatorname{ch}}
+\newcommand{\sigmoid}{\operatorname{sigmoid}}
+\newcommand{\KL}{\operatorname{KL}}
+\newcommand{\ind}{\mathbf 1}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\numberwithin{equation}{section}
+\title{Hierarchical cEBMF for multi-omics\\[5pt]
+\large Model capacity, analytical benchmarks, and a defensible paper contribution}
+\author{Research assessment for the cEBMF project}
+\date{Literature checked: 14 September 2026}
+\begin{document}
+\maketitle
+
+\textbf{Assessment.} This is a plausible basis for a methods paper if the
+contribution is a coherent, useful, and computationally effective solver for
+\emph{learned conditional distributions between molecular programs}.
+Hierarchical multi-omics, empirical Bayes integration, nonlinear latent
+relationships, and interpretability each have substantial prior art. None,
+on its own, is a defensible novelty claim.
+
+The most promising combination is:
+\begin{quote}
+Separate additive factorizations for each modality, connected by flexible
+conditional loading priors, with joint posterior inference that accounts for
+uncertainty in both upstream and downstream programs.
+\end{quote}
+An EBNM-based computational construction, usable across the learned prior
+registry, could make this statistically and practically distinctive.
+It would need to work beyond the particular CGB--HMM toy example.
+
+\textbf{Relative to your existing work.} EBMF already reduces factor
+updates to normal-means problems, and cEBMF already supplies flexible
+covariate-moderated priors \cite{ebmf,cebmf}. The additional contribution
+would be treating the informative covariates as uncertain latent programs
+inside a joint model, with the resulting feedback and parameter updates.
+Prior flexibility or EBNM modularity alone would not be new.
+
+\textbf{Closest comparisons.}
+MOFA+ and JIVE are essential reference points, but a contemporary paper also
+needs EV-BIDIFAC for empirical Bayes linked matrix decomposition,
+CAVACHON for a hierarchical multi-omics generative model, and HALO for
+relationships between RNA and ATAC representations
+\cite{mofa,jive,evbidifac,cavachon,halo}.
+SIFA, MuVI, SOFA, and MEFISTO cover related uses of external information
+\cite{sifa,muvi,sofa,mefisto}.
+
+\textbf{What this document establishes.}
+We compare model structure, derive exact results in controlled examples,
+identify the actual inference contribution, and specify an empirical
+benchmark. Numerical values in the analytical examples are population
+calculations, \emph{not fitted-method performance}. No competing methods or
+new hierarchical solver were run for this report.
+
+\textbf{Scope.} The proposed model below is the paired Gaussian observation
+model developed in the companion
+\href{run:atac_rna_joint_inference.pdf}{joint-inference derivation}.
+It is a proposal, not a statement that the current package implements full
+joint inference. The literature review is targeted rather than exhaustive;
+publication potential is a judgment, not a guarantee of novelty or acceptance.
+
+\clearpage
+\section{The proposed model and the comparison target}
+
+For paired samples, let
+\[
+Y^A\in\R^{N\times P_A},\qquad Y^R\in\R^{N\times P_R}.
+\]
+Use separate loading matrices \(A\in\R^{N\times K_A}\) and
+\(R\in\R^{N\times K_R}\), with feature factors
+\(F^m\in\R^{P_m\times K_m}\):
+\begin{align}
+Y^A_{ip}\mid A,F^A&\sim
+ \N\!\left(\sum_{k=1}^{K_A}A_{ik}F^A_{pk},(\tau^A_{ip})^{-1}\right),\\
+Y^R_{ip}\mid R,F^R&\sim
+ \N\!\left(\sum_{j=1}^{K_R}R_{ij}F^R_{pj},(\tau^R_{ip})^{-1}\right).
+\end{align}
+Only observed entries enter the likelihood. Samples are conditionally
+independent under the following row-wise prior:
+\begin{equation}\label{eq:dag}
+p(A,R\mid\theta)=
+\prod_{i=1}^{N}
+\left\{\prod_{k=1}^{K_A}
+g^A_k(A_{ik}\mid A_{i,<k};\theta^A_k)\right\}
+\left\{\prod_{j=1}^{K_R}
+g^R_j(R_{ij}\mid R_{i,<j},A_i;\theta^R_j)\right\}.
+\end{equation}
+Each \(g\) is normalized; a sparse subset of the displayed parents can be
+used. Fixed observed covariates may also be included. The feature-factor
+prior \(p(F^A,F^R\mid\psi)\) is a separate design choice, including independent
+shrinkage or an HMM along a meaningful feature ordering.
+
+\textbf{Interpretation.} The same ATAC state can change an RNA program's
+activation probability, amplitude distribution, or uncertainty. Different
+RNA programs need not reuse identical ATAC scores. The model also permits
+dependencies among programs within each modality.
+
+The generative ordering \(A\to R\) does not restrict posterior inference to
+that direction. For fixed parameters,
+\[
+p(A,R,F^A,F^R\mid Y^A,Y^R)
+\ \propto\ p(Y^A\mid A,F^A)\,p(Y^R\mid R,F^R)\,
+p(A,R)\,p(F^A,F^R).
+\]
+RNA can therefore update ATAC. This property is shared by coherent joint
+latent-variable models in general; it is not unique to cEBMF.
+
+\textbf{Four different meanings of capacity.}
+\begin{enumerate}
+\item \emph{Reconstruction capacity}: which finite mean matrices can be fitted?
+\item \emph{Distributional capacity}: which joint laws and conditional
+relationships between programs can be represented?
+\item \emph{Statistical efficiency}: how much paired data is needed to learn
+those relationships and improve prediction?
+\item \emph{Inference capacity}: can the algorithm approximate the relevant
+posterior at useful scale and quantify uncertainty?
+\end{enumerate}
+Greater distributional flexibility does not imply better finite-sample
+performance or easier inference.
+
+\clearpage
+\section{Comparison with factorization methods}
+
+The following are structural comparisons of the cited formulations.
+An absent mechanism means it is not native to that formulation, not that
+the method could never be extended to include it.
+
+\begingroup\small
+\renewcommand{\arraystretch}{1.13}
+\begin{tabular}{@{}P{.19\textwidth}P{.37\textwidth}P{.38\textwidth}@{}}
+\toprule
+Method & Native structure and strength & Relation to the proposal\\
+\midrule
+JIVE (2013); AJIVE (2018)
+&
+Low-rank joint and individual sample subspaces; AJIVE estimates shared
+structure using angles and perturbation arguments.
+&
+A linear shared-subspace description, without a learned nonlinear
+conditional law between modality-specific scores in the original models
+\cite{jive,ajive}.\\[5pt]
+MOFA+ (2020)
+&
+Shared sample scores, view-specific feature weights, sparsity and ARD;
+factors can be shared, view-specific, or active in subsets. Supports groups,
+missing data and several observation likelihoods.
+&
+Already jointly borrows information and provides probabilistic inference.
+Its standard score-prior construction does not provide the proposed
+autoregressive conditional loading distributions \cite{mofa}.\\[5pt]
+SLIDE (2019); BASS (2016)
+&
+Partially shared components across subsets of views. BASS uses Bayesian
+structured shrinkage; SLIDE uses structured sparsity for the decomposition.
+&
+Shared/private structure and sparsity are existing capabilities, not
+distinctive benefits of a loading hierarchy \cite{slide,bass}.\\[5pt]
+BIDIFAC+ (2022); EV-BIDIFAC (2024)
+&
+Low-rank modules supported on subsets of linked row and column groups.
+EV-BIDIFAC uses empirical variational Bayes shrinkage and supports
+imputation.
+&
+A direct baseline for an empirical Bayes integration claim. The proposed
+distinction is learning conditional program distributions, rather than
+only the sharing pattern and shrinkage of modules
+\cite{bidifac,evbidifac}.\\[5pt]
+ProJIVE (2026)
+&
+Probabilistic joint and individual factorization, estimated by maximum
+likelihood using EM.
+&
+A current probabilistic JIVE comparator; making JIVE probabilistic
+would not be a new contribution \cite{projive}.\\
+\bottomrule
+\end{tabular}
+\endgroup
+
+\subsection*{A fair reading of MOFA+ and JIVE}
+MOFA+ does \emph{not} require every factor to affect every modality.
+JIVE explicitly includes individual variation. Therefore, allowing
+modality-specific factors is insufficient positioning.
+
+For orientation, the shared-score Gaussian predictor is
+\(Y^m=ZW_m^\top+E^m\). A shared/private linear formulation writes
+\(Y^m=SU_m^\top+V_m B_m^\top+E^m\).
+These schematic equations describe matrix structure, not every prior,
+constraint, or likelihood in the methods above.
+
+The useful new question is whether a nonlinear, uncertain relation between
+distinct programs can be learned more efficiently and interpreted more
+directly through Equation~\eqref{eq:dag}. It is not whether existing models
+can represent any view-specific signal at all.
+
+\clearpage
+\section{Hierarchical and information-informed comparators}
+
+\begingroup\small
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{@{}P{.19\textwidth}P{.37\textwidth}P{.38\textwidth}@{}}
+\toprule
+Method & Native structure and strength & Consequence for the paper\\
+\midrule
+CAVACHON (2024 preprint; earlier 2022 workshop)
+&
+Hierarchical VAE based on a supplied modality DAG; Gaussian-mixture
+innovation latents feed parent-aware decoders.
+&
+Close prior art for biological hierarchy and conditional independence.
+A factor-level conditional-prior model must be distinguished from this
+decoder hierarchy \cite{cavachon}.\\[5pt]
+HALO (2025)
+&
+RNA/ATAC representations linked through learned mappings and causal
+constraint losses, with an interpretable nonlinear additive decoder.
+&
+Neither hierarchical RNA--ATAC modeling nor interpretable nonlinear
+representations are new. Its published generative-prior and loss
+construction differs from Equation~\eqref{eq:dag} \cite{halo}.\\[5pt]
+SIFA (2017)
+&
+Joint and individual factors partly informed by observed covariates
+through nonparametric functions.
+&
+Covariate-informed nonlinear factor relationships already exist.
+Latent parents, their uncertainty, and feedback are the relevant
+distinction here \cite{sifa}.\\[5pt]
+MuVI (2023); SOFA (2026)
+&
+MuVI uses feature-set information through structured shrinkage.
+SOFA separates guided and unguided factors using sample-level
+guide variables.
+&
+Different ways to incorporate prior knowledge; include when the
+evaluation supplies pathways, annotations or observed drivers
+\cite{muvi,sofa}.\\[5pt]
+MEFISTO (2022)
+&
+Gaussian-process structure on sample factors over continuous
+covariates such as time and space.
+&
+Structured factors are existing work. Its sample-axis covariance is
+different from an HMM over genomic features \cite{mefisto}.\\[5pt]
+MultiVI (2023); GLUE (2022)
+&
+MultiVI handles paired and unpaired RNA/ATAC with a multimodal VAE.
+GLUE uses a feature guidance graph to link modality embeddings.
+&
+Relevant for single-cell integration, count data, missing modalities
+and unpaired settings. Their scope is broader than the present
+Gaussian paired-data proposal \cite{multivi,glue}.\\
+\bottomrule
+\end{tabular}
+\endgroup
+
+\subsection*{Two distinctions that matter}
+CAVACHON's generative equations put independent mixture innovation
+variables into a decoder that incorporates ancestors. In contrast,
+Equation~\eqref{eq:dag} places dependencies in normalized distributions
+of scalar program loadings, while keeping feature reconstruction linear.
+This is a different parameterization and inductive bias, not proof of
+strictly greater model capacity.
+
+HALO's Gaussian latent priors and additional constraint/mapping losses
+(Methods, Equations 17--24) differ from a normalized \(p(R\mid A)\).
+Neither comparison establishes superiority; both require experiments.
+
+\clearpage
+\section{Analytical benchmark I: what hierarchy does not add}
+
+\subsection{Any finite pair of fitted matrices has a shared-score representation}
+Let the fitted signals be
+\[
+M^A=AF_A^\top,\qquad M^R=RF_R^\top.
+\]
+Define \(Z=[\,A\ R\,]\) and view weights
+\[
+W_A=[\,F_A\ 0\,],\qquad W_R=[\,0\ F_R\,].
+\]
+Then
+\begin{equation}
+M^A=ZW_A^\top,\qquad M^R=ZW_R^\top.
+\end{equation}
+Thus a shared-score matrix parameterization with up to \(K_A+K_R\)
+columns can reproduce the two fitted means exactly.
+The minimal joint rank can be smaller.
+
+\textbf{What follows.} There is no universal in-sample reconstruction
+advantage merely from giving the modalities different loading matrices.
+
+\textbf{What does not follow.} This construction does not match the
+probability law of \(Z\), the method's prior probability on the constructed
+weights, its identifiability constraints, or the efficiency of learning
+these weights from new data. It is not an equality of the full MOFA+
+and hierarchical cEBMF model classes.
+
+\subsection{A linear Gaussian hierarchy reduces to shared/private structure}
+For a sample, use column-vector notation and suppose
+\[
+a\sim\N(0,\Sigma_A),\qquad
+r=B a+\eta,\qquad \eta\sim\N(0,\Sigma_\eta),\quad \eta\perp a.
+\]
+Then
+\[
+y^A=F_Aa+\epsilon_A,\qquad
+y^R=F_RB a+F_R\eta+\epsilon_R.
+\]
+The same \(a\) drives both views, and \(\eta\) is RNA-specific.
+Whitening \(a\) and \(\eta\), when their covariance matrices are
+positive definite, yields independent standard Gaussian scores with
+transformed feature weights.
+
+This is a shared/private linear-Gaussian factor model at the level of the
+observation distribution. Method-specific orthogonality and sparsity
+restrictions can still differ. Adding a linear Gaussian hierarchy alone
+therefore does not create the central expressive advantage being sought.
+
+\subsection{Flexible ordering is not a causal identification result}
+For unrestricted conditional families, any joint density can be
+factorized by the chain rule in any variable order. A dense DAG is then a
+parameterization, not evidence that ATAC causes RNA.
+Restricted families, sparse parents, biological anchors and the choice
+of factor orientation make the model informative, but introduce
+assumptions that must be assessed.
+
+Factor scaling, signs, permutations, and sometimes rotations are
+non-identifiable without additional restrictions. Nonnegativity alone
+does not guarantee uniqueness. Graph edges between unanchored factors
+should not be presented as identified regulatory effects.
+
+\clearpage
+\section{Analytical benchmark II: nonlinear dependence and shrinkage}
+
+\subsection{A dependency invisible to affine cross-modal prediction}
+Let \(A_1,A_2\) be independent \(\operatorname{Bernoulli}(1/2)\) variables
+and define an RNA loading \(R=A_1\mathbin{\mathrm{xor}}A_2\):
+\[
+\begin{array}{ccc}
+\toprule A_1&A_2&R\\ \midrule
+0&0&0\\0&1&1\\1&0&1\\1&1&0\\ \bottomrule
+\end{array}
+\qquad
+\E R=\tfrac12,\quad
+\Cov(A_1,R)=\Cov(A_2,R)=0.
+\]
+The population least-squares predictor among affine functions
+\(b_0+b_1A_1+b_2A_2\) is \(1/2\). Its mean squared error is
+\(\Var(R)=1/4\). The nonlinear oracle
+\[
+\E(R\mid A_1,A_2)=A_1+A_2-2A_1A_2
+\]
+has zero error. This establishes a strict advantage over
+\emph{affine prediction using these two observed inputs}.
+
+A neural activation prior can approximate this gate. For example,
+\[
+\pi_\kappa(a)=\sigmoid\{\kappa(2|a_1-a_2|-1)\},\qquad
+R\mid a\sim(1-\pi_\kappa(a))\delta_0+
+\pi_\kappa(a)\N(1,d^2).
+\]
+The Boolean model is approached as \(\kappa\to\infty\) and \(d^2\to0\);
+it is not identical to finite-variance CGB. A single linear-logistic
+gate cannot express XOR, whereas a suitable nonlinear network can.
+
+\textbf{Limits of the example.} These numbers are not benchmark scores
+for fitted MOFA+, JIVE, or cEBMF. An expanded shared basis containing
+\(A_1A_2\) represents this mean relationship with a linear readout.
+Non-Gaussian latent models can also have nonlinear posterior predictors.
+No impossibility claim for every MOFA+ configuration follows.
+
+\subsection{Useful dependence can affect variance rather than mean}
+Suppose
+\[
+R\mid A=a\sim\N(0,v(a)),\qquad T=R+\varepsilon,\quad
+\varepsilon\sim\N(0,s^2)
+\]
+with independent noise. Then \(\E(R\mid A)=0\), so knowing \(A\)
+cannot improve prediction of \(R\) from \(A\) alone under squared error.
+However,
+\[
+\E(R\mid T,A=a)=\frac{v(a)}{v(a)+s^2}T,\qquad
+\Var(R\mid T,A=a)=\frac{v(a)s^2}{v(a)+s^2}.
+\]
+ATAC can therefore improve RNA denoising by setting the amount of
+shrinkage, even without a conditional mean association.
+
+This motivates conditional log scores and calibration alongside
+reconstruction error. A benchmark assessing only cross-modal mean
+prediction would miss an important use of conditional shrinkage.
+
+\clearpage
+\section{Analytical benchmark III: can RNA improve ATAC?}
+
+\subsection{An exact population result}
+Let \(U\) be an ATAC loading, a vector of loadings, or its noiseless
+signal, with finite second moment. Let \(D_A\) denote ATAC evidence and
+\(D_R\) additional RNA evidence. Under one fixed joint probability law,
+define
+\[
+\widehat U_A=\E(U\mid D_A),\qquad
+\widehat U_{AR}=\E(U\mid D_A,D_R).
+\]
+The tower property and orthogonality of conditional expectation give
+\begin{equation}\label{eq:risk}
+\boxed{\;
+\E\|U-\widehat U_A\|^2-\E\|U-\widehat U_{AR}\|^2
+=\E\|\widehat U_{AR}-\widehat U_A\|^2\ \geq 0.
+\;}
+\end{equation}
+To verify this, write
+\(U-\widehat U_A=(U-\widehat U_{AR})+
+(\widehat U_{AR}-\widehat U_A)\).
+The cross term has expectation zero after conditioning on both data sets.
+
+Thus additional RNA evidence cannot increase the \emph{integrated
+Bayes risk} of the optimal ATAC posterior mean. Improvement is strict
+exactly when the posterior mean changes with positive probability.
+Information can change higher moments without changing the mean.
+The analogous result holds with RNA and ATAC exchanged.
+
+The result is not a guarantee for every realized sample, for an
+estimated empirical Bayes prior, or for a local variational solution.
+Nor does it compare two separately fitted, possibly misspecified models.
+It explains why bidirectional improvement is possible under a directed
+generative model.
+
+\subsection{Where the RNA evidence enters the actual update}
+For an ATAC loading \(v=A_{ik}\), hold parameters fixed. Let \(\Omega_i^A\)
+be the observed ATAC features for sample \(i\). Its exact
+full conditional has the form
+\begin{align}
+p(v\mid\mathrm{rest})
+&\propto
+\exp\{-\tfrac12 a_{ik}v^2+b_{ik}v\}\,
+g^A_k(v\mid A_{i,<k}) \notag\\[-2pt]
+&\quad\times
+\prod_{\substack{h>k\\v\in\pa(A_{ih})}}
+g^A_h(A_{ih}\mid A_{i,<h})
+\prod_{\substack{j\\v\in\pa(R_{ij})}}
+g^R_j(R_{ij}\mid R_{i,<j},A_i).
+\label{eq:fullconditional}
+\end{align}
+Here \(a_{ik}=\sum_{p\in\Omega_i^A}\tau^A_{ip}(F^A_{pk})^2\) and
+\[
+b_{ik}=\sum_{p\in\Omega_i^A}\tau^A_{ip}F^A_{pk}
+\left(Y^A_{ip}-\sum_{h\ne k}A_{ih}F^A_{ph}\right).
+\]
+RNA observations enter indirectly through the RNA loadings and factors
+being inferred jointly. The final product in
+Equation~\eqref{eq:fullconditional} is the feedback missing when one only
+treats estimated ATAC loadings as fixed RNA covariates.
+
+The full conditional of a directed model already conditions on children.
+Introducing an independently fitted reverse conditional does not in
+general produce the same joint model; the two conditionals must be compatible.
+
+\clearpage
+\section{What an EBNM-based solver would contribute}
+
+\subsection{A general interface, with real mathematical qualifications}
+For a scalar loading \(v\), a factorized variational coordinate has
+\[
+q^*(v)\propto
+\exp\!\left\{-\tfrac12av^2+bv+
+\E_{q_{\pa(v)}}\log g(v\mid\pa(v))+
+\sum_{c\in\ch(v)}
+\E_{q_{\setminus v}}\log g_c(c\mid\pa(c))\right\}.
+\]
+The coefficients \(a,b\) now come from the \emph{expected} log likelihood:
+replace the realized squared factors by their second moments, and take
+expectations of the residual--factor products in \(b\). All expectations
+hold \(v\) fixed. This is the standard variational coordinate identity,
+not a new general theorem. For spike-and-continuous priors, densities
+and updates use a common dominating measure with a zero atom.
+
+For \emph{exact full conditionals} with other latents realized, define
+the ordinary EBNM posterior at fixed parents and parameters,
+\[
+q_0(v)\propto e^{-av^2/2+bv}g(v\mid\pa(v)),\qquad
+D(v)=\sum_{c\in\ch(v)}\log g_c(c\mid\pa(c)).
+\]
+Then \(p(v\mid\mathrm{rest})\propto q_0(v)e^{D(v)}\).
+An independent proposal \(v'\sim q_0\) has Metropolis acceptance
+\(\min\{1,\exp[D(v')-D(v)]\}\).
+With suitable support and ergodicity, this targets the required
+conditional; its finite-run accuracy depends on mixing.
+Refitting prior parameters inside this acceptance step would invalidate
+the argument. In variational inference, uncertainty in parents also
+requires the expected-own-prior correction detailed in the companion note.
+
+\subsection{The learned registry does not contain interchangeable model classes}
+\begingroup\small
+\renewcommand{\arraystretch}{1.10}
+\begin{tabular}{@{}P{.30\textwidth}P{.65\textwidth}@{}}
+\toprule
+Registry family & Conditional capacity relevant to the paper\\
+\midrule
+\texttt{cash}, \texttt{lcash}, \texttt{po\_lcash}
+& Mixture weights depend on covariates; centered scale mixtures change
+sparsity/variance but retain zero conditional prior mean.\\[3pt]
+\texttt{cgb}, \texttt{cgb\_sharp}
+& Covariates change spike/slab probability, with global Gaussian slab
+parameters. Sharpening changes fitting, not a new generic hierarchy.\\[3pt]
+\texttt{cgb\_sharp\_2}
+& Separate positive-mean and negative-mean Gaussian slabs plus spike;
+slab means do not impose truncated support.\\[3pt]
+\texttt{emdn}, \texttt{spiked\_emdn}
+& Covariate-dependent mixture weights, means and variances; the latter
+adds a zero atom. These are the broadest scalar families here.\\[3pt]
+\texttt{hmm}, \texttt{hmm\_pos}, \texttt{hmm\_neg}
+& Sequence priors, currently ignoring side covariates and using unit
+adjacency. They require block treatment; in this proposal they act on \(F\).\\
+\bottomrule
+\end{tabular}
+\endgroup
+
+For CGB with active probability \(\pi(x)\), slab mean \(\mu\) and
+variance \(d^2\),
+\(\E(L\mid x)=\pi(x)\mu\) and
+\(\Var(L\mid x)=\pi(x)d^2+\pi(x)(1-\pi(x))\mu^2\).
+This is a gate, not unrestricted regression.
+The current registry's posterior moments alone are not enough for
+general child messages: density evaluation, sampling or integration,
+and coherent parameter learning are needed.
+
+\clearpage
+\section{An empirical benchmark that would test the claims}
+
+These are proposed experiments, not predicted rankings.
+The central design is to vary \emph{dependence type} independently of
+noise level, rank, sparsity, and feature smoothness.
+
+\begingroup\small
+\renewcommand{\arraystretch}{1.13}
+\begin{tabular}{@{}P{.26\textwidth}P{.35\textwidth}P{.33\textwidth}@{}}
+\toprule
+Scenario & Question tested & Informative comparisons\\
+\midrule
+Linear Gaussian shared/private factors
+& Does flexibility cost accuracy or runtime when unnecessary?
+& MOFA+, AJIVE/ProJIVE, EV-BIDIFAC; linear hierarchy.\\[4pt]
+Nonlinear activation: AND, XOR, smooth gates
+& Can conditional program structure improve denoising and prediction?
+& Conditional versus independent priors; HALO, CAVACHON;
+shared factors plus nonlinear regression.\\[4pt]
+Variance-only dependence
+& Does the method learn adaptive shrinkage and predictive dispersion?
+& Conditional scale mixture versus homoscedastic/independent priors.\\[4pt]
+Asymmetric SNR, reversed in a second experiment
+& Can downstream evidence help the noisy upstream modality?
+& Full joint versus one-way plug-in and no-child-message ablations.\\[4pt]
+No dependence; shuffled pairing; wrong graph
+& Can the method decline to borrow, and resist negative transfer?
+& Independent fits and sparsity-controlled hierarchy.\\[4pt]
+Three or more modalities with subset sharing
+& Does a DAG improve on established partial-sharing structure?
+& SLIDE, BASS, EV-BIDIFAC; matched total latent dimension.\\[4pt]
+Block features, smooth features, and permuted features
+& Is any gain due to the loading hierarchy or the HMM?
+& Same loading model with and without the feature prior; smoothing controls.\\[4pt]
+Realistic count noise, batch effects, missing modalities
+& What is the scope beyond normalized Gaussian matrices?
+& MultiVI; HALO/CAVACHON for paired hierarchy; explicit
+preprocessing and likelihood controls.\\
+\bottomrule
+\end{tabular}
+\endgroup
+
+\subsection*{Required internal ablations}
+Use the same observation model and feature prior for:
+(i) independent cEBMF;
+(ii) one-way ATAC-to-RNA plug-in conditioning;
+(iii) one-way conditioning in the reverse direction;
+(iv) the proposed joint inference;
+(v) within-modality hierarchy only;
+(vi) a linear conditional prior.
+Also compare an independent factorization followed by a trained nonlinear
+map between loadings. That tests whether the benefit requires joint
+inference rather than just a flexible regression.
+
+The current block-shaped toy data are valuable for debugging, but align
+closely with the HMM prior. They do not establish general multi-omics
+performance. Vary the feature prior independently of the loading model.
+RNA columns need a scientifically meaningful ordering before adjacency
+smoothing is interpreted biologically; unit index spacing is not genomic
+distance.
+
+\clearpage
+\section{Evaluation, identifiability and computational evidence}
+
+\textbf{Primary endpoints.} In simulations, report noiseless-signal
+reconstruction error separately for ATAC and RNA, conditional prediction
+error in both directions, and uncertainty calibration. Assess program
+recovery after appropriate scale, sign and permutation alignment; use
+subspace recovery where individual factors are not identifiable.
+Log scores require predictive distributions; original JIVE does not
+natively provide them.
+
+\textbf{Three distinct holdouts.}
+\begin{enumerate}
+\item Hold out entries for within-sample denoising.
+\item Hold out an entire modality for test samples, inferring their
+loadings only from available modalities.
+\item Hold out biological samples, donors or studies for transfer.
+For single-cell studies, avoid treating cells from the same donor as
+independent biological replications.
+\end{enumerate}
+The corresponding estimands are different and should not be pooled.
+An entire-modality holdout on genuinely new samples is especially
+informative for learned conditional distributions.
+
+\textbf{Prevent leakage.} Train transformations, feature selection,
+hyperparameters and conditional networks using training data; select
+settings with validation data. Test RNA must not enter the ATAC covariates
+used to predict that same held-out RNA. Parent uncertainty should be
+integrated, not replaced by information from the hidden modality.
+Distinguish transductive matrix completion from prediction for new samples.
+
+\textbf{Fairness.} Tune ranks and regularization rather than fixing an
+arbitrary common \(K\). A model with \(K_A\) ATAC factors and \(K_R\) RNA
+factors does not have the same complexity as a shared model with
+\(\max(K_A,K_R)\) factors. Report both matched-capacity and independently
+tuned comparisons, network sizes, optimization budgets and restarts.
+Supply the same external information when comparing mechanisms that use
+it. When HMM smoothing is unique to one arm, report that advantage separately.
+
+\textbf{Comparable scales.} Raw ELBO values from different model families
+are not a common performance metric. Compare held-out prediction for the
+same observed quantity and units. Gaussian losses on transformed
+expression are not directly comparable to count likelihoods.
+Use repeated simulation replicates with uncertainty intervals, and
+held-out donors/studies for real-data uncertainty.
+Clustering and enrichment can supplement, but cannot replace, prediction
+and calibration.
+
+\textbf{Computational evidence.} A residual-based Gaussian sweep has a
+likelihood cost of order \(N\sum_m P_mK_m\). The loading hierarchy adds
+child-prior evaluations and parameter optimization. With \(K=K_A+K_R\),
+a dense ordered graph has \(K(K-1)/2\) edges, so cost can grow rapidly with
+rank. Integration accuracy and network input size add further costs.
+An HMM with \(S\) states has the usual \(O(P_mS^2)\) forward--backward
+cost per feature-factor sequence before exploiting transition structure.
+Report runtime, memory, convergence and, for Monte Carlo, effective sample
+size. No scaling advantage can be claimed from the update formula alone.
+
+\textbf{Suggested real-data scope.} Start with two independent paired
+RNA--ATAC studies, preferably spanning different tissues or technologies.
+Add a three-modality application only if broad multi-omics capability is
+a central claim. For the first paper, a carefully delimited Gaussian
+analysis of processed molecular features is legitimate; raw-count
+performance needs an observation-model extension or a justified pipeline.
+
+\clearpage
+\section{What would make this a convincing paper?}
+
+\subsection*{A defensible contribution statement}
+\begin{quote}
+We develop a hierarchical empirical Bayes factorization that learns
+conditional distributions between modality-specific molecular programs.
+The model preserves additive feature contributions and supports joint
+posterior updates across a specified program graph. An EBNM-based
+inference strategy accommodates multiple conditional prior families.
+We evaluate when this structure improves estimation and when it causes
+negative transfer.
+\end{quote}
+This is suggested positioning, not a claim that all of it has been
+implemented or validated.
+
+\textbf{The most substantial methodological contribution would be the
+solver and its statistical behavior.} Standard full-conditionals, the
+variational coordinate identity, and the conditional-expectation risk
+identity are established tools. Their application is useful, but a paper
+needs more than writing them down.
+
+A strong submission would provide:
+\begin{enumerate}
+\item A normalized joint model, clearly separating observed covariates,
+latent parents, feature structure, and learned hyperparameters.
+\item An implemented common-objective inference algorithm, with mixed
+spike/continuous supports, uncertain-parent expectations and child
+feedback handled consistently. A small exact or accurately sampled
+reference should check the approximation.
+\item Evidence across at least two materially different conditional
+prior families, for example CGB gates and mixture mean/variance models.
+Regularization and preprocessing must have a coherent role in the target.
+\item A clear account of ordering, anchors, sparsity and factor
+identifiability; sensitivity to alternative orderings and incorrect
+graphs should be reported.
+\item Fair comparisons against strong linear/EB methods and hierarchical
+neural comparators, with convincing positive examples and failures.
+\end{enumerate}
+
+\textbf{Useful theory targets.} Characterize a restricted model class for
+which conditional program dependencies are identifiable, or prove
+approximation/error properties for the proposed EBNM message algorithm.
+An exact-coordinate ascent proof gives monotonicity only for updates
+that truly maximize one well-defined objective; it does not automatically
+cover Monte Carlo gradients, plug-in parents, sharpening heuristics,
+changing supports, or repeated black-box prior refits.
+
+\textbf{My judgment.} The idea is promising as an interpretable statistical
+alternative for studying dependence between programs. Its clearest
+potential benefit over standard shared-factor models is a targeted
+conditional-distribution assumption, especially with nonlinear gates or
+covariate-dependent shrinkage. Its benefit over hierarchical VAEs would
+need to come from the particular additive model, prior flexibility,
+inference quality, data efficiency, or practical simplicity.
+
+A paper showing only that one alternating two-fitter example improves RNA
+would be weak. A carefully validated general solver, a useful biological
+question, and evidence explaining \emph{when and why} joint conditional
+modeling helps could constitute a substantial contribution.
+
+\clearpage
+\begingroup\small\raggedright
+\begin{thebibliography}{99}
+\setlength{\itemsep}{5pt}
+\bibitem{mofa}
+Argelaguet et al. (2020).
+MOFA+: a statistical framework for comprehensive integration of
+multi-modal single-cell data. \emph{Genome Biology} 21, 111.
+\url{https://doi.org/10.1186/s13059-020-02015-1}
+
+\bibitem{jive}
+Lock, Hoadley, Marron and Nobel (2013).
+Joint and Individual Variation Explained (JIVE) for integrated analysis
+of multiple data types. \emph{Annals of Applied Statistics} 7, 523--542.
+\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC3671601/}
+
+\bibitem{ajive}
+Feng, Jiang, Hannig and Marron (2018).
+Angle-based joint and individual variation explained.
+\url{https://arxiv.org/abs/1704.02060}
+
+\bibitem{slide}
+Gaynanova and Li (2019).
+Structural learning and integrative decomposition of multi-view data.
+\emph{Biometrics} 75, 1121--1132.
+\url{https://arxiv.org/abs/1707.06573}
+
+\bibitem{bass}
+Zhao, Gao, Mukherjee and Engelhardt (2016).
+Bayesian group factor analysis with structured sparsity.
+\emph{Journal of Machine Learning Research} 17.
+\url{https://www.jmlr.org/papers/volume17/14-472/14-472.pdf}
+
+\bibitem{bidifac}
+Lock et al. (2022).
+Decomposition and imputation of bidimensionally linked matrices.
+\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC9060567/}
+
+\bibitem{evbidifac}
+Lock (2024).
+Empirical Bayes Linked Matrix Decomposition.
+\emph{Machine Learning} 113, 7451--7477.
+\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC11698509/}
+
+\bibitem{projive}
+Murden et al. (2026).
+Probabilistic Joint and Individual Variation Explained (ProJIVE) for
+Data Integration. \emph{Journal of Computational and Graphical Statistics};
+arXiv version accessed.
+\url{https://arxiv.org/abs/2603.12351}
+
+\bibitem{cavachon}
+Hsieh et al. (2024).
+CAVACHON: a hierarchical variational autoencoder to integrate multi-modal
+single-cell data. Preprint, arXiv:2405.18655v1.
+Earlier related paper presented at NeurIPS LMRL Workshop 2022.
+\url{https://arxiv.org/html/2405.18655v1}
+
+\bibitem{halo}
+Mao et al. (2025).
+HALO: hierarchical causal modeling for single cell multi-omics data.
+\emph{Nature Communications} 16, 8892.
+\url{https://www.nature.com/articles/s41467-025-63921-1}
+
+\bibitem{sifa}
+Li and Jung (2017).
+Incorporating Covariates into Integrated Factor Analysis of Multi-View
+Data. \emph{Biometrics} 73, 1433--1442.
+\url{https://arxiv.org/abs/1703.05794}
+
+\bibitem{muvi}
+Qoku and Buettner (2023).
+Encoding Domain Knowledge in Multi-view Latent Variable Models:
+A Bayesian Approach with Structured Sparsity. \emph{AISTATS}, PMLR 206.
+\url{https://proceedings.mlr.press/v206/qoku23a.html}
+
+\bibitem{sofa}
+Capraz et al. (2026).
+Semi-supervised Omics Factor Analysis (SOFA) disentangles known and latent
+sources of variation in multi-omic data.
+\emph{Nature Communications} 17, 8725. Published 20 August 2026.
+\url{https://www.nature.com/articles/s41467-026-74694-6}
+
+\bibitem{mefisto}
+Velten et al. (2022).
+Identifying temporal and spatial patterns of variation from multimodal
+data using MEFISTO. \emph{Nature Methods} 19, 179--186.
+\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC8828471/}
+
+\bibitem{multivi}
+Ashuach et al. (2023).
+MultiVI: deep generative model for the integration of multimodal data.
+\emph{Nature Methods}.
+\url{https://www.nature.com/articles/s41592-023-01909-9}
+
+\bibitem{glue}
+Cao and Gao (2022).
+Multi-omics single-cell data integration and regulatory inference with
+graph-linked embedding. \emph{Nature Biotechnology}.
+\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC9546775/}
+
+\bibitem{ebmf}
+Wang and Stephens (2021).
+Empirical Bayes Matrix Factorization.
+\emph{Journal of Machine Learning Research} 22(120), 1--40.
+\url{https://jmlr.org/papers/v22/20-589.html}
+
+\bibitem{cebmf}
+Denault et al. (2025).
+Covariate-moderated Empirical Bayes Matrix Factorization.
+Preprint, arXiv:2505.11639v2.
+\url{https://arxiv.org/html/2505.11639v2}
+\end{thebibliography}
+\endgroup
+\end{document}
