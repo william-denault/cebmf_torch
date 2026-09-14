@@ -13,6 +13,7 @@ Welcome to the cebmf_torch documentation!
    Home <self>
    theoretical_background
    examples
+   hmm_priors
    api
 
 .. include:: ../../README.md

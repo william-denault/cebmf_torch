@@ -112,6 +112,9 @@ class cEBMF:
             Initial number of factors. Default 5.
         prior_L, prior_F : str, optional
             Prior names to use for the row/column factors.
+            ``hmm``, ``hmm_pos`` and ``hmm_neg`` use fSuSiE-style HMM priors
+            with real, nonnegative and nonpositive support. Entries follow
+            the existing row (L) or column (F) order at equal spacing.
         internal_epoch : int, optional
             Number of inner epochs for the prior fitting routine.
         prior_L_kwargs, prior_F_kwargs : dict or None, optional
@@ -139,6 +142,7 @@ class cEBMF:
             observed values in ``data``.
         X_l, X_f : torch.Tensor or None, optional
             External covariates for the row/column factors.
+            Ignored on an HMM side, with one warning at construction time.
         self_row_cov, self_col_cov : bool, optional
             Whether to use other factors as self-covariates.
         device : torch.device or None, optional
@@ -163,6 +167,25 @@ class cEBMF:
             K=K, prior_L=prior_L, prior_F=prior_F, allow_backfitting=allow_backfitting, prune_thresh=prune_thresh
         )
         self.noise = NoiseParams(type=noise_type)
+        # Handle HMM covariates once, before moving or combining them. In
+        # particular, a 1-D position vector must never reach hstack below.
+        hmm_priors = {"hmm", "hmm_pos", "hmm_neg"}
+        for side, prior, external, self_cov in (
+            ("L", prior_L, X_l, self_row_cov), ("F", prior_F, X_f, self_col_cov)
+        ):
+            if prior in hmm_priors and (external is not None or self_cov):
+                warn(
+                    f"HMM specified for {side} (prior_{side}={prior!r}); additional side information "
+                    f"provided for {side} will be ignored. The HMM uses the existing "
+                    f"{'row' if side == 'L' else 'column'} order with equal spacing. To use location "
+                    "information and additional side information, add location to the side-information "
+                    "matrix and use 'emdn' or 'spiked_emdn'.",
+                    stacklevel=2,
+                )
+        if prior_L in hmm_priors:
+            X_l, self_row_cov = None, False
+        if prior_F in hmm_priors:
+            X_f, self_col_cov = None, False
         # Move covariates to device (if provided) to avoid later CPU↔GPU hops
         self.covariate = CovariateParams(
             X_l=(X_l.to(self.device) if X_l is not None else None),
