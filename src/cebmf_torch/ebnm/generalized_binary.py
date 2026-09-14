@@ -93,6 +93,12 @@ def ebnm_gb(
     standard deviation non-negative regardless of μ's sign. This matters
     when the EM machinery wants to push μ slightly into the negative
     half-line; the slab is still a valid truncated normal on ``[0, ∞)``.
+
+    The all-zero boundary prior is also compared against the fitted mixture,
+    as for the point-exponential solver. If it has at least as high a marginal
+    likelihood, the returned moments and ``pi_slab`` are zero. ``wlist``
+    constrains the nondegenerate mixture fits; this boundary comparison avoids
+    retaining a redundant slab whose location and width have collapsed to zero.
     """
     device, dtype = x.device, x.dtype
     x = x.to(dtype)
@@ -271,9 +277,21 @@ def ebnm_gb(
 
         post_mean = zeta * EX
         post_mean2 = zeta * EX2
-        post_sd = (post_mean2 - post_mean**2).clamp_min(0).sqrt()
-
         log_lik = best_ll_t
+
+        # EM can collapse the slab toward zero while leaving its weight near
+        # the starting value. Such a fit can be worse than the exact all-zero
+        # prior, yet prevents cEBMF from pruning an unused factor. Compare the
+        # boundary likelihood explicitly, as in ebnm_point_exp; do not threshold
+        # factor magnitudes, which depend on the arbitrary L/F scaling.
+        null_log_lik = lf.sum()
+        prefer_null = (~torch.isfinite(log_lik)) | (null_log_lik >= log_lik)
+        post_mean = torch.where(prefer_null, torch.zeros_like(post_mean), post_mean)
+        post_mean2 = torch.where(prefer_null, torch.zeros_like(post_mean2), post_mean2)
+        pi = torch.where(prefer_null, torch.zeros_like(pi), pi)
+        mu = torch.where(prefer_null, torch.zeros_like(mu), mu)
+        log_lik = torch.where(prefer_null, null_log_lik, log_lik)
+        post_sd = (post_mean2 - post_mean**2).clamp_min(0).sqrt()
 
     scale_t = torch.as_tensor(1.0 / (omega + 1e-8), device=device, dtype=dtype)
     return EBNMGBResult(

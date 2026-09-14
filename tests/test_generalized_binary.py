@@ -130,3 +130,24 @@ def test_extreme_cases_pi_near_zero_and_one():
     r1 = ebnm_gb(x1, s1, omega=0.2)
     assert r1.pi_slab > 0.8
     assert r1.post_mean.mean().item() > 0.5
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("scale", [1e-3, 1.0, 20.0])
+def test_collapsed_slab_uses_better_all_zero_boundary(dtype, scale):
+    # A weak, slightly negative sequence makes EM collapse the slab's mode
+    # without reducing its weight (previously pi_slab stayed around 0.47).
+    # In cEBMF this kept unused factors alive and allowed reciprocal L/F scales
+    # to diverge. The exact all-zero prior has a higher likelihood here.
+    x = (torch.linspace(-1, 1, 200, dtype=dtype) - 0.01) * scale
+    s = torch.full_like(x, scale)
+    res = ebnm_gb(x, s)
+    null_log_lik = torch.distributions.Normal(torch.zeros_like(x), s).log_prob(x).sum()
+
+    assert res.pi_slab == 0
+    assert res.mode == 0
+    assert torch.count_nonzero(res.post_mean) == 0
+    assert torch.count_nonzero(res.post_mean2) == 0
+    assert torch.count_nonzero(res.post_sd) == 0
+    torch.testing.assert_close(res.log_lik, null_log_lik)
+    assert res.post_mean.dtype == dtype

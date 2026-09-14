@@ -99,3 +99,16 @@ def test_point_builder_pi0_null_consistent_with_ebnm_directly():
     # Both calls deterministic; if not, this assertion will surface it.
     assert abs(_to_float(prior.pi_slab) - _to_float(res.pi_slab)) < 1e-6
     assert abs(_to_float(prior.pi0_null) - (1.0 - _to_float(res.pi_slab))) < 1e-6
+
+
+def test_collapsed_gbinary_slab_is_pruned_by_cebmf():
+    from cebmf_torch import cEBMF
+
+    x = torch.linspace(-1, 1, 200) - 0.01
+    builder = PointBuilder(PointPriorType.GBINARY)
+    prior = builder.fit(X=None, betahat=x, sebetahat=torch.ones_like(x))
+    model = cEBMF(x[:, None], K=1, prior_L="gbinary", prior_F="hmm_pos", device="cpu")
+    model.pi0_L[0] = prior.pi0_null
+
+    assert prior.pi0_null == 1
+    assert model._should_prune_factor(0)

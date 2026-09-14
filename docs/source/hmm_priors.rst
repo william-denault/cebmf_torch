@@ -53,6 +53,22 @@ The HMM assumes unit spacing between consecutive columns. It does not infer
 genomic distances, sort columns, or detect chromosome/sequence boundaries.
 Avoid joining unrelated sequences into one chain.
 
+When inspecting ``gbinary``/``hmm_pos`` fits, use separate vertical axes for
+the factors. Multiplying ``L[:, k]`` by a constant and dividing ``F[:, k]``
+by the same constant preserves the reconstructed signal. A large value in
+``F`` therefore need not mean a large contribution to the data. A useful
+scale-invariant measure of each component's contribution is::
+
+   component_rms = (res.L.square().mean(0) * res.F.square().mean(0)).sqrt()
+
+The ``gbinary`` solver compares its fitted mixture with the all-zero boundary
+prior. If the boundary fits at least as well, it returns zero moments and
+zero slab weight, allowing cEBMF to prune that unused factor. This check
+uses marginal likelihood, not a threshold on factor magnitudes.
+
+Separate RNA and ATAC fits do not by themselves impose a hierarchy or shared
+loadings between the two datasets.
+
 Side information and the startup warning
 ----------------------------------------
 
