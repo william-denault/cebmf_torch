@@ -14,6 +14,7 @@ Welcome to the cebmf_torch documentation!
    theoretical_background
    examples
    hmm_priors
+   ordered_loading_priors
    api
 
 .. include:: ../../README.md

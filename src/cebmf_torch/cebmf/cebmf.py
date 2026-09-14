@@ -144,7 +144,11 @@ class cEBMF:
             External covariates for the row/column factors.
             Ignored on an HMM side, with one warning at construction time.
         self_row_cov, self_col_cov : bool, optional
-            Whether to use other factors as self-covariates.
+            Whether to use earlier factors (columns strictly before k) as
+            self-covariates for factor k. External covariates are prepended.
+            The first factor uses an intercept if no external covariates exist.
+            Conditioning uses current posterior means, not a joint hierarchical
+            posterior update that includes downstream conditional-prior terms.
         device : torch.device or None, optional
             Target device. Defaults to the result of :func:`get_device`.
         """
@@ -672,6 +676,12 @@ class cEBMF:
         self.kl_f = self.kl_f[keep]
         self.model_state_L = [self.model_state_L[i] for i in keep]
         self.model_state_F = [self.model_state_F[i] for i in keep]
+        # Pruning changes the dimensions and identities of earlier-factor
+        # covariates. Saved networks on a self-conditioned side must be refit.
+        if self.covariate.self_row_cov:
+            self.model_state_L = [None] * len(keep)
+        if self.covariate.self_col_cov:
+            self.model_state_F = [None] * len(keep)
         self.pi0_L = [self.pi0_L[i] for i in keep]
         self.pi0_F = [self.pi0_F[i] for i in keep]
         self.model.K = len(keep)
@@ -681,22 +691,20 @@ class cEBMF:
     def _build_covariate_matrix(
         self, external_cov: Tensor | None, self_cov_enabled: bool, factors: Tensor, k: int, dim_size: int
     ) -> Tensor | None:
-        """Build covariate matrix combining external and self-covariates."""
+        """Combine external covariates with strictly earlier factor columns."""
         if external_cov is not None and external_cov.device != self.device:
             external_cov = external_cov.to(self.device)
 
         if not self_cov_enabled:
             return external_cov
 
-        # Get other factors (excluding k)
-        if self.model.K > 1:
-            others = factors[:,0:(k-1) ]#torch.arange(self.model.K, device=self.device) != k]
-            if external_cov is None:
-                return others
-            return torch.hstack((external_cov, others))
-
-        # K=1 case: return external covariates or intercept
-        return external_cov if external_cov is not None else factors.new_ones(dim_size, 1)
+        earlier = factors[:, :k]
+        if external_cov is not None:
+            if external_cov.ndim == 1:
+                external_cov = external_cov[:, None]
+            return torch.hstack((external_cov, earlier))
+        # No parents for k=0: fit an unconditional prior using an intercept.
+        return earlier if k > 0 else factors.new_ones(dim_size, 1)
 
     @torch.no_grad()
     def _recompute_residual(self) -> None:
