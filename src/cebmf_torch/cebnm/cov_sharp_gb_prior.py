@@ -191,12 +191,12 @@ def sharp_cgb_posterior_means(
     betahat,
     sebetahat,
     n_epochs=50,
-    n_layers=2,
-    omega=0.005,
+    n_layers=4,
+    omega=0.01,
     hidden_dim=32,
     batch_size=128,
     lr=1e-3,
-    penalty: float = 1.5,
+    penalty: float = 1.05,
     model_param=None,
     eps=1e-8,
     device: torch.device | None = None,
@@ -223,7 +223,7 @@ def sharp_cgb_posterior_means(
     lr : float, optional
         Learning rate for the optimizer (default=1e-3).
     penalty : float, optional
-        Penalty for spike probability (default=1.5).
+        Penalty for spike probability (default=1.1).
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
 

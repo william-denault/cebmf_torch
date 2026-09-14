@@ -667,7 +667,7 @@ class cEBMF:
 
         # Get other factors (excluding k)
         if self.model.K > 1:
-            others = factors[:, torch.arange(self.model.K, device=self.device) != k]
+            others = factors[:,0:(k-1) ]#torch.arange(self.model.K, device=self.device) != k]
             if external_cov is None:
                 return others
             return torch.hstack((external_cov, others))

@@ -67,7 +67,7 @@ class CashNet(nn.Module):
 
 
 # Custom loss function
-def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
+def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.1, epsilon=1e-10):
     # log sum_k pi_k * exp(mll_k), reduced in log-space. The previous code
     # exponentiated marginal_log_lik directly; exp() is unnecessary here and
     # overflows float32 to inf for mll > ~88. marginal_log_lik is only clamped
@@ -132,7 +132,7 @@ def cash_posterior_means(
     batch_size=128,
     lr=0.001,
     model_param=None,
-    penalty=1.5,
+    penalty=1.05,
     device: torch.device | None = None,
 ):
     """
@@ -164,7 +164,7 @@ def cash_posterior_means(
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
     penalty : float, optional
-        Penalty for spike probability (default=1.5).
+        Penalty for spike probability (default=1.1).
     device : torch.device, optional
         Target device for tensors and the model. If ``None``, inherits from
         ``betahat`` when it is already a tensor; otherwise falls back to CUDA
