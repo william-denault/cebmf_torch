@@ -1,5 +1,95 @@
-Experimental joint ATAC-RNA inference
-=====================================
+Joint inference for self-covariates and ATAC-RNA
+===============================================
+
+Automatic cEBMF interface
+------------------------
+
+``self_row_cov=True`` or ``self_col_cov=True`` now selects the joint sampler
+through ``cEBMF.fit``. Both flags can be enabled. On each enabled axis, a
+coordinate's conditional includes every later coordinate's child-prior
+contribution. The current implementation uses the existing conditional
+mixture networks; it does not add linear-logistic CGB or VampPrior.
+
+.. code-block:: python
+
+   model = cEBMF(
+       data=Z, K=10, prior_L="cgb", prior_F="norm",
+       self_row_cov=True, S=1.25, device="cpu",
+       joint_kwargs={"burnin": 100, "draws": 150, "thin": 2},
+   )
+   model.initialise_factors()
+   result = model.fit(8)
+   signal = result.reconstruction
+   posterior = result.joint_posterior
+
+``fit(maxit)`` uses ``maxit`` partial Monte Carlo EM rounds, followed by
+burn-in and retained posterior draws. ``iter_once()`` instead advances one
+joint sweep at fixed fitted parameters and publishes that realized draw.
+It does not collect posterior means or learn parameters. ``fit(0)`` collects
+draws without further parameter learning. A repeated ``fit`` continues from
+the sampler's last state, not from the displayed posterior means.
+
+``result.inference`` is ``"joint"`` for this route. The posterior contains
+``loading_draws``, ``factor_draws``, nonzero-component probabilities on both
+axes, acceptance fractions, and a log-joint trace. ``result.reconstruction``
+averages products within draws; multiplying marginal factor means generally
+gives a different result. ``history_obj``/``model.obj`` contain sampled log
+joint densities, not an ELBO or a quantity that must improve every sweep.
+
+The joint route supports the eight learned scalar families listed below,
+``norm`` (independent Gaussian scale mixtures), and the three HMM priors.
+Other priors fail explicitly instead of silently using the old update.
+HMM priors still ignore side information and self-covariates on their own
+axis; enabling an effective self-covariate flag on the other axis selects
+joint inference. Without either effective flag, the original variational
+``cEBMF`` route is unchanged.
+
+The sampler currently requires CPU tensors. Missing entries and fixed
+heteroscedastic Gaussian observation variances are supported. Each matrix
+row/column needs at least one observation for initialization. Unknown noise
+is estimated during independent initialization and then frozen. The rank,
+factor order, side information, non-neural priors and preprocessing also
+remain fixed during joint sampling. Supplying ``initialise_factors(L=..., F=...)``
+skips the independent initialization and preserves that starting rank/order.
+Without user-supplied factors, a preliminary independent fit chooses the
+starting values and rank; its CGB-like axis uses a generalized-binary prior.
+
+``joint_kwargs`` defaults are: ``initialization_iterations=10``,
+``pretrain_steps=100``, ``sweeps_per_round=10``, ``steps=30``, ``lr=0.003``,
+``burnin=100``, ``draws=100``, ``thin=2``, ``seed=123`` and
+``progress_every=20``. Experimental distribution settings may be supplied in
+``joint_kwargs['prior_L_kwargs']``/``['prior_F_kwargs']``. Neural architecture
+and distribution settings in ordinary prior kwargs are also forwarded.
+Legacy neural ``penalty``, ``n_epochs`` and ``batch_size`` settings produce
+a warning and do not change the normalized joint-prior objective. HMM kwargs
+continue to configure its initial fitted prior.
+
+Ready-to-run notebooks are:
+
+* ``examples/tree_joint_simple.ipynb``: start here for a short CPU example with
+  one settings cell, inline simulation and fitting, prediction errors and objective
+  plots. Select the ``cebmf`` kernel and run all cells.
+* ``examples/tree_joint_walkthrough.ipynb``: a self-contained, step-by-step
+  tree example with negative-ELBO, fixed-draw prior-loss and posterior-sampling
+  plots. Its independent baseline runs for 30 iterations.
+* ``examples/check_tree_consistency_joint.ipynb``: one matrix, corrected tree
+  simulation, signed unordered features, and optional hierarchies on both axes.
+* ``examples/ATAC_RNA_self_cov_joint.ipynb``: automatic cEBMF calls, with RNA
+  conditioned on fixed fitted ATAC loadings.
+* ``examples/ATAC_RNA_hmm_joint.ipynb``: the full coupled ATAC/RNA sampler.
+
+**Fixed cross-modality covariates are not uncertain parents.** Separate
+``cEBMF`` calls with ``X_l=another_model.L`` do not propagate uncertainty or
+feedback between modalities. Changing fixed covariates mid-chain raises an
+error. Use ``JointATACRNA`` below for that coupled target and partial overlap.
+
+The corrected tree simulation has seven named programs but only four leaf
+profiles, so its signal has rank at most four. Good reconstruction does not
+identify the generating seven-program tree. The default total ordering is a
+conditional model, not a learned tree topology.
+
+Fully coupled ATAC-RNA example
+-----------------------------
 
 The runnable notebook is ``examples/ATAC_RNA_hmm_joint.ipynb``.
 It recreates the two ATAC bands and four RNA profiles, and can include
@@ -63,7 +153,8 @@ RNA likelihood information reaches ATAC through the RNA child-prior terms.
 This separate experimental API currently runs on CPU, with scalar fixed
 Gaussian observation noise per modality. The supplied standard deviations
 must describe the data being fitted; 1.5 is the known simulation value.
-The API does not change ``cEBMF.iter_once()`` into a joint update.
+This class couples both modalities. The automatic cEBMF route above handles
+joint inference within a single matrix.
 
 Supported scalar families
 -------------------------
@@ -193,6 +284,7 @@ Verification and diagnostics
 Run the focused mathematical and integration checks::
 
     python -m pytest tests/test_joint_conditional.py tests/test_joint_atac_rna.py -q
+    python -m pytest tests/test_joint_matrix.py -q
 
 Or run the package suite::
 

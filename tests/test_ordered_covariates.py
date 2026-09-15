@@ -58,6 +58,7 @@ def test_atac_then_rna_conditioning_runs_with_factor_specific_network_widths():
         device="cpu",
         prior_L_kwargs={"n_epochs": 2, "n_layers": 1, "hidden_dim": 4},
         prior_F_kwargs={"mu": [0, 0.5, 1], "prior_sd": [0, 0.2], "maxiter": 2, "learn_state_means": False},
+        joint_kwargs={"initialization_iterations": 0, "pretrain_steps": 2},
     )
     atac = cEBMF(torch.rand(12, 16), K=2, **options)
     rna = cEBMF(torch.rand(12, 16), K=3, X_l=atac.L.clone(), **options)
@@ -65,9 +66,8 @@ def test_atac_then_rna_conditioning_runs_with_factor_specific_network_widths():
     rna.initialise_factors()
     for _ in range(2):
         atac.iter_once()
-        rna.covariate.X_l = atac.L.detach().clone()
         rna.iter_once()
-    assert [s["input_layer.weight"].shape[1] for s in atac.model_state_L] == [1, 1]
-    assert [s["input_layer.weight"].shape[1] for s in rna.model_state_L] == [2, 3, 4]
+    assert [p.net.input_layer.weight.shape[1] for p in atac.joint_sampler.axes[0].priors] == [1, 1]
+    assert [p.net.input_layer.weight.shape[1] for p in rna.joint_sampler.axes[0].priors] == [2, 3, 4]
     assert atac.covariate.X_l is None
     assert torch.isfinite(atac.L).all() and torch.isfinite(rna.L).all()

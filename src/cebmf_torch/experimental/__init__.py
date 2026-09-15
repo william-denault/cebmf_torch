@@ -1,4 +1,4 @@
-"""Experimental joint inference; separate from the production cEBMF API."""
+"""Joint inference backends and the experimental coupled ATAC/RNA API."""
 
 from .data import align_modalities
 from .joint import JointATACRNA

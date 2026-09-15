@@ -37,6 +37,9 @@ class CEBMFResult:
     F: Tensor
     tau: Tensor
     history_obj: list
+    reconstruction: Tensor | None = None
+    joint_posterior: object | None = None
+    inference: str = "variational"
 
 
 class NoiseType(StrEnum):
@@ -102,6 +105,7 @@ class cEBMF:
         self_row_cov: bool = False,
         self_col_cov: bool = False,
         device: torch.device | None = None,
+        joint_kwargs: dict | None = None,
     ):
         """
         Parameters
@@ -147,10 +151,15 @@ class cEBMF:
             Whether to use earlier factors (columns strictly before k) as
             self-covariates for factor k. External covariates are prepended.
             The first factor uses an intercept if no external covariates exist.
-            Conditioning uses current posterior means, not a joint hierarchical
-            posterior update that includes downstream conditional-prior terms.
+            Either effective flag selects joint inference, including downstream
+            child-prior contributions. HMM priors ignore the flag on their axis.
         device : torch.device or None, optional
             Target device. Defaults to the result of :func:`get_device`.
+            The joint reference sampler currently requires CPU.
+        joint_kwargs : dict or None, optional
+            Joint initialization, learning and sampling settings, including
+            burnin, draws, thin, seed, pretrain_steps and initialization_iterations.
+            See docs/source/joint_inference.rst for defaults and supported priors.
         """
         self.data = data
         self.device = device or get_device()
@@ -212,6 +221,12 @@ class cEBMF:
         self._initialise_tensors()
         self.internal_epoch = internal_epoch
         self._factors_initialised = False
+        self._user_initialisation = False
+        self._prior_L_kwargs = dict(prior_L_kwargs)
+        self._prior_F_kwargs = dict(prior_F_kwargs)
+        self.joint_kwargs = dict(joint_kwargs or {})
+        self.joint_sampler = None
+        self.joint_posterior = None
 
     @torch.no_grad()
     def fit(self, maxit: int = 50):
@@ -221,16 +236,33 @@ class cEBMF:
         Parameters
         ----------
         maxit : int, optional
-            Number of iterations to run. Default is 50.
+            Number of variational iterations, or prior-learning rounds when
+            a self-covariate flag selects joint inference. Default is 50.
+            Joint fits then discard burn-in and retain posterior draws as
+            configured by joint_kwargs. Rank/noise/non-neural priors are fixed.
 
         Returns
         -------
         CEBMFResult
-            Result container with fitted factors, noise, and objective history.
+            Fitted factors, noise, and history. Joint fits additionally return
+            reconstruction (mean of per-draw products) and joint_posterior;
+            their history is a sampled log joint, not a variational objective.
         """
         if not self._factors_initialised:
             warn("Factors not initialized; using SVD initialization.", stacklevel=2)
             self.initialise_factors()
+        if self._uses_joint_inference:
+            if not isinstance(maxit, int) or maxit < 0:
+                raise ValueError("maxit must be a nonnegative integer (joint prior-learning rounds).")
+            self._ensure_joint_sampler()
+            self.joint_sampler.fit_prior_parameters(maxit)
+            result = self.joint_sampler.sample()
+            self.joint_posterior = result
+            self.L, self.L2 = result.L, result.L2
+            self.F, self.F2 = result.F, result.F2
+            self.R = (self.Y0 - result.reconstruction) * self.mask
+            self.obj = list(result.log_joint)
+            return CEBMFResult(self.L, self.F, self.tau, self.obj, result.reconstruction, result, "joint")
         for _ in range(maxit):
             self.iter_once()
         return CEBMFResult(self.L, self.F, self.tau, self.obj)
@@ -249,6 +281,10 @@ class cEBMF:
         F : Tensor or None, optional
             User-provided initial factor matrix (P, K).  Ignored if L not also provided.
         """
+
+        self.joint_sampler = None
+        self.joint_posterior = None
+        self._user_initialisation = L is not None and F is not None
 
         def _use_strategy(method: str):
             initialise_fn = INIT_STRATEGIES[method]
@@ -281,8 +317,20 @@ class cEBMF:
     @torch.no_grad()
     def iter_once(self):
         """
-        Perform one iteration of the cEBMF update (update all factors and noise).
+        Perform one variational iteration or one fixed-parameter joint sweep.
+
+        Self-covariates select the joint sweep; call fit() to learn the prior
+        parameters and obtain posterior summaries from retained draws.
         """
+        if self._uses_joint_inference:
+            self._ensure_joint_sampler()
+            self.joint_sampler.sweep()
+            self.L, self.F = (value.clone() for value in self.joint_sampler.values)
+            self.L2, self.F2 = self.L.square(), self.F.square()
+            self.R = self.joint_sampler.residual.clone()
+            self.joint_posterior = None
+            self.obj.append(self.joint_sampler.log_joint())
+            return
         tau_map = None if self.noise.type == NoiseType.CONSTANT else self.tau_map
         for k in range(self.model.K):
             self._update_factors(k, tau_map=tau_map, eps=NUMERICAL_EPS)
@@ -291,6 +339,76 @@ class cEBMF:
         self._backfit()
 
         self._cal_obj()
+
+    @property
+    def _uses_joint_inference(self) -> bool:
+        return self.joint_sampler is not None or self.covariate.self_row_cov or self.covariate.self_col_cov
+
+    @torch.no_grad()
+    def _ensure_joint_sampler(self):
+        from cebmf_torch.experimental.matrix import HMM_PRIORS, JointMatrix, joint_options
+
+        if self.joint_sampler is not None:
+            self.joint_sampler.check_fixed_inputs(self)
+            return
+        options = joint_options(self.joint_kwargs)
+        JointMatrix.validate_owner(self)
+        if not self._factors_initialised:
+            self.initialise_factors()
+        # The preliminary independent fit chooses a starting rank and noise.
+        # User-supplied fitted factors keep their rank, values and ordering.
+        if not self._user_initialisation and options["initialization_iterations"]:
+            names = (self.model.prior_L, self.model.prior_F)
+            initial_names = [name if name in HMM_PRIORS else "norm" for name in names]
+            for m, name in enumerate(names):
+                if name in ("cgb", "cgb_sharp", "cgb_sharp_2"):
+                    initial_names[m] = "gbinary"
+            with torch.random.fork_rng():
+                torch.manual_seed(options["seed"])
+                source = cEBMF(
+                    self.Y, K=self.model.K, prior_L=initial_names[0], prior_F=initial_names[1],
+                    prior_L_kwargs=self._prior_L_kwargs if names[0] in HMM_PRIORS else {},
+                    prior_F_kwargs=self._prior_F_kwargs if names[1] in HMM_PRIORS else {},
+                    S=self._S_input,
+                    noise_type=NoiseType.CONSTANT if self._S_input is not None else self.noise.type,
+                    allow_backfitting=self.model.allow_backfitting, prune_thresh=self.model.prune_thresh,
+                    device="cpu",
+                )
+                source.initialise_factors()
+                source.fit(options["initialization_iterations"])
+            if source.model.K < 1:
+                raise ValueError("Independent initialization retained no factors; supply fitted initial L and F.")
+            self.model.K = source.model.K
+            self.L, self.F, self.L2, self.F2 = (getattr(source, key).double().clone() for key in ("L", "F", "L2", "F2"))
+            self.tau = source.tau.clone()
+            self.tau_map = source.tau_map.clone()
+            self.model_state_L, self.model_state_F = source.model_state_L, source.model_state_F
+            self.kl_l, self.kl_f = torch.zeros(self.model.K), torch.zeros(self.model.K)
+            self.pi0_L, self.pi0_F = source.pi0_L, source.pi0_F
+            # Fix a useful loading scale before learning conditional priors.
+            # Preserve L F.T and transform any opposite-axis HMM parameters.
+            axis = next((m for m, name in enumerate(names) if name in ("cgb", "cgb_sharp", "cgb_sharp_2")), None)
+            if axis is not None:
+                value, other = (self.L, self.F) if axis == 0 else (self.F, self.L)
+                scale = value.square().sum(0) / value.abs().sum(0).clamp_min(1e-12)
+                scale = torch.where(scale > 1e-8, scale, torch.ones_like(scale))
+                value.div_(scale)
+                other.mul_(scale)
+                states = self.model_state_F if axis == 0 else self.model_state_L
+                if names[1 - axis] in HMM_PRIORS:
+                    for k, state in enumerate(states):
+                        state["mu"] = state["mu"] * scale[k]
+                        state["prior_sd"] = state["prior_sd"] * scale[k]
+                self.L2, self.F2 = self.L.square(), self.F.square()
+        self.Y0 = self.Y0.double()
+        self.mask = self.mask.double()
+        self.L, self.F = self.L.double(), self.F.double()
+        self.L2, self.F2 = self.L2.double(), self.F2.double()
+        self.obj = []
+        self.joint_sampler = JointMatrix(self)
+        warn("Self-covariates selected joint sampling. fit(maxit) now uses maxit prior-learning rounds, "
+             "then burn-in and retained draws from joint_kwargs. Rank, noise and non-neural priors stay fixed; "
+             "history_obj records sampled log joint densities, not an ELBO.", stacklevel=3)
 
     @torch.no_grad()
     def update_tau(self):
@@ -304,6 +422,8 @@ class cEBMF:
         - ``COLUMN_WISE`` -> tau_col (P,), tau_map broadcast to (N,P)
         - ``KNOWN``       -> no-op; tau_map was built once from the user-supplied ``S``.
         """
+        if getattr(self, "joint_sampler", None) is not None:
+            raise ValueError("Observation noise is frozen during joint inference; start a new fit to change it.")
         if self.noise.type == NoiseType.KNOWN:
             # Variance is fixed by the user; nothing to update.
             return
@@ -446,6 +566,9 @@ class cEBMF:
 
     @torch.no_grad()
     def _cal_obj(self):
+        if self.joint_sampler is not None:
+            self.obj.append(self.joint_sampler.log_joint())
+            return
         # Data term
         ER2 = self._expected_residuals_squared()
         if self.noise.type == NoiseType.CONSTANT:
@@ -488,7 +611,7 @@ class cEBMF:
 
     @torch.no_grad()
     def _update_fitted_value(self):
-        self.Y_fit = self.L @ self.F.T
+        self.Y_fit = self.joint_posterior.reconstruction if self.joint_posterior is not None else self.L @ self.F.T
 
     @torch.no_grad()
     def _expected_residuals_squared(self):
@@ -496,6 +619,11 @@ class cEBMF:
         E[(Y - sum_k L_k F_k)^2] on observed entries.
         Uses: (Y - E[Y])^2 - sum_k (E[L]^2)(E[F]^2)^T + sum_k E[L^2] E[F^2]^T
         """
+        if self.joint_posterior is not None:
+            posterior = self.joint_posterior
+            return ((self.Y0 - posterior.reconstruction).square() + posterior.reconstruction_sd.square()) * self.mask
+        if self.joint_sampler is not None:
+            return self.joint_sampler.residual.square()
         Yfit = self.L @ self.F.T  # (N,P)
         resid_mean_sq = (self.Y0 - Yfit).pow(2)  # (N,P)
         first_moment_sq = (self.L.pow(2)) @ (self.F.pow(2)).T  # Σ_k (E[L]^2)(E[F]^2)^T
@@ -667,6 +795,8 @@ class cEBMF:
         """In-place prune of K and all factor-aligned structures."""
         if not idxs:
             return
+        if self.joint_sampler is not None:
+            raise ValueError("Rank is frozen during joint sampling; start a new fit to change it.")
         keep = [i for i in range(self.model.K) if i not in idxs]
         self.L = self.L[:, keep]
         self.L2 = self.L2[:, keep]

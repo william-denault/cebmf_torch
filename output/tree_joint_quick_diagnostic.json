@@ -1,0 +1,18 @@
+{
+  "n": 300,
+  "p": 80,
+  "seed": 1,
+  "prior_L": "cgb",
+  "column_hierarchy": false,
+  "rank": 8,
+  "rounds": 3,
+  "burnin": 30,
+  "draws": 40,
+  "thin": 1,
+  "signal_rmse_joint": 0.22692723658515837,
+  "signal_rmse_baseline": 0.28166271214478705,
+  "heldout_rmse_joint": 1.2590542897865564,
+  "heldout_rmse_baseline": 1.2664401429527647,
+  "elapsed_seconds": 11.910665700001118,
+  "interpretation": "Finite-chain diagnostic. Seven generating programs yield four leaf profiles; reconstruction does not identify the generating tree. The baseline also differs in prior family."
+}

@@ -134,7 +134,26 @@ controls, direct EBNM calls, and numerical validation.
 
 ## Notes & Tips
 
-- All computations run on the device of your input tensors (CPU or GPU).
+With `self_row_cov=True` or `self_col_cov=True`, `cEBMF.fit()` now uses the
+joint sampler with child-prior feedback. Configure burn-in and retained
+draws using `joint_kwargs={"burnin": 100, "draws": 150, "thin": 2}`;
+`fit(maxit)` then runs `maxit` prior-learning rounds before sampling.
+Use `result.reconstruction` to preserve dependence between sampled L and F.
+This route currently runs on CPU and supports the eight learned scalar
+families, `norm`, and HMM priors. With neither effective self-covariate flag,
+the existing variational fit remains unchanged.
+
+Start with [the simple tree notebook](examples/tree_joint_simple.ipynb),
+[the automatic ATAC/RNA interface](examples/ATAC_RNA_self_cov_joint.ipynb), or
+[full coupled ATAC/RNA inference](examples/ATAC_RNA_hmm_joint.ipynb).
+The simple notebook has one settings cell and runs from top to bottom on CPU.
+For the objective derivation and additional diagnostics, use
+[the detailed tree walkthrough](examples/tree_joint_walkthrough.ipynb).
+See the [joint inference guide](docs/source/joint_inference.rst) for the
+sampling semantics and the distinction between fixed covariates and
+uncertain cross-modality parents.
+
+- Variational computations support CPU or GPU; the joint reference sampler uses CPU.
 - Mini-batch EM for `pi` is implemented via Adam on logits (recommended) or online EM.
 - Truncated normal moments are computed analytically in torch (no SciPy required).
 - The codebase is modular and easy to extend for new prior families or custom models.
