@@ -1,0 +1,130 @@
+\subsection{Population priors and the relation to TwinEB}
+\label{sec:twineb}
+The closest comparison for flexible empirical-Bayes prior learning is
+TwinEB, introduced by Salehi, Nazaret, Shah and Blei
+\cite{twineb}. TwinEB learns mixture priors on the entire row and column
+latent vectors and fits these priors jointly with a variational posterior.
+The paper develops Gaussian and Poisson matrix factorization.
+Its mixture-of-vectors construction must be distinguished from a product
+of independent scalar mixture priors: a shared component label can induce
+dependence among coordinates of a latent vector.
+
+For the Gaussian formulation, write a diagonal-component row mixture as
+\begin{equation}\label{eq:twinebvector}
+p_{\rm pop}(z)=\sum_{h=1}^H\omega_h
+       \prod_{k=1}^K\Normal{z_k}{m_{hk}}{s_{hk}^2}.
+\end{equation}
+The scales in the paper are parameterized per component and coordinate
+(Appendix B). Its mean-field posterior approximation does not imply
+independence under the prior.
+For example, with \(\bar m=\sum_h\omega_hm_h\),
+\[
+\Cov(z)=\sum_h\omega_h\operatorname{diag}(s_h^2)
+       +\sum_h\omega_h(m_h-\bar m)(m_h-\bar m)^\top.
+\]
+The second term may have nonzero off-diagonal entries. Thus dependence
+between latent programs is not, by itself, a capability absent from TwinEB.
+
+\paragraph{An exact relationship at the level of the loading prior.}
+The vector-mixture form implies the autoregressive conditionals
+\begin{align}
+p_{\rm pop}(z_k\mid z_{<k})
+&=\sum_h\widetilde\omega_{hk}(z_{<k})
+              \Normal{z_k}{m_{hk}}{s_{hk}^2},\label{eq:twinebconditional}\\
+\widetilde\omega_{hk}(z_{<k})
+&=\frac{\omega_h\prod_{j<k}\Normal{z_j}{m_{hj}}{s_{hj}^2}}
+        {\sum_r\omega_r\prod_{j<k}\Normal{z_j}{m_{rj}}{s_{rj}^2}}.
+\label{eq:twinebgate}
+\end{align}
+To prove the result, let
+\(C_k(z_{\leq k})=\sum_h\omega_h
+\prod_{j\leq k}\Normal{z_j}{m_{hj}}{s_{hj}^2}\), with \(C_0=1\).
+The conditional in \eqref{eq:twinebconditional} equals
+\(C_k/C_{k-1}\). Multiplying over \(k\) telescopes to \(C_K\), which
+is \eqref{eq:twinebvector}.
+
+Accordingly, a conditional Gaussian-mixture framework that permits the
+specific gates \eqref{eq:twinebgate} contains this row-prior family exactly.
+An unrestricted conditional head can also vary the component means and
+variances with preceding coordinates, and incorporate observed covariates.
+However, an arbitrary finite ReLU network does not necessarily implement
+the log-quadratic Bayes gates exactly. A one-slab CGB is also a much
+smaller family than an unrestricted vector mixture.
+The result is a distributional inclusion under explicit assumptions,
+not a blanket inclusion claim for every registry configuration.
+
+Any joint density admits an autoregressive factorization by the chain
+rule. Moreover, increasing the number of Gaussian mixture components
+already gives highly flexible continuous population models.
+The proposed ordering therefore does not establish that TwinEB cannot
+represent nonlinear dependence. The empirical question is whether the
+chosen conditional parameterization represents and learns scientifically
+relevant dependencies more efficiently at feasible sample sizes and
+computational budgets. Exact atomic probabilities are an additional
+modeling choice; narrow continuous Gaussians approximate concentration
+near zero without assigning positive probability to zero itself.
+
+\paragraph{Different structural assumptions.}
+The present model explicitly separates modality-specific latent programs
+and specifies
+\[
+p(A_i,R_i\mid X_i)=p(A_i\mid X_i)p(R_i\mid A_i,X_i)
+\]
+through within- and between-modality conditional distributions.
+This allows external covariates to modify activation probabilities,
+amplitudes or scales at particular nodes. All such conditional factors
+belong to one normalized joint model; upstream updates include the
+downstream evidence described in \eqref{eq:familyD}.
+
+TwinEB, as formulated in the cited paper, uses population priors for a
+single matrix. A multi-view extension could concatenate loading vectors
+and specify a suitable block observation model. That is a legitimate
+comparator construction, but it should be identified as an extension
+and implemented with the same missing-data likelihood and evaluation
+protocol rather than attributed to the published model.
+
+The feature-factor assumptions differ as well. TwinEB's column prior is
+a mixture on an entire feature's latent vector; it can relate factor
+coordinates within that vector. The present HMM instead relates adjacent
+feature positions within each factor and is independent across factors.
+It is not a strict superset of the TwinEB column-prior model. Similarly,
+the current Gaussian observation implementation does not subsume the
+paper's Poisson formulation.
+
+\paragraph{Inference and the proposed contribution.}
+Both approaches use learned distributions to regularize matrix
+factorization. TwinEB optimizes prior and mean-field variational
+parameters through an ELBO. The reference solver here uses analytic
+normal-means proposals with a child-likelihood Metropolis correction,
+sequence sampling for HMM factors, and optional partial Monte Carlo
+empirical-Bayes learning. Section~\ref{sec:familyvi} supplies an alternative
+augmented variational formulation; it has not been established to be
+faster or more accurate than TwinEB's inference.
+
+A defensible methodological contribution is therefore a modular
+conditional-prior factorization framework with explicit sparse or
+positive distributions, fixed side information, ordered feature priors,
+and joint uncertainty propagation across partially observed modalities.
+The distributional decomposition and the Metropolis identity are
+established mathematics. Novelty would rest on a useful model
+construction, effective inference and evidence that these structural
+choices improve a defined scientific task.
+
+\paragraph{Comparisons needed to support this positioning.}
+Include TwinEB alongside independent cEBMF and the multi-omics
+comparators below. On a common Gaussian single-matrix benchmark,
+compare vector population mixtures and autoregressive mixtures at
+matched ranks and documented parameter and tuning budgets. For
+multi-view data, report any required extension of the competitor.
+Separately ablate the hierarchy, nonlinear means and scales, exact
+spikes, exponential slabs, fixed covariates and HMM smoothing.
+This distinguishes prior expressiveness, regularization, modality
+coupling and the inference algorithm.
+
+Evaluation should include held-out observations, missing-modality
+prediction, predictive calibration, and computation at matched
+accuracy. For samplers, report effective sample sizes and convergence
+diagnostics rather than acceptance rates alone. For VI, assess the
+effect of its dependence assumptions against small reference problems.
+No result in this derivation establishes empirical superiority over
+TwinEB or the other methods.

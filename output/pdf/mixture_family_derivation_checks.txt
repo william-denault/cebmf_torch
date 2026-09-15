@@ -1,0 +1,144 @@
+Mixture-family manuscript verification
+2026-09-15
+
+PASS Gaussian evidence and moments a=0.0, mu=-0.6, var=0.7: max absolute error 2.220e-16
+PASS Gaussian evidence and moments a=0.0, mu=1.2, var=0.04: max absolute error 2.220e-16
+PASS Gaussian evidence and moments a=0.0, mu=0.5, var=1e-10: max absolute error 2.220e-16
+PASS Gaussian evidence and moments a=0.3, mu=-0.6, var=0.7: max absolute error 4.441e-16
+PASS Gaussian evidence and moments a=0.3, mu=1.2, var=0.04: max absolute error 2.220e-16
+PASS Gaussian evidence and moments a=0.3, mu=0.5, var=1e-10: max absolute error 1.665e-16
+PASS Gaussian evidence and moments a=2.0, mu=-0.6, var=0.7: max absolute error 1.110e-16
+PASS Gaussian evidence and moments a=2.0, mu=1.2, var=0.04: max absolute error 6.661e-16
+PASS Gaussian evidence and moments a=2.0, mu=0.5, var=1e-10: max absolute error 1.665e-16
+PASS Gaussian evidence and moments a=8.0, mu=-0.6, var=0.7: max absolute error 5.551e-17
+PASS Gaussian evidence and moments a=8.0, mu=1.2, var=0.04: max absolute error 8.882e-16
+PASS Gaussian evidence and moments a=8.0, mu=0.5, var=1e-10: max absolute error 2.220e-16
+PASS Exponential evidence and moments a=0.0, b=0.0, rate=0.4, sign=-1: max absolute error 4.441e-16
+PASS Exponential evidence and moments a=0.0, b=0.0, rate=0.4, sign=1: max absolute error 4.441e-16
+PASS Exponential evidence and moments a=0.0, b=0.0, rate=1.7, sign=-1: max absolute error 2.220e-16
+PASS Exponential evidence and moments a=0.0, b=0.0, rate=1.7, sign=1: max absolute error 2.220e-16
+PASS Exponential evidence and moments a=0.3, b=-0.7, rate=0.4, sign=-1: max absolute error 4.441e-16
+PASS Exponential evidence and moments a=0.3, b=-0.7, rate=0.4, sign=1: max absolute error 1.721e-14
+PASS Exponential evidence and moments a=0.3, b=-0.7, rate=1.7, sign=-1: max absolute error 9.992e-15
+PASS Exponential evidence and moments a=0.3, b=-0.7, rate=1.7, sign=1: max absolute error 4.691e-14
+PASS Exponential evidence and moments a=2.0, b=2.0, rate=0.4, sign=-1: max absolute error 8.049e-16
+PASS Exponential evidence and moments a=2.0, b=2.0, rate=0.4, sign=1: max absolute error 2.220e-16
+PASS Exponential evidence and moments a=2.0, b=2.0, rate=1.7, sign=-1: max absolute error 1.707e-15
+PASS Exponential evidence and moments a=2.0, b=2.0, rate=1.7, sign=1: max absolute error 1.110e-16
+PASS Exponential evidence and moments a=1.0, b=-19.0, rate=0.4, sign=1: max absolute error 5.436e-12
+PASS Exponential evidence and moments a=1.0, b=-19.0, rate=1.7, sign=1: max absolute error 1.889e-11
+PASS Exponential evidence and moments a=1.0, b=-79.0, rate=0.4, sign=1: max absolute error 8.882e-16
+PASS Exponential evidence and moments a=1.0, b=-79.0, rate=1.7, sign=1: max absolute error 4.441e-16
+PASS Exponential log evidence at z=-1000: max absolute error 8.882e-16
+PASS Exponential zero-precision evidence limit: max absolute error 5.917e-11
+PASS Gaussian mixture normalized normal-means weights: max absolute error 1.110e-16
+PASS Gaussian mixture plus spike normalized normal-means weights: max absolute error 1.110e-16
+PASS one-slab CGB normalized normal-means weights: max absolute error 5.551e-17
+PASS two-slab CGB normalized normal-means weights: max absolute error 1.110e-16
+PASS two-slab without spike normalized normal-means weights: max absolute error 1.110e-16
+PASS exponential mixture normalized normal-means weights: max absolute error 1.110e-16
+PASS exponential mixture plus spike normalized normal-means weights: max absolute error 1.110e-16
+PASS Mixed-family tilted component integrals, children=False: max absolute error 5.551e-16
+PASS Mixed-family normalized masses and moments, children=False: max absolute error 1.110e-16
+PASS Mixed-family tilted component integrals, children=True: max absolute error 8.327e-17
+PASS Mixed-family normalized masses and moments, children=True: max absolute error 1.110e-16
+PASS Augmented MH ratio labels 0->0: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 0->0: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 0->1: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 0->1: max absolute error 8.882e-16
+PASS Augmented MH ratio labels 0->2: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 0->2: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 0->3: max absolute error 2.220e-16
+PASS Augmented detailed balance labels 0->3: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 0->4: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 0->4: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 0->5: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 0->5: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 1->0: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 1->0: max absolute error 8.882e-16
+PASS Augmented MH ratio labels 1->1: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 1->1: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 1->2: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 1->2: max absolute error 8.882e-16
+PASS Augmented MH ratio labels 1->3: max absolute error 6.661e-16
+PASS Augmented detailed balance labels 1->3: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 1->4: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 1->4: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 1->5: max absolute error 8.882e-16
+PASS Augmented detailed balance labels 1->5: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 2->0: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 2->0: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 2->1: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 2->1: max absolute error 8.882e-16
+PASS Augmented MH ratio labels 2->2: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 2->2: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 2->3: max absolute error 2.220e-16
+PASS Augmented detailed balance labels 2->3: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 2->4: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 2->4: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 2->5: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 2->5: max absolute error 1.776e-15
+PASS Augmented MH ratio labels 3->0: max absolute error 2.220e-16
+PASS Augmented detailed balance labels 3->0: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 3->1: max absolute error 8.882e-16
+PASS Augmented detailed balance labels 3->1: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 3->2: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 3->2: max absolute error 8.882e-16
+PASS Augmented MH ratio labels 3->3: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 3->3: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 3->4: max absolute error 2.220e-16
+PASS Augmented detailed balance labels 3->4: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 3->5: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 3->5: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 4->0: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 4->0: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 4->1: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 4->1: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 4->2: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 4->2: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 4->3: max absolute error 2.220e-16
+PASS Augmented detailed balance labels 4->3: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 4->4: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 4->4: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 4->5: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 4->5: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 5->0: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 5->0: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 5->1: max absolute error 8.882e-16
+PASS Augmented detailed balance labels 5->1: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 5->2: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 5->2: max absolute error 1.776e-15
+PASS Augmented MH ratio labels 5->3: max absolute error 2.220e-16
+PASS Augmented detailed balance labels 5->3: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 5->4: max absolute error 4.441e-16
+PASS Augmented detailed balance labels 5->4: max absolute error 0.000e+00
+PASS Augmented MH ratio labels 5->5: max absolute error 0.000e+00
+PASS Augmented detailed balance labels 5->5: max absolute error 0.000e+00
+PASS Exponential VI expected log prior a=0.0, v=0.01: max absolute error 0.000e+00
+PASS Exponential VI expected log prior a=0.0, v=0.4: max absolute error 0.000e+00
+PASS Exponential VI expected log prior a=0.0, v=1.8: max absolute error 0.000e+00
+PASS Exponential VI normalized tilted integrals a=0.0: max absolute error 6.939e-18
+PASS Exponential VI expected log prior a=1.3, v=0.01: max absolute error 5.551e-17
+PASS Exponential VI expected log prior a=1.3, v=0.4: max absolute error 0.000e+00
+PASS Exponential VI expected log prior a=1.3, v=1.8: max absolute error 0.000e+00
+PASS Exponential VI normalized tilted integrals a=1.3: max absolute error 1.388e-17
+PASS Exponential child VI expected log density: max absolute error 2.220e-16
+PASS Exponential child parent derivative: max absolute error 1.077e-11
+PASS Spike and two-exponential VI probabilities a=0.0: max absolute error 0.000e+00
+PASS Spike and two-exponential VI probabilities a=1.3: max absolute error 5.551e-17
+PASS Gaussian M-step objective at numerical optimum: max absolute error 0.000e+00
+PASS Exponential M-step rate: max absolute error 7.490e-09
+PASS Sign-constrained CGB Gaussian objective: max absolute error 0.000e+00
+PASS TwinEB autoregressive identity vector 0: max absolute error 1.776e-15
+PASS TwinEB autoregressive identity vector 1: max absolute error 0.000e+00
+PASS TwinEB autoregressive identity vector 2: max absolute error 0.000e+00
+PASS TwinEB autoregressive identity vector 3: max absolute error 0.000e+00
+PASS TwinEB autoregressive identity vector 4: max absolute error 8.882e-16
+PASS TwinEB autoregressive identity vector 5: max absolute error 0.000e+00
+PASS TwinEB autoregressive identity vector 6: max absolute error 8.882e-16
+PASS TwinEB autoregressive identity vector 7: max absolute error 0.000e+00
+PASS TwinEB autoregressive identity vector 8: max absolute error 8.882e-16
+PASS TwinEB autoregressive identity vector 9: max absolute error 8.882e-16
+
+138 numerical checks passed.
+These checks validate identities, not MCMC mixing or empirical superiority.

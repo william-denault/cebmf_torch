@@ -8,11 +8,11 @@
 \usepackage[dvipsnames]{xcolor}
 \usepackage{hyperref,fancyhdr}
 \hypersetup{colorlinks=true,linkcolor=MidnightBlue,urlcolor=MidnightBlue,
- citecolor=MidnightBlue,pdftitle={Joint inference for ordered ATAC and RNA factor models},
+ citecolor=MidnightBlue,pdftitle={Hierarchical conditional empirical Bayes matrix factorization},
  pdfauthor={Derivation prepared for the cEBMF project}}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small Ordered ATAC and RNA factor models}
-\fancyhead[R]{\small Model and inference derivation}
+\fancyhead[L]{\small Hierarchical conditional empirical Bayes}
+\fancyhead[R]{\small Models and inference}
 \fancyfoot[C]{\thepage}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{5pt}
@@ -34,55 +34,79 @@
 \newcommand{\ind}{\mathbf 1}
 \newcommand{\Normal}[3]{\varphi\!\left(#1;#2,#3\right)}
 \newcommand{\given}{\mid}
-\title{Joint inference for ordered ATAC and RNA factor models\\[4pt]
-\large From conditional EBNM updates to a coherent joint posterior}
-\author{Technical derivation for the cEBMF project}
+\title{Hierarchical conditional empirical Bayes matrix factorization\\[4pt]
+\large Gaussian, exponential and sparse priors for coupled molecular programs}
+\author{Methods manuscript for the cEBMF project}
 \date{15 September 2026}
 \begin{document}
 \maketitle
 \begin{abstract}
-We derive a paired Gaussian matrix factorization with ordered loading priors
-\(A_{ik}\mid A_{i,<k}\) and \(R_{ij}\mid R_{i,<j},A_i\), and HMM priors on
-the feature factors. The generative direction ATAC to RNA permits posterior
-information to flow in both directions. The loading update is a normal-means
-likelihood times its own conditional prior times contributions from its
-children. We give a prior-agnostic update and a Metropolis correction that can
-use any evaluable, sampleable conditional EBNM posterior. For all scalar learned
-registry families we also derive a common augmented Gaussian-mixture update.
-For the package's CGB family, these contributions tilt an ordinary
-spike-and-Gaussian posterior; scalar full conditionals require one-dimensional
-integration, while mean-field updates additionally require expectations over
-uncertain parents. We give the exact conditional, a joint variational objective,
-normalized CGB updates and moments, HMM updates, parameter updates, and simpler
-binary and linear-logistic cases. A comparison with existing multi-omics
-methods distinguishes conditional-prior modeling from shared-subspace
-factorization and hierarchical neural decoders.
-An accompanying experimental implementation supplies augmented joint
-sampling for all scalar learned families, HMM factor draws, and optional
-partial empirical-Bayes learning. We also derive missing-modality handling
-and discuss variational and score-based approximations. These results are
-not an empirical claim that joint fitting improves both modalities.
+We study multi-modal matrix factorization in which the distributions of
+sample loadings depend on earlier latent programs and fixed side information.
+A normalized directed prior links modality-specific additive factorizations,
+while hidden Markov priors regularize ordered feature factors. We derive a
+common inference construction for conditional Gaussian mixtures, exponential
+mixtures, optional fixed point masses, and the one- and two-slab CGB families.
+Each loading update combines a Gaussian normal-means likelihood, its own
+conditional prior, and the likelihood contributions of its children.
+Analytic component posteriors provide proposals for a Metropolis correction
+that preserves the joint latent target, including transitions to and from
+exact zero. We also derive augmented variational coordinates and
+complete-data parameter updates, distinguish exact identities from numerical
+approximations, and handle partially overlapping modalities by integrating
+or sampling missing latent programs. A comparison with population-prior
+matrix factorization establishes an explicit autoregressive representation
+of vector Gaussian mixtures and delineates the additional structural
+assumptions of the proposed framework. An experimental Gaussian-mixture
+implementation and independent numerical checks support the derivations;
+exponential-mixture solver support and comparative empirical validation
+remain future work. The construction does not imply causal identification
+or guaranteed improvement in either modality.
 \end{abstract}
-\textbf{Main conclusion.} The general problem is nonconjugate, but the difficulty
-is localized. HMM factor smoothing remains available. The new machinery is
-chiefly in the loading posteriors, expected conditional-prior terms, and common
-objective. The current two-fitter covariate-exchange procedure does not supply
-these pieces automatically.
 
-\textbf{Reading guide.} Sections~\ref{sec:models}--\ref{sec:exact} define the
-model and exact inference target. Sections~\ref{sec:vi}--\ref{sec:cgb} derive
-implementable coordinate equations. Section~\ref{sec:generalregistry} is the
-general result for the learned registry, including an exact-target Gibbs option.
-Sections~\ref{sec:hmm}--\ref{sec:learning}
-complete the remaining updates. Sections~\ref{sec:alternatives}--\ref{sec:useful}
-explain computational choices, qualifications, and usefulness.
-Section~\ref{sec:comparison} compares the model and inference construction
-with related multi-omics methods and specifies the limits of capacity claims.
 \clearpage
 \begingroup\small\setlength{\parskip}{0pt}
 \tableofcontents
 \endgroup
 \clearpage
+
+\section{Introduction}\label{sec:introduction}
+Multi-modal measurements can reveal different aspects of a sample's latent
+biological programs. Separate matrix factorizations allow each modality to
+have its own programs, but independent priors do not express how the
+activation or amplitude of one program informs another. Conversely,
+substituting estimated loadings from one modality into a conditional prior
+for another treats those estimates as observed and omits feedback through
+their dependent programs.
+
+Empirical Bayes matrix factorization reduces factor updates to normal-means
+problems \cite{wang}, and cEBMF allows observed covariates to inform the prior
+\cite{cebmf}. TwinEB learns flexible population mixtures on entire row and
+column latent vectors \cite{twineb}. Shared-subspace and hierarchical
+multi-omics models provide complementary integration strategies
+\cite{mofa,jive,cavachon}. Building on these ideas, we consider normalized
+conditional loading distributions whose inputs include uncertain latent
+programs as well as fixed covariates. The inferential target is the resulting
+joint posterior, conditional on estimated parameters in an empirical-Bayes
+analysis.
+
+The methodological construction has three parts. First, analytic
+normal-means posteriors for Gaussian, exponential and atomic components
+provide a common computational primitive. Second, child-prior contributions
+supply the missing upstream feedback, through either exact-target sampling
+or explicitly defined variational coordinates. Third, sequence updates for
+feature factors and missing-modality likelihoods complete the model without
+changing its directed loading-prior semantics. The resulting modularity
+covers the one- and two-slab CGB variants while retaining their actual
+support and scale constraints.
+
+The paper develops these identities and their implementation requirements.
+It does not present a completed empirical benchmark. We distinguish the
+prototype's implemented Gaussian/atomic sampler from derived extensions,
+and identify the experiments required to assess computational efficiency,
+uncertainty calibration and scientific utility. Section~\ref{sec:twineb}
+positions the contribution relative to population-prior factorization;
+Section~\ref{sec:comparison} also compares multi-omics alternatives.
 
 \section{Notation and assumptions}\label{sec:notation}
 We observe paired cells in two matrices, with no requirement that their features
@@ -120,7 +144,7 @@ All distributions and log densities involving a spike are interpreted on their
 mixed discrete/continuous space, not by assigning an infinite ordinary density
 to zero. Empty products equal one; empty sums equal zero.
 
-\section{The models being compared}\label{sec:models}
+\section{Hierarchical factorization model}\label{sec:models}
 \subsection{Observation models}
 For \((i,t)\in\Omega_m\),
 \begin{equation}\label{eq:observation}
@@ -670,6 +694,8 @@ feature covariates and no factor children, the update reduces to the ordinary
 conditional EBNM problem. Latent self-covariates on \(F\) introduce the same
 expected-parent and child-message requirements as on \(L\).
 
+\input{mixture_family_derivations.tex}
+
 \section{Normalized CGB updates}\label{sec:cgb}
 \subsection{Simplifying the downstream term}
 Let \(\gamma_c=q(Z_c=1)\) denote a child's posterior slab probability. Because
@@ -1105,7 +1131,7 @@ and initialization. Keeping old per-factor KL values after changing their
 parents does not evaluate the current joint objective. A Gibbs version samples
 full conditionals instead and targets a posterior rather than an ELBO.
 
-\section{How useful this could be}\label{sec:useful}
+\section{Scientific scope and evaluation}\label{sec:useful}
 \subsection{What the construction could provide}
 \begin{enumerate}
 \item \textbf{Bidirectional use of paired data.} RNA can resolve ambiguous
@@ -1179,7 +1205,7 @@ literature; the derivation alone does not establish methodological novelty.
 \section{Comparison with other multi-omics methods}\label{sec:comparison}
 \subsection{Scope and notation}
 This section compares the proposed model with representative multi-omics
-methods, using the literature reviewed on 14 September 2026. It is a
+methods, using the literature reviewed through 15 September 2026. It is a
 comparison of statistical structure and inferential requirements, not an
 empirical performance ranking or an exhaustive novelty review.
 Throughout, \(L^m\) denotes sample loadings and \(F^m\) denotes feature factors;
@@ -1205,6 +1231,8 @@ uses \(Y^A=AF_A^\top+E^A\), \(Y^R=RF_R^\top+E^R\), and the normalized
 conditional prior~\eqref{eq:orderedprior}. These schematic matrix equations
 do not identify methods' complete model classes: their priors, likelihoods,
 rank constraints, and identifiability restrictions can differ.
+
+\input{twineb_positioning.tex}
 
 \subsection{Structural comparison}
 Table~\ref{tab:methodcomparison} summarizes the cited formulations.
@@ -1236,6 +1264,14 @@ Method & Native model structure & Relation to this derivation\\
 \endfoot
 \bottomrule
 \endlastfoot
+TwinEB (2024)
+&
+Learns mixture population priors on complete row and column latent vectors,
+with joint variational empirical-Bayes estimation.
+&
+Vector mixtures already capture coordinate dependence. Explicit conditional
+covariates, modality structure and HMM adjacency are distinct choices;
+Section~\ref{sec:twineb} gives the precise relationship \cite{twineb}.\\[5pt]
 JIVE (2013); AJIVE (2018)
 &
 Decompose joint and individual low-rank sample subspaces. AJIVE uses
@@ -1462,7 +1498,7 @@ plug-in conditioning in each direction, within-modality hierarchy only,
 a linear conditional model, and the joint-target updates derived here.
 A two-stage nonlinear map between independently fitted loadings helps
 separate the benefit of flexible regression from that of joint inference.
-External comparators should cover both linear/empirical Bayes methods
+External comparators should include TwinEB and both linear/empirical Bayes methods
 and hierarchical neural models in Table~\ref{tab:methodcomparison}.
 
 Evaluate held-out prediction and calibration separately for both
@@ -1561,6 +1597,17 @@ The companion script \path{verify_atac_rna_derivation.py} reproduces these
 checks using Python, NumPy and SciPy. It is a verification script for this
 document, not a factorization solver.
 
+The additional script \path{verify_mixture_family_derivation.py} independently
+checks the Gaussian, exponential and atomic identities in
+Section~\ref{sec:mixturefamilies}. It compares normalizers and moments with
+numerical integration, tests missing-likelihood and reflected-exponential
+cases, checks the augmented Metropolis ratio across component types,
+verifies exponential variational coordinates with uncertain parents,
+and verifies the autoregressive vector-mixture identity in
+Section~\ref{sec:twineb}. Results are recorded in
+\path{mixture_family_derivation_checks.txt}. These checks concern mathematical
+identities; they do not implement an exponential-mixture factorization solver.
+
 The inspected source locations are relative to the repository root:
 \begin{itemize}
 \item \path{src/cebmf_torch/cebnm/cov_gb_prior.py}\par
@@ -1597,9 +1644,13 @@ The executable tests are \path{tests/test_joint_conditional.py} and
 \path{tests/test_joint_atac_rna.py}. These are correctness tests, not a
 convergence certificate or a benchmark against competing methods.
 
-\clearpage
 \begingroup\raggedright
 \begin{thebibliography}{99}
+\bibitem{twineb} S. Salehi, A. Nazaret, S. P. Shah and D. M. Blei (2024).
+Population Priors for Matrix Factorization.
+\emph{Transactions on Machine Learning Research}, December 2024.
+\url{https://openreview.net/forum?id=AT9G5s1pOj}.
+
 \bibitem{hyvarinen} A. Hyv\"arinen (2005).
 \emph{Estimation of Non-Normalized Statistical Models by Score Matching}.
 Journal of Machine Learning Research 6, 695--709.

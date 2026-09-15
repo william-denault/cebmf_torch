@@ -1,0 +1,445 @@
+\section{Gaussian, exponential and atomic conditional mixtures}
+\label{sec:mixturefamilies}
+This section specializes the joint update to the distribution families of
+primary interest. The same construction covers a Gaussian mixture, an
+exponential mixture, either family with point masses, and a mixture containing
+both continuous families. The normalized normal-means proposal is available
+analytically; its hierarchical correction need not be conjugate.
+
+\subsection{A normalized family with fixed supports}
+For node \(u\) in cell \(i\), let \(h_{iu}=(P_{iu},X_i)\) collect its
+permitted latent parents and fixed observed covariates. Suppress these
+indices where unambiguous. Introduce a component label \(B\) with law
+\begin{equation}\label{eq:familyprior}
+\begin{split}
+g(dv\mid h)={}&
+\sum_{j\in\mathcal A}w_j(h)\delta_{c_j}(dv)
++\sum_{j\in\mathcal G}w_j(h)\Normal{v}{\mu_j(h)}{d_j^2(h)}\,dv\\
+&+\sum_{j\in\mathcal E}w_j(h)\lambda_j(h)
+             e^{-\lambda_j(h)v}\ind\{v>0\}\,dv .
+\end{split}
+\end{equation}
+Here the three label sets are disjoint, \(w_j\geq0\), \(\sum_jw_j=1\),
+\(d_j^2>0\), and \(\lambda_j>0\). Any set may be empty, provided at least
+one component remains. A zero spike corresponds to a fixed \(c_j=0\).
+The atoms and component supports do not depend on parents or trainable
+parameters in this derivation. Moving an atom with a parent would introduce
+deterministic support constraints and invalidate the simple density
+cancellations below without further analysis.
+
+The augmented conditional is \(g(dv,j\mid h)=w_j(h)G_j(dv\mid h)\).
+Use Lebesgue measure on each continuous component and unit point mass on
+each atomic component as the reference measure. Equivalently, a collapsed
+prior uses Lebesgue measure plus the distinct fixed atoms. At an atom its
+Radon--Nikodym derivative is the total atomic probability; continuous
+densities evaluated at that point are not added to the atomic probability.
+This convention removes any need to approximate a spike by a narrow Gaussian.
+
+Neural networks may parameterize weights by softmax and positive scales or
+rates by suitable positive transformations. A graph neural network is also
+admissible if its latent inputs respect the specified directed acyclic graph.
+If it introduces additional cross-cell dependencies, the child sets and
+parallel update schedule must change accordingly. Fixed side information
+may enter every conditional without being sampled. In all cases, each head
+must specify a normalized probability distribution.
+
+\subsection{Analytic normal-means proposals and moments}
+\label{sec:familyproposal}
+Condition on current parents, other latent variables and parameters, and
+write the observation contribution as
+\(\ell(v)=-av^2/2+bv\), with \(a\geq0\) and \(a=0\Rightarrow b=0\).
+For every component define
+\begin{equation}\label{eq:familyI}
+I_j=\int e^{\ell(v)}G_j(dv),\qquad
+Q_j(dv)=I_j^{-1}e^{\ell(v)}G_j(dv),\qquad
+\widetilde w_j=\frac{w_jI_j}{\sum_r w_rI_r}.
+\end{equation}
+The exact own-prior normal-means posterior is
+\(q_0(dv,j)=\widetilde w_jQ_j(dv)\).
+The same unnormalized likelihood \(e^{\ell(v)}\) is used for every label;
+one must not combine these \(I_j\) with normalized observation densities
+for only some components.
+
+\paragraph{Atomic components.}
+For \(G_j=\delta_{c_j}\),
+\begin{equation}\label{eq:familyatom}
+\log I_j=-ac_j^2/2+bc_j,\qquad
+Q_j=\delta_{c_j},\qquad
+\E_{Q_j}V=c_j,\quad \E_{Q_j}V^2=c_j^2.
+\end{equation}
+In particular \(I_j=1\) for the zero spike. Its posterior probability still
+changes through normalization against the continuous components.
+
+\paragraph{Gaussian components.}
+Let \(G_j=\N(\mu_j,d_j^2)\) and \(t_j=1+ad_j^2\). Completing the square gives
+\begin{align}
+V_j&=\frac{d_j^2}{t_j},&
+M_j&=\frac{\mu_j+bd_j^2}{t_j},&
+Q_j&=\N(M_j,V_j),\label{eq:familygauss}\\
+\log I_j&=-\frac12\log t_j+
+\frac{-a\mu_j^2/2+b\mu_j+b^2d_j^2/2}{t_j}.
+\label{eq:familygaussI}
+\end{align}
+Thus \(\E_{Q_j}V=M_j\) and \(\E_{Q_j}V^2=M_j^2+V_j\).
+The expression for \(\log I_j\) avoids subtracting large
+\(\mu_j^2/d_j^2\) terms when the slab is narrow.
+
+\paragraph{Exponential components.}
+Let \(G_j(dv)=\lambda_j e^{-\lambda_jv}\ind\{v>0\}dv\).
+For \(a>0\), put
+\(z_j=(b-\lambda_j)/\sqrt a\) and \(m_j=(b-\lambda_j)/a\).
+Since
+\[
+-av^2/2+(b-\lambda_j)v
+=-a(v-m_j)^2/2+(b-\lambda_j)^2/(2a),
+\]
+integration over the positive half-line gives
+\begin{align}
+Q_j&=\N_{[0,\infty)}(m_j,a^{-1}),\label{eq:familyexp}\\
+\log I_j&=\log\lambda_j+\tfrac12\log(2\pi/a)
+                 +\tfrac12z_j^2+\log\Phi(z_j).\label{eq:familyexpI}
+\end{align}
+Writing \(r(z)=\varphi(z)/\Phi(z)\), its first two moments are
+\begin{equation}\label{eq:familyexpmoments}
+\E_{Q_j}V=\frac{z_j+r(z_j)}{\sqrt a},\qquad
+\E_{Q_j}V^2=\frac{1+z_j^2+z_jr(z_j)}{a}.
+\end{equation}
+These follow either from truncated-normal moments or by differentiating
+\(I_j\) with respect to \(b\). If \(a=b=0\), evaluate the limit directly:
+\[
+I_j=1,\qquad Q_j=\operatorname{Exp}(\lambda_j),\qquad
+\E V=\lambda_j^{-1},\quad \E V^2=2\lambda_j^{-2}.
+\]
+This case occurs for a loading without a direct modality likelihood.
+Its children can nevertheless inform its posterior.
+
+For negative \(z\), an equivalent expression avoids cancellation in the
+log normalizer:
+\begin{equation}\label{eq:experfcx}
+\log I_j=\log\lambda_j+\tfrac12\log\{\pi/(2a)\}
+             +\log\operatorname{erfcx}(-z_j/\sqrt2),
+\end{equation}
+where \(\operatorname{erfcx}(x)=e^{x^2}\operatorname{erfc}(x)\).
+Use log-CDF functions for the other branch and log-sum-exp for mixture
+weights. The moment identities in \eqref{eq:familyexpmoments} can still
+suffer cancellation for large negative \(z\); stable tail expansions or
+specialized truncated-normal routines are needed in numerical solvers.
+For example, if \(x=-z>0\), the unnormalized moments of
+\(T=\sqrt a\,V\) are
+\[
+K_n(x)=\int_0^\infty t^n e^{-xt-t^2/2}\,dt
+\sim x^{-n-1}\sum_{k=0}^\infty
+\frac{(-1)^k(n+2k)!}{2^k k!\,x^{2k}}\qquad(x\to\infty).
+\]
+Use \(K_1/(\sqrt a K_0)\) and \(K_2/(aK_0)\) for the first two
+moments, truncating this asymptotic expansion in the far tail.
+The expansion follows by setting \(y=xt\), expanding
+\(e^{-y^2/(2x^2)}\), and integrating each term against \(e^{-y}\).
+It is an asymptotic expansion, not a convergent series at every \(x\).
+There is no justification for replacing \(a=0\) by an arbitrary
+positive precision.
+
+A reflected exponential with fixed orientation \(\kappa_j\in\{-1,1\}\)
+has density
+\(\lambda_j e^{-\lambda_j\kappa_jv}\ind\{\kappa_jv>0\}\).
+Apply \eqref{eq:familyexp}--\eqref{eq:familyexpmoments} to
+\(T=\kappa_jV\) with \(b\) replaced by \(\kappa_jb\).
+Multiply the first moment by \(\kappa_j\); leave the second moment unchanged.
+The sign of a Gaussian mean, by contrast, does not restrict its support.
+
+\paragraph{Mixture summaries.}
+Without children, the first two posterior moments are
+\[
+\E_{q_0}V=\sum_j\widetilde w_j\E_{Q_j}V,\qquad
+\E_{q_0}V^2=\sum_j\widetilde w_j\E_{Q_j}V^2.
+\]
+With a zero spike and otherwise continuous components,
+\(\Pr(V=0)=\widetilde w_0\).
+Under the convention
+\(\mathrm{lfsr}=\min\{\Pr(V\leq0),\Pr(V\geq0)\}\),
+the spike contributes to both probabilities; a positive exponential
+contributes only to the second, and a Gaussian contributes its appropriate
+normal-CDF probability. These are marginal posterior summaries, not
+classification based on the largest component density.
+
+\subsection{Exact hierarchical correction}
+\label{sec:familycorrection}
+During an augmented coordinate move keep each child's value \(V_c\) and
+label \(B_c\) fixed. Define
+\begin{equation}\label{eq:familyD}
+D_u(v)=\sum_{c\in\ch(u)}
+\log\{w_{cB_c}(h_c[v])G_{cB_c}(V_c\mid h_c[v])\}.
+\end{equation}
+The product is evaluated on the reference measures specified above.
+For each component put
+\[
+J_{jr}=\int v^r e^{D_u(v)}Q_j(dv),\qquad r=0,1,2.
+\]
+Assuming a finite positive normalizer, the exact full conditional is
+\begin{equation}\label{eq:familyfull}
+p(dv,j\mid\mathrm{rest})
+=\frac{w_jI_j}{\sum_h w_hI_hJ_{h0}}\,
+       e^{D_u(v)}Q_j(dv).
+\end{equation}
+Its label probabilities are proportional to \(w_jI_jJ_{j0}\), and its
+first two moments are obtained by replacing \(J_{j0}\) in the numerator
+with \(J_{j1}\) and \(J_{j2}\), respectively. For an atom,
+\(J_{jr}=c_j^r e^{D_u(c_j)}\), with \(c_j^0=1\).
+This supplies a one-dimensional quadrature route with exact atomic masses.
+The tilted continuous components generally cease to be Gaussian or
+truncated Gaussian.
+
+Alternatively draw \((v',j')\sim q_0\) and accept with probability
+\begin{equation}\label{eq:familyMH}
+\alpha=\min\{1,\exp[D_u(v')-D_u(v)]\}.
+\end{equation}
+To verify the rule, write the target as
+\(\pi(v,j)=q_0(v,j)e^{D_u(v)}/Z_D\).
+The forward accepted probability density is
+\[
+\pi(v,j)q_0(v',j')\alpha
+=\frac{q_0(v,j)q_0(v',j')}{Z_D}
+ \min\{e^{D_u(v)},e^{D_u(v')}\},
+\]
+which is symmetric in the two states. Rejections complete the transition
+kernel, establishing detailed balance. Fixed-support mixture augmentation
+therefore permits exact transitions between spikes and slabs without a
+reversible-jump construction. This is the standard Metropolis principle
+\cite{hastings}, specialized to analytic normal-means proposals.
+It establishes invariance; irreducibility, adequate mixing and Monte Carlo
+precision must be assessed separately.
+
+For a Gaussian child component, include
+\[
+\log w_{cj}(h)-\tfrac12\log(2\pi d_{cj}^2(h))
+-\frac{(V_c-\mu_{cj}(h))^2}{2d_{cj}^2(h)}.
+\]
+For a positive exponential child component, include
+\begin{equation}\label{eq:expchild}
+\log w_{cj}(h)+\log\lambda_{cj}(h)-\lambda_{cj}(h)V_c
+\quad(V_c>0).
+\end{equation}
+For a fixed atomic child on its support, only the log weight remains.
+The exponential rate normalizer and the Gaussian variance normalizer are
+essential whenever they depend on the updated parent. In particular,
+weights alone are insufficient for EMDN.
+
+The obstruction to conjugacy is already present in the single-Gaussian
+example \(V_c\mid v\sim\N(v^2,s^2)\), whose child log density contains
+\(-(V_c-v^2)^2/(2s^2)\). Removing a spike does not remove this nonlinear
+term. Conversely, linear means and constant variances in a Gaussian
+loading DAG preserve Gaussian scalar conditionals, conditional on the
+feature factors.
+
+\subsection{Specialization to CGB, sharp CGB and two-slab CGB}
+\label{sec:familycgb}
+For the package's CGB prior,
+\[
+g(dv\mid h)=\{1-\pi(h)\}\delta_0(dv)
+                +\pi(h)\N(dv;\mu,d^2).
+\]
+The normal-means masses are \(1-\pi\) and \(\pi I_G\), with
+\(I_G\) from \eqref{eq:familygaussI}. The hierarchical slab log odds are
+\begin{equation}\label{eq:cgbfamilyodds}
+\log\frac{\Pr(B=1\mid\mathrm{rest})}{\Pr(B=0\mid\mathrm{rest})}
+=\logit\pi+\log I_G+\log J_{G0}-D_u(0).
+\end{equation}
+Its conditional slab moments are \(J_{G1}/J_{G0}\) and
+\(J_{G2}/J_{G0}\). If a CGB child has gate
+\(\pi_c(v)=\sigmoid\eta_c(v)\), its variable log contribution is
+\(B_c\eta_c(v)-\log\{1+\exp\eta_c(v)\}\).
+The same expression applies to its sharp variant at fixed slab parameters.
+
+Sharp CGB uses an effective slab variance \(d^2=\omega s^2\), with
+\(\omega>0\), in the preceding formulas. A small positive variance is a
+continuous slab, not a second point mass. If the base variance is freely
+estimated, a fixed \(\omega\) merely reparameterizes the same family.
+Persistent sharpening requires a fixed scale, an explicit constraint or
+a specified regularizer. Repeatedly multiplying an unconstrained variance
+estimate by \(\omega\) is not the unpenalized joint M-step.
+
+The two-slab version has
+\begin{equation}\label{eq:familycgb2}
+g(dv\mid h)=\pi_0(h)\delta_0(dv)
++\pi_+(h)\N(dv;\mu_+,d_+^2)
++\pi_-(h)\N(dv;\mu_-,d_-^2),
+\end{equation}
+where \(\mu_+>0\), \(\mu_-<0\), and the weights sum to one.
+The means are global parameters, and both Gaussians have support on
+the whole real line. Its three posterior masses are proportional to
+\[
+\pi_0 e^{D_u(0)},\qquad
+\pi_+I_+J_{+0},\qquad
+\pi_-I_-J_{-0}.
+\]
+The moments follow by the same weighted integrals. With
+\(d_\pm^2=\omega s_\pm^2\), this is the fixed-parameter model of
+\texttt{cgb\_sharp\_2}. Setting \(\pi_0=0\) gives a two-Gaussian variant
+without a spike; this is a distributional specialization, not an additional
+registry name currently exposed by the package.
+
+Setting the spike weight to zero in a one-slab CGB leaves a single global
+Gaussian. Its gate disappears, so that node's own conditional prior no
+longer depends on parents. Retaining parent dependence without a spike
+requires multiple changing weights or parent-dependent means or variances,
+as in EMDN. CASH and LCASH are further Gaussian-mixture specializations
+with fixed zero-centered scale grids and their respective gate functions.
+
+\subsection{Variational updates for the extended family}
+\label{sec:familyvi}
+For an alternative approximation, use the augmented mean-field family
+\[
+q=\prod_uq_u(V_u,B_u)\prod_{m,k}q^m_{F,k}
+\]
+from Section~\ref{sec:augmented}. Here \(a,b\) are the expected-likelihood
+coefficients from Section~\ref{sec:vi}, rather than realized-value Gibbs
+coefficients. Define \(D_u^q(v)\) as the expected log child contribution
+under all other variational factors. Then
+\begin{equation}\label{eq:familycavi}
+q_u^*(dv,j)\ \propto\
+\exp\{\ell(v)+\E_q\log[w_j(h)G_j(v\mid h)]+D_u^q(v)\}\,\nu_j(dv).
+\end{equation}
+All following expectations require finiteness. For a Gaussian component
+this is the tilted Gaussian construction in
+\eqref{eq:augweights}--\eqref{eq:augq}, with expected inverse variances
+and expected precision-weighted means. Replacing these by the parameters
+evaluated at mean parents is generally incorrect.
+
+For an exponential component set
+\begin{equation}\label{eq:expviAB}
+B_j=b-\E_q\lambda_j(h),\qquad
+C_j=\E_q\log w_j(h)+\E_q\log\lambda_j(h).
+\end{equation}
+Its unnormalized log coordinate density on \(v>0\) is exactly
+\(-av^2/2+B_jv+C_j+D_u^q(v)\).
+For \(a>0\), define
+\begin{align}
+H_j&=\sqrt{2\pi/a}\,
+       \exp\{B_j^2/(2a)\}\Phi(B_j/\sqrt a),\\
+Q_j^q&=\N_{[0,\infty)}(B_j/a,a^{-1}),&
+J_{jr}^q&=\E_{Q_j^q}\{V^r e^{D_u^q(V)}\}.
+\end{align}
+The component mass is \(W_j=e^{C_j}H_jJ_{j0}^q\); conditional moments
+are \(J_{j1}^q/J_{j0}^q\) and \(J_{j2}^q/J_{j0}^q\).
+When \(a=b=0\), let \(\bar\lambda_j=\E_q\lambda_j(h)>0\).
+Then \(H_j=1/\bar\lambda_j\) and
+\(Q_j^q=\operatorname{Exp}(\bar\lambda_j)\), with the same tilted
+integral formulas. Notice that \(e^{C_j}\) includes
+\(\exp(\E\log\lambda_j)\); it cannot be replaced by
+\(\E\lambda_j\) in the component mass.
+
+For an atomic component at \(c_j\), the unnormalized mass is
+\[
+W_j=\exp\{\ell(c_j)+\E_q\log w_j(h)+D_u^q(c_j)\}.
+\]
+Normalize all Gaussian, exponential and atomic masses together.
+For an exponential child component with
+\(r_{cj}=q(B_c=j)\) and
+\(m_{cj}=\E_q(V_c\mid B_c=j)\), its contribution to \(D_u^q(v)\) is
+\begin{equation}\label{eq:expvichild}
+r_{cj}\E_{P_c\setminus V_u}
+\{\log w_{cj}(h_c[v])+\log\lambda_{cj}(h_c[v])
+                    -\lambda_{cj}(h_c[v])m_{cj}\}.
+\end{equation}
+This factorization uses the stated mean-field independence between a
+child node and its parents. A row-structured approximation instead retains
+their joint expectation.
+
+These are exact coordinate equations within the stated variational family,
+provided the expectations and integrals are computed exactly. Monte Carlo
+expectations, quadrature and parametric approximations to tilted components
+are separate numerical approximations. The augmented and collapsed
+mean-field problems are not interchangeable for overlapping mixtures.
+An implemented variational algorithm must evaluate the corresponding
+entropy and expected joint terms consistently.
+
+\subsection{Learning the conditional distributions}
+\label{sec:familymstep}
+Let \(\mathcal Q_{\rm old}\) be either the joint latent posterior under
+old parameters or a specified variational approximation. A node's
+complete-data objective is
+\begin{equation}\label{eq:familyQ}
+\mathcal M_u(\theta_u)=
+\sum_i\E_{\mathcal Q_{\rm old}}
+\{\log w_{uB_{iu}}(h_{iu};\theta_u)
++\log G_{uB_{iu}}(V_{iu}\mid h_{iu};\theta_u)\}
++\mathcal R_u(\theta_u).
+\end{equation}
+Here \(\mathcal R_u\) is an explicitly specified regularizer or log
+parameter prior; it is zero for the unpenalized empirical-Bayes objective.
+The expectation is held fixed while optimizing \(\theta_u\).
+Posterior samples must retain parents, values and labels from the same
+joint draw. Latent posterior values are not new noisy observations for
+another EBNM deconvolution step.
+
+For global component parameters, write
+\(n_j=\sum_i\E\ind\{B_{iu}=j\}\),
+\(s_j=\sum_i\E[V_{iu}\ind\{B_{iu}=j\}]\), and
+\(t_j=\sum_i\E[V_{iu}^2\ind\{B_{iu}=j\}]\).
+Without regularization and with positive occupancy, Gaussian components
+have the unconstrained updates
+\begin{equation}\label{eq:familygaussmstep}
+\mu_j^{\rm new}=s_j/n_j,\qquad
+(d_j^2)^{\rm new}=t_j/n_j-(s_j/n_j)^2.
+\end{equation}
+If the mean is constrained to a closed interval \(\mathcal I_j\), project
+\(s_j/n_j\) onto that interval and use
+\(t_j/n_j-2\mu_j^{\rm new}s_j/n_j+(\mu_j^{\rm new})^2\)
+for the variance. A strict sign constraint can have only a boundary
+supremum; using \([\epsilon,\infty)\) or \((-\infty,-\epsilon]\)
+with fixed \(\epsilon>0\) specifies an attained constrained problem.
+Variance bounds are enforced by projection onto the specified positive
+interval. For a global exponential rate,
+\begin{equation}\label{eq:familyexpmstep}
+\lambda_j^{\rm new}=n_j/s_j
+\end{equation}
+when \(s_j>0\); bounds or regularization are required at degeneracies.
+Unoccupied components do not have identified parameter updates.
+For global weights, \(w_j^{\rm new}=n_j/N\).
+
+Neural conditional parameters generally require numerical optimization of
+\eqref{eq:familyQ}. For a Gaussian draw their gradients with respect to
+\(\mu\) and \(\log d\) are
+\[
+\frac{v-\mu}{d^2},\qquad \frac{(v-\mu)^2}{d^2}-1;
+\]
+for an exponential draw the gradient with respect to \(\log\lambda\)
+is \(1-\lambda v\). A softmax logit receives
+\(\ind\{B=j\}-w_j(h)\). The network chain rule then accounts for its
+chosen parameterization, including shared hidden layers. These gradients
+describe complete-data learning, not the derivative of an isolated
+normal-means marginal likelihood.
+
+Exact EM increases the observed-data likelihood when its E-step is exact
+and its M-step increases the corresponding objective. Finite Monte Carlo
+EM need not do so, even if it improves the fixed-sample objective.
+Variational coordinate ascent instead concerns its particular ELBO.
+Mixture variance collapse, rate divergence and overfitting by flexible
+heads motivate explicit admissible parameter sets and held-out tuning;
+they are not resolved by the algebra of a scalar proposal.
+
+\subsection{Scope of the derivation and implementation}
+The formulas above supply exact normal-means proposals and invariant
+hierarchical coordinate kernels for the stated families. They do not claim
+an analytic general full conditional or uniformly fast mixing.
+An exponential mixture on the positive half-line has a decreasing
+continuous density:
+\[
+\frac{d}{dv}\sum_jw_j\lambda_je^{-\lambda_jv}
+=-\sum_jw_j\lambda_j^2e^{-\lambda_jv}<0\quad(v>0).
+\]
+Consequently, it is not a universal family for positive conditional
+densities and cannot represent a continuous mode away from zero.
+Adding a zero spike does not change this restriction. The choice between
+Gaussian and exponential components therefore changes both support and
+shape assumptions, rather than only computational convenience.
+Their HMM counterpart remains a sequence block update
+(Section~\ref{sec:hmm}); the loading hierarchy does not introduce children
+of \(F\) when feature factors are not inputs to the loading priors.
+
+The experimental code currently implements Gaussian and fixed-atom
+conditional mixtures across the eight scalar learned registry families.
+Exponential-mixture inference and its variational counterpart in this
+section are derived extensions, not newly implemented solver options.
+The independent verification script described in Section~\ref{sec:checks}
+tests their local identities and the TwinEB factorization below.
