@@ -1,0 +1,213 @@
+\subsection{Learned VAE priors and explicit program relationships}
+\label{sec:vaepriors}
+Learned latent priors are an established component of variational
+autoencoders. Their relevance here is both statistical and computational:
+they provide alternatives for representing dependence, but differ in the
+meaning assigned to latent coordinates and in the inference operations
+available under the observation model. Three distinctions are essential:
+prior flexibility does not imply an interpretable dependency graph;
+conditional independence within a mixture component does not imply
+marginal independence; and a tractable prior density does not imply a
+tractable posterior under an arbitrary decoder.
+
+\paragraph{VampPrior: learned pseudo-inputs and shared mixture components.}
+Tomczak and Welling~\cite{vampprior} define the basic VampPrior by
+\begin{equation}\label{eq:vampposition}
+p(z)=\frac1H\sum_{h=1}^Hq_\phi(z\mid u_h),
+\end{equation}
+where \(q_\phi\) is the VAE encoder and the \(u_h\) are trainable vectors
+in the observation space (their equation~9). Pseudo-inputs are global
+model parameters optimized with the encoder and decoder. They need not
+be realistic observations, and they are not noisy copies of fitted
+loadings or sample-specific latent variables.
+With a diagonal Gaussian encoder, \eqref{eq:vampposition} is a vector
+Gaussian mixture whose parameters are tied through the encoder. It is
+not a normalizing flow.
+
+Equivalently, introduce a sample-specific label
+\(C_i\sim\operatorname{Uniform}\{1,\ldots,H\}\) and
+\(z_i\mid C_i=h\sim q_\phi(z_i\mid u_h)\).
+The label is shared across coordinates of \(z_i\), so the mixture can
+encode nonlinear and multimodal conditional dependence even when each
+component has diagonal covariance. Section~\ref{sec:twineb} derives the
+corresponding coordinate conditionals. Neither diagonal components nor
+a diagonal variational encoder justify describing this population prior
+as independent. The latter restricts the approximate posterior for each
+observation, not the dependence of the mixture prior.
+
+The same paper separately introduces a two-layer hierarchical VAE, with a
+VampPrior on its upper latent layer and a neural Gaussian conditional
+distribution for the lower layer (their equations~12--15).
+That extra continuous latent layer is not required by the basic VampPrior.
+In contrast, the present hierarchy specifies dependencies among the
+existing factorization loadings. Its mixture indicators are auxiliary
+labels for the specified component distributions, rather than a new
+continuous representation above the programs. The HMM states serve the
+separate feature-sequence prior.
+
+\paragraph{Autoregressive-flow priors.}
+The Variational Lossy Autoencoder of Chen et al.~\cite{vlae} parameterizes
+a latent prior by an invertible autoregressive transformation
+\(z=f_\theta(\epsilon)\) of a simple continuous noise source.
+Its density follows from the change-of-variables identity,
+\begin{equation}\label{eq:flowposition}
+\log p_\theta(z)=
+\log p_0(f_\theta^{-1}(z))
++\log\left|\det J_{f_\theta^{-1}}(z)\right|.
+\end{equation}
+Such a prior explicitly introduces dependence between latent coordinates.
+A single affine Gaussian autoregressive step has Gaussian scalar
+conditionals in its ordering, but this restriction should not be
+generalized to arbitrary compositions and nonlinear flow families.
+Accordingly, complex distributional dependence itself is not a
+distinguishing capability of the present model.
+
+The distinction is the specified semantics of its conditional heads:
+an exact activation probability, a chosen amplitude distribution, and
+an explicit parent set for each additive program. A smooth invertible
+flow with an absolutely continuous base distribution assigns no positive
+mass to an exact zero event. Exact spikes therefore require an additional
+discrete or mixed-support construction; an ordinary continuous flow
+does not provide them by itself. Conversely, adding a neural conditional
+mixture does not automatically give more interpretable effects than a
+flow. Interpretation requires restrictions on the heads and stable
+definitions of the latent programs.
+
+\paragraph{iVAE and conditional identifiability.}
+Khemakhem et al.~\cite{ivae} study priors of the form
+\begin{equation}\label{eq:ivaeposition}
+p(z\mid x)=\prod_k p_k(z_k\mid x),
+\end{equation}
+with suitable exponential-family component distributions and an observed
+auxiliary variable \(x\). Conditional factorization, together with
+additional assumptions on the decoder and variation of the conditional
+parameters, supports their identifiability results. It does not assert
+marginal independence after averaging over \(x\).
+Their use of \emph{exponential family} refers to the general statistical
+class, not specifically to the exponential slabs in
+Section~\ref{sec:mixturefamilies}.
+
+The present model allows direct dependence on latent parents even after
+conditioning on \(x\). It therefore addresses a different modeling
+objective and does not automatically inherit iVAE's identification
+guarantees. A directed loading prior is not a causal identification
+result, and coefficient interpretation remains conditional on the chosen
+ordering, scales and program definitions.
+
+\paragraph{An interpretable linear-logistic specialization.}
+Let \(Z^R_{ik}=1\) indicate the continuous slab of RNA loading \(R_{ik}\);
+when \(Z^R_{ik}=0\), set \(R_{ik}=0\). A restricted CGB prior can specify
+\begin{equation}\label{eq:interpretablegate}
+\logit\Pr(Z^R_{ik}=1\mid A_i,R_{i,<k},x_i)
+=\alpha_k+\beta_k^\top A_i
+             +\eta_k^\top R_{i,<k}+\gamma_k^\top x_i .
+\end{equation}
+For a parent-independent Gaussian slab, the coefficients govern activation
+probability rather than slab amplitude. Holding all other parents and
+context fixed, increasing \(A_{ij}\) by \(\Delta\) multiplies the prior
+activation odds by \(\exp(\beta_{kj}\Delta)\).
+This is a conditional association at a specified loading scale, not a
+causal effect or the posterior odds after observing both modalities.
+The latter also include the likelihood and child contributions derived
+earlier. Sign-constrained Gaussian means do not, by themselves, make
+loadings positive.
+
+Equation~\eqref{eq:interpretablegate} gives a more direct coefficient
+interpretation than a generic vector-mixture or flow parameterization.
+It does not prove superior empirical interpretability: latent rotations,
+permutations, scale changes and alternative program decompositions can
+change the apparent relationships. Anchoring or aligning programs and
+assessing stability across fits remain necessary for scientific use.
+The parent set consists of the prescribed preceding nodes. Unrestricted
+regressions of every loading on all the other loadings are not
+automatically compatible with a single joint distribution.
+
+The current experimental CGB implementation uses ReLU neural gates.
+Equation~\eqref{eq:interpretablegate} is a restricted model specification,
+not a coefficient interpretation of those fitted neural networks.
+Section~\ref{sec:linearlogistic} describes its simpler, log-concave slab
+update under the stated assumptions. Neural gates and EMDN can subsequently
+be compared with this restriction when nonlinear activation, amplitude or
+variance relationships are scientifically required.
+
+\paragraph{Observed context in a vector-mixture alternative.}
+A conditional population mixture can incorporate the same fixed context:
+\begin{align}
+C_i\mid x_i&\sim\operatorname{Categorical}(w_1(x_i),\ldots,w_H(x_i)),\\
+v_i\mid C_i=h,x_i&\sim\N(\mu_h(x_i),D_h(x_i)),
+\qquad v_i=(A_i^\top,R_i^\top)^\top .
+\label{eq:contextvectormixture}
+\end{align}
+Context may affect mixture probabilities, component means or covariance
+matrices; it need not become an uncertain latent variable.
+A conditional VampPrior could tie components through an encoder
+\(q_\phi(v\mid u_h,x)\), whereas a directly parameterized mixture can
+learn these component functions without introducing that encoder.
+These are possible extensions, not a claim that the original VampPrior
+paper implements this multi-omics model.
+
+Under diagonal component covariances, dependence between programs is
+mediated by the shared component label. Their conditional relationships
+can still be complex, but an effect of one program on another is usually
+distributed across the component parameters and responsibilities rather
+than summarized by a coefficient such as \(\beta_{kj}\).
+Full component covariances permit additional dependence within each
+component.
+
+\paragraph{Why Gaussian mixtures can simplify inference.}
+Conditional on the feature factors, the observed row vector satisfies
+a linear Gaussian model \(Y_i^{\rm obs}=B_i v_i+\epsilon_i\), where
+\(B_i\) selects the observed entries from the two modality designs and
+\(\epsilon_i\sim\N(0,\Sigma_i)\).
+For positive-definite Gaussian prior covariances in
+\eqref{eq:contextvectormixture}, the row conditional is a Gaussian mixture.
+Its component parameters are
+\begin{align}
+S_{ih}&=(D_h^{-1}+B_i^\top\Sigma_i^{-1}B_i)^{-1},\\
+m_{ih}&=S_{ih}(D_h^{-1}\mu_h+B_i^\top\Sigma_i^{-1}Y_i^{\rm obs}),
+\end{align}
+with weights proportional to
+\[
+w_h(x_i)\,
+\N\!\left(Y_i^{\rm obs};B_i\mu_h,
+               \Sigma_i+B_iD_hB_i^\top\right).
+\]
+Here \(\mu_h,D_h\) are evaluated at fixed \(x_i\).
+These identities follow by completing the multivariate Gaussian square.
+They establish tractability of a row conditional at fixed factors and
+parameters, not an analytic posterior for the entire factorization.
+Missing entries or modalities are omitted from the observation vector
+and design. HMM factor updates remain available conditional on the
+loading draws.
+
+Both this mixture model and the direct hierarchy propagate information
+between modalities. The computational simplification is Gaussian
+conjugacy of the joint components; it does not arise merely from adding
+a latent label. In the direct logistic hierarchy, an upstream update
+instead contains nonlinear log-gate contributions from its children.
+Those contributions preserve the explicit model's semantics while
+making its update nonconjugate. Exact sparsity patterns in vector
+mixtures require explicit lower-dimensional component supports, and
+exponential components do not generally preserve the unrestricted
+Gaussian block formulas above. Neither alternative is uniformly cheaper
+at comparable modeling accuracy.
+
+\paragraph{Positioning and empirical consequences.}
+For an interpretation-oriented study, the proposed main model is a
+direct conditional loading hierarchy, with linear-logistic activation
+heads as a transparent restriction. Its contribution must be assessed
+through interpretable conditional associations, useful predictions and
+joint uncertainty propagation, rather than through a claim that previous
+VAE priors cannot encode dependence.
+Conditional vector mixtures offer a relevant tractable comparator,
+and neural gates offer an expressiveness comparison within the same
+factorization framework. Differences in observation models, feature
+priors, ranks and tuning budgets must be controlled.
+
+Finally, replacing the linear factorization by a nonlinear VAE decoder
+preserves the normalized conditional-prior model and its ELBO, but
+generally removes the exact quadratic normal-means likelihood.
+The analytic updates in this paper are therefore not automatically
+available for arbitrary VAEs. Learned priors and structured posterior
+approximations are related choices, but neither posterior dependence
+nor exact spike probabilities follow from changing a prior alone.

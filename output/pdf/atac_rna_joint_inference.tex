@@ -82,7 +82,10 @@ their dependent programs.
 Empirical Bayes matrix factorization reduces factor updates to normal-means
 problems \cite{wang}, and cEBMF allows observed covariates to inform the prior
 \cite{cebmf}. TwinEB learns flexible population mixtures on entire row and
-column latent vectors \cite{twineb}. Shared-subspace and hierarchical
+column latent vectors \cite{twineb}. Learned VAE priors also include
+encoder-tied population mixtures, autoregressive flows and conditionally
+factorized priors for identifiable representation learning
+\cite{vampprior,vlae,ivae}. Shared-subspace and hierarchical
 multi-omics models provide complementary integration strategies
 \cite{mofa,jive,cavachon}. Building on these ideas, we consider normalized
 conditional loading distributions whose inputs include uncertain latent
@@ -106,7 +109,9 @@ prototype's implemented Gaussian/atomic sampler from derived extensions,
 and identify the experiments required to assess computational efficiency,
 uncertainty calibration and scientific utility. Section~\ref{sec:twineb}
 positions the contribution relative to population-prior factorization;
-Section~\ref{sec:comparison} also compares multi-omics alternatives.
+Section~\ref{sec:vaepriors} distinguishes density flexibility from explicit
+program relationships and compares inference requirements;
+Section~\ref{sec:comparison} also covers multi-omics alternatives.
 
 \section{Notation and assumptions}\label{sec:notation}
 We observe paired cells in two matrices, with no requirement that their features
@@ -988,7 +993,7 @@ exactly. The exact Gibbs probability uses fixed parents and children in the
 same expression. This is an excellent reference model for the notebook's
 binary truth, but it is not the package's continuous \texttt{gbinary} or CGB.
 
-\subsection{Linear-logistic CGB: a log-concave slab}
+\subsection{Linear-logistic CGB: a log-concave slab}\label{sec:linearlogistic}
 Suppose each child gate has a linear logit in the candidate loading,
 \(\pi_c(P_c[v])=\sigmoid(\beta_{cu}v+\zeta_c)\), where \(\zeta_c\) depends
 on the other parents. Then under the same mean-field assumptions,
@@ -1202,9 +1207,9 @@ different scan orders, and weak or absent cross-modality dependence.
 Section~\ref{sec:comparison} places these comparisons in the existing
 literature; the derivation alone does not establish methodological novelty.
 
-\section{Comparison with other multi-omics methods}\label{sec:comparison}
+\section{Positioning among learned priors and multi-omics methods}\label{sec:comparison}
 \subsection{Scope and notation}
-This section compares the proposed model with representative multi-omics
+This section compares the proposed model with learned latent priors and multi-omics
 methods, using the literature reviewed through 15 September 2026. It is a
 comparison of statistical structure and inferential requirements, not an
 empirical performance ranking or an exhaustive novelty review.
@@ -1233,6 +1238,8 @@ do not identify methods' complete model classes: their priors, likelihoods,
 rank constraints, and identifiability restrictions can differ.
 
 \input{twineb_positioning.tex}
+
+\input{vae_prior_positioning.tex}
 
 \subsection{Structural comparison}
 Table~\ref{tab:methodcomparison} summarizes the cited formulations.
@@ -1650,6 +1657,23 @@ convergence certificate or a benchmark against competing methods.
 Population Priors for Matrix Factorization.
 \emph{Transactions on Machine Learning Research}, December 2024.
 \url{https://openreview.net/forum?id=AT9G5s1pOj}.
+
+\bibitem{vampprior} J. M. Tomczak and M. Welling (2018).
+VAE with a VampPrior.
+\emph{Proceedings of AISTATS}, PMLR 84, 1214--1223.
+\url{https://proceedings.mlr.press/v84/tomczak18a.html}.
+
+\bibitem{vlae} X. Chen, D. P. Kingma, T. Salimans, Y. Duan,
+P. Dhariwal, J. Schulman, I. Sutskever and P. Abbeel (2017).
+Variational Lossy Autoencoder.
+\emph{International Conference on Learning Representations}.
+\url{https://arxiv.org/abs/1611.02731}.
+
+\bibitem{ivae} I. Khemakhem, D. P. Kingma, R. P. Monti and
+A. Hyv\"arinen (2020).
+Variational Autoencoders and Nonlinear ICA: A Unifying Framework.
+\emph{Proceedings of AISTATS}, PMLR 108, 2207--2217.
+\url{https://proceedings.mlr.press/v108/khemakhem20a.html}.
 
 \bibitem{hyvarinen} A. Hyv\"arinen (2005).
 \emph{Estimation of Non-Normalized Statistical Models by Score Matching}.
