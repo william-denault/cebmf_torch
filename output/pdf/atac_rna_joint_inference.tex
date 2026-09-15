@@ -37,7 +37,7 @@
 \title{Joint inference for ordered ATAC and RNA factor models\\[4pt]
 \large From conditional EBNM updates to a coherent joint posterior}
 \author{Technical derivation for the cEBMF project}
-\date{14 September 2026}
+\date{15 September 2026}
 \begin{document}
 \maketitle
 \begin{abstract}
@@ -57,8 +57,11 @@ normalized CGB updates and moments, HMM updates, parameter updates, and simpler
 binary and linear-logistic cases. A comparison with existing multi-omics
 methods distinguishes conditional-prior modeling from shared-subspace
 factorization and hierarchical neural decoders.
-This is a mathematical specification, not an
-implementation or an empirical claim that joint fitting improves both modalities.
+An accompanying experimental implementation supplies augmented joint
+sampling for all scalar learned families, HMM factor draws, and optional
+partial empirical-Bayes learning. We also derive missing-modality handling
+and discuss variational and score-based approximations. These results are
+not an empirical claim that joint fitting improves both modalities.
 \end{abstract}
 \textbf{Main conclusion.} The general problem is nonconjugate, but the difficulty
 is localized. HMM factor smoothing remains available. The new machinery is
@@ -76,7 +79,9 @@ explain computational choices, qualifications, and usefulness.
 Section~\ref{sec:comparison} compares the model and inference construction
 with related multi-omics methods and specifies the limits of capacity claims.
 \clearpage
+\begingroup\small\setlength{\parskip}{0pt}
 \tableofcontents
+\endgroup
 \clearpage
 
 \section{Notation and assumptions}\label{sec:notation}
@@ -642,7 +647,7 @@ log-likelihood difference, provided the proposal can be sampled and the
 required support condition holds.
 
 \subsection{The reusable interface implied by the mathematics}
-A future general solver would need, conceptually:
+A general solver needs, conceptually:
 \begin{enumerate}
 \item Frozen prior parameters, normalized conditional log densities and
 explicit atom masses at arbitrary parent values, with fixed preprocessing.
@@ -653,7 +658,9 @@ parents and child values, if using variational inference.
 \item A joint dependency graph and one consistent objective, including any
 component-label entropy, HMM block terms and declared penalties.
 \end{enumerate}
-These are mathematical requirements, not proposed code changes in this task.
+The experimental implementation described in Section~\ref{sec:implemented}
+now supplies the density, component-sampling and joint-graph interfaces for
+the scalar families; the variational extensions remain specifications.
 The current registry can select the component family; its moment-returning
 \texttt{fit} contract alone is insufficient for a universal joint update.
 The same scalar formulas apply to a feature-factor entry if a learned
@@ -1525,11 +1532,12 @@ This example distinguishes an exact scalar full conditional, an exact
 \emph{marginal} posterior, and a variational coordinate update. They are three
 different quantities even though they arise from the same joint model.
 
+\input{joint_implementation_sections.tex}
+
 \section{Verification and package correspondence}\label{sec:checks}
 The formulas were checked algebraically by expansion and by the limiting
-cases listed below. A companion numerical check of this note, rather than
-an implementation in the package, compares small finite-state and
-one-dimensional calculations:
+cases listed below. The original companion numerical script compares small finite-state and
+one-dimensional calculations independently of the implementation:
 \begin{enumerate}
 \item No children and fixed parents recover ordinary CGB posterior moments.
 \item A one-child tilted CGB conditional agrees with direct numerical
@@ -1545,8 +1553,8 @@ variances, and an EMDN child contributes a downstream term.
 \item The positive-slab evidence in \eqref{eq:positiveevidence} agrees with
 direct convolution, and the example's RNA block mapping agrees with its code.
 \end{enumerate}
-These checks validate the local identities, not convergence or performance of
-an unimplemented full joint solver. The associated numerical results are
+These checks validate the local identities, not convergence or empirical
+performance of a finite joint inference run. The associated numerical results are
 reported in the companion file
 \path{atac_rna_derivation_checks.txt}.
 The companion script \path{verify_atac_rna_derivation.py} reproduces these
@@ -1577,12 +1585,26 @@ Current user-facing model semantics.
 \end{itemize}
 The local CGB solver's moment-based slab-variance estimator is not being
 identified with the joint latent-variable M-step \eqref{eq:slabM}. This note
-defines the latter independently. No package implementation is changed by
-this derivation.
+defines the latter independently. The production cEBMF update is unchanged;
+the new experimental implementation is described in Section~\ref{sec:implemented}.
+Its tests compare every scalar parent--child family pairing against the
+complete joint Metropolis ratio, numerical quadrature, native network
+outputs, finite-difference scores, enumerated HMM path probabilities, and
+fixed-parameter HMM posterior moments. Whole-solver checks exercise all
+eight families with missing modality rows and missing entries, fixed
+preprocessing, parameter freezing, and joint reconstruction moments.
+The executable tests are \path{tests/test_joint_conditional.py} and
+\path{tests/test_joint_atac_rna.py}. These are correctness tests, not a
+convergence certificate or a benchmark against competing methods.
 
 \clearpage
 \begingroup\raggedright
 \begin{thebibliography}{99}
+\bibitem{hyvarinen} A. Hyv\"arinen (2005).
+\emph{Estimation of Non-Normalized Statistical Models by Score Matching}.
+Journal of Machine Learning Research 6, 695--709.
+\url{https://www.jmlr.org/papers/v6/hyvarinen05a.html}.
+
 \bibitem{hastings} W. K. Hastings (1970).
 \emph{Monte Carlo sampling methods using Markov chains and their applications}.
 Biometrika 57(1), 97--109.

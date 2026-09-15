@@ -15,6 +15,7 @@ Welcome to the cebmf_torch documentation!
    examples
    hmm_priors
    ordered_loading_priors
+   joint_inference
    api
 
 .. include:: ../../README.md

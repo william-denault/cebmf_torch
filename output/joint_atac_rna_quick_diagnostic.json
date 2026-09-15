@@ -1,0 +1,130 @@
+{
+  "config": {
+    "n": 400,
+    "p": 200,
+    "seed": 1,
+    "prior_atac": "cgb",
+    "prior_rna": "cgb",
+    "unpaired_fraction_per_view": 0.2,
+    "use_side_info": false,
+    "rounds": 3,
+    "burnin": 40,
+    "draws": 40,
+    "thin": 1,
+    "holdout_fraction": 0.02
+  },
+  "ranks": [
+    2,
+    3
+  ],
+  "learning_seconds": 13.199093499977607,
+  "total_seconds": 17.326834000006784,
+  "metrics": [
+    {
+      "modality": "atac",
+      "rows": "paired",
+      "n": 240,
+      "joint_signal_mse": 0.008158542965780743,
+      "independent_signal_mse": 0.01061423588703494
+    },
+    {
+      "modality": "atac",
+      "rows": "observed_unpaired",
+      "n": 80,
+      "joint_signal_mse": 0.011795043926147825,
+      "independent_signal_mse": 0.010077576109794102
+    },
+    {
+      "modality": "atac",
+      "rows": "missing_modality",
+      "n": 80,
+      "joint_signal_mse": 0.01356488186541445,
+      "independent_signal_mse": null
+    },
+    {
+      "modality": "atac",
+      "rows": "held_out_entries",
+      "n": 1262,
+      "joint_noisy_mse": 2.3019709711217717,
+      "independent_noisy_mse": 2.306099400162937
+    },
+    {
+      "modality": "rna",
+      "rows": "paired",
+      "n": 240,
+      "joint_signal_mse": 0.010731555102907249,
+      "independent_signal_mse": 0.016274963122236707
+    },
+    {
+      "modality": "rna",
+      "rows": "observed_unpaired",
+      "n": 80,
+      "joint_signal_mse": 0.010361839879883867,
+      "independent_signal_mse": 0.010826291024074747
+    },
+    {
+      "modality": "rna",
+      "rows": "missing_modality",
+      "n": 80,
+      "joint_signal_mse": 0.021166670059578594,
+      "independent_signal_mse": null
+    },
+    {
+      "modality": "rna",
+      "rows": "held_out_entries",
+      "n": 1294,
+      "joint_noisy_mse": 2.3245181668894914,
+      "independent_noisy_mse": 2.327774499205814
+    }
+  ],
+  "acceptance": [
+    0.701625,
+    0.8120625,
+    0.9241875000000004,
+    0.97775,
+    1.0
+  ],
+  "log_joint": [
+    -229668.45269663414,
+    -229606.43877467266,
+    -229566.05003677896,
+    -229615.06081966727,
+    -229568.87196845614,
+    -229675.29719803206,
+    -229576.85938640544,
+    -229611.14582638073,
+    -229592.2090374211,
+    -229633.42214884266,
+    -229623.77409696978,
+    -229534.70635634335,
+    -229587.9297303322,
+    -229572.39545967372,
+    -229624.99572182912,
+    -229624.2710141229,
+    -229615.31300882823,
+    -229573.99129213067,
+    -229630.14388184214,
+    -229583.10980509332,
+    -229597.35710230333,
+    -229606.9965827754,
+    -229606.35081014855,
+    -229618.18450384535,
+    -229641.3231592507,
+    -229652.49021025543,
+    -229604.6849915077,
+    -229645.00074988493,
+    -229583.24349685005,
+    -229626.0918357112,
+    -229572.76294487936,
+    -229596.87829028303,
+    -229695.02607372846,
+    -229635.67368927493,
+    -229636.05032736462,
+    -229620.81899847396,
+    -229623.28434164144,
+    -229590.93330408345,
+    -229587.06818331472,
+    -229636.69368357697
+  ],
+  "interpretation": "Finite-chain diagnostic for one fitted conditional-EB target; not a convergence certificate or benchmark."
+}
