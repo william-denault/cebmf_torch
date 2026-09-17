@@ -366,18 +366,21 @@ def posterior_point_mass_normal(
     sigma0 = torch.tensor(max(float(sigma_0), 1e-8), dtype=x.dtype, device=x.device)
     se = torch.clamp(se, min=1e-8)
 
-    # marginal likelihoods
-    mlik = _logpdf_normal(
+    # Marginal component log-likelihoods. Keep posterior normalization in
+    # log space so very small but finite densities preserve their likelihood
+    # ratio instead of being distorted by a fixed probability-space floor.
+    log_mlik = _logpdf_normal(
         x,
         torch.as_tensor(mu1, dtype=x.dtype, device=x.device),
         torch.sqrt(se**2 + sigma0**2),
-    ).exp()
-    lpm = _logpdf_normal(x, torch.as_tensor(mu0, dtype=x.dtype, device=x.device), se).exp()
+    )
+    log_lpm = _logpdf_normal(x, torch.as_tensor(mu0, dtype=x.dtype, device=x.device), se)
 
-    denom = torch.clamp(pi * lpm + (1.0 - pi) * mlik, min=1e-12)
-
-    w0 = torch.clamp(pi * lpm / denom, min=0.0, max=1.0)
-    w1 = 1.0 - w0
+    log_w0 = torch.log(pi) + log_lpm
+    log_w1 = torch.log1p(-pi) + log_mlik
+    log_norm = torch.logaddexp(log_w0, log_w1)
+    w0 = torch.exp(log_w0 - log_norm)
+    w1 = torch.exp(log_w1 - log_norm)
 
     # posterior for normal component
     mu_post = (mu1 / sigma0**2 + x / se**2) / (1.0 / sigma0**2 + 1.0 / se**2)
