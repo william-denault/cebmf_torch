@@ -1,0 +1,83 @@
+{
+  "signature": "8e3c786c70e9bacead052b53df40e62b85263e8556af1df21f3e26ca777204c8",
+  "seed": 1,
+  "method": "current",
+  "stage": "cold",
+  "prior": "spiked_emdn",
+  "prior_kwargs": {
+    "penalty": 1.1
+  },
+  "scalar_network_defaults": {
+    "n_epochs": 10,
+    "n_layers": 4,
+    "n_gaussians": 5,
+    "hidden_dim": 64,
+    "batch_size": 512,
+    "lr": 0.001,
+    "penalty": 1.1
+  },
+  "resolved_training": {
+    "n_epochs": 10,
+    "batch_size": 128,
+    "lr": 0.001,
+    "penalty": 1.1
+  },
+  "conditional_options": {
+    "quadrature_points": 24,
+    "parent_samples": 32,
+    "seed": 0,
+    "approximation": "quadratic"
+  },
+  "fixed_rank": false,
+  "initial_rank": 6,
+  "steps": 2,
+  "initialization": {
+    "sweep": 0,
+    "seconds": 0,
+    "signal_rmse": 0.26832613348960876,
+    "observation_rmse": 1.2236589193344116,
+    "sigma": 1.2236589193344116,
+    "rank": 6,
+    "loading_variance": 0.0
+  },
+  "setup_seconds": 0.17385389999253675,
+  "complete": true,
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0,
+      "signal_rmse": 0.23095250129699707,
+      "observation_rmse": 1.2257015705108643,
+      "sigma": 1.2236589193344116,
+      "rank": 6,
+      "loading_variance": 1.2978078126907349
+    },
+    {
+      "sweep": 1,
+      "seconds": 53.229547700000694,
+      "signal_rmse": 0.1689745932817459,
+      "observation_rmse": 1.231842041015625,
+      "sigma": 1.2445646524429321,
+      "rank": 6,
+      "loading_variance": 0.8748852014541626,
+      "objective": 335048.34375,
+      "curvature_clipped": 0.0,
+      "curvature_evaluations": 24000
+    },
+    {
+      "sweep": 2,
+      "seconds": 94.6555530000187,
+      "signal_rmse": 0.11931376159191132,
+      "observation_rmse": 1.2384544610977173,
+      "sigma": 1.2467619180679321,
+      "rank": 6,
+      "loading_variance": 0.5154871940612793,
+      "objective": 333836.3125,
+      "curvature_clipped": 0.0,
+      "curvature_evaluations": 24000
+    }
+  ],
+  "fit_seconds": 94.6555530000187,
+  "checkpoint": "output\\plugin_vs_joint_20260917\\cpu_timing\\current\\seed01_cold.model.pt",
+  "inference": "conditional_quadratic"
+}

@@ -1,0 +1,404 @@
+\section{Implemented reference updates for the learned priors}
+\label{sec:implemented}
+The experimental modules in \path{src/cebmf_torch/experimental/} are
+\path{conditional.py}, \path{loading.py}, \path{matrix.py} and
+\path{joint.py}. They target the augmented latent
+posterior for fixed fitted parameters. It supports the eight scalar
+families in Section~\ref{sec:registrymap}: CGB, both sharp CGB variants,
+CASH, LCASH, proportional-odds LCASH, EMDN and spiked EMDN.
+The existing neural-network classes are reused; normalized log weights,
+explicit slab scales, and a fixed preprocessing transform are exposed.
+The main \texttt{cEBMF} interface selects the single-matrix joint sampler
+when an effective row or column self-covariate flag is enabled. Its
+\texttt{fit} method performs prior learning followed by posterior sampling;
+\texttt{iter\_once} advances one sweep at fixed parameters. Without either
+effective flag, the original variational route remains in use. Replacing
+a fixed covariate matrix with estimated loadings from another fit does not
+create the coupled-modality target; that requires the combined loading DAG.
+
+\subsection{An augmented normal-means proposal with exact atoms}
+Fix a sample and target node \(u\), the other latent variables, and all
+parameters. Write
+\[
+g_u(dv,h\mid P_u)=w_hG_h(dv),\qquad
+\ell_u(v)=-\tfrac12av^2+bv.
+\]
+For a Gaussian component, let \(\mu_h\) and \(d_h^2>0\) denote its mean
+and variance evaluated at the \emph{current} parents. For an atomic
+component set \(d_h^2=0\), and \(G_h=\delta_{\mu_h}\). Atoms in the
+implemented scalar priors are fixed at zero. Define
+\begin{align}
+t_h&=1+ad_h^2,&
+V_h&=d_h^2/t_h,&
+M_h&=(\mu_h+bd_h^2)/t_h,\\
+\log I_h
+&=-\tfrac12\log t_h+
+\frac{-a\mu_h^2/2+b\mu_h+b^2d_h^2/2}{t_h}.
+\label{eq:stableproposal}
+\end{align}
+Direct integration gives
+\(I_h=\int e^{\ell_u(v)}G_h(dv)\), including
+\(I_h=e^{-a\mu_h^2/2+b\mu_h}\) for an atom.
+Consequently the normalized proposal is
+\begin{align}
+\widetilde w_h
+&=\frac{w_hI_h}{\sum_gw_gI_g},&
+q_0(dv,h)
+&=\widetilde w_h
+\begin{cases}
+\N(dv;M_h,V_h),&d_h^2>0,\\
+\delta_{\mu_h}(dv),&d_h^2=0.
+\end{cases}
+\label{eq:implementedproposal}
+\end{align}
+This expression avoids subtracting terms of size \(\mu_h^2/d_h^2\)
+when a slab is extremely narrow. If \(a=b=0\), it recovers the conditional
+prior exactly, without an artificial precision floor.
+
+Keep each child's component \(B_c\) fixed during this move and define
+\begin{equation}
+D_u(v)=\sum_{c\in\ch(u)}
+\left\{\log w_{cB_c}(P_c[v])
+       +\log G_{cB_c}(V_c\mid P_c[v])\right\}.
+\label{eq:implementedmessage}
+\end{equation}
+If the child is in its fixed zero atom, its component log mass is zero
+on that event. If it is in a Gaussian slab, include its full log density.
+Sample \((v',h')\sim q_0\) and accept with probability
+\begin{equation}
+\alpha((v,h),(v',h'))=\min\{1,\exp[D_u(v')-D_u(v)]\}.
+\label{eq:implementedaccept}
+\end{equation}
+Indeed the target is proportional to \(q_0(dv,h)e^{D_u(v)}\);
+the forward and reverse proposal densities cancel, with respect to the
+same component-specific reference measures. This proves detailed balance
+for the augmented coordinate kernel. A deterministic sweep of these
+invariant kernels preserves the same joint distribution, although the
+whole sweep need not itself be reversible. It does not prove that a
+finite chain has mixed.
+
+For CGB and fixed-component CASH variants, only child log weights vary
+with \(v\). For EMDN and spiked EMDN, the child's Gaussian term also varies:
+\[
+-\frac12\log(2\pi d_{cB_c}^2(P_c[v]))
+-\frac{(V_c-\mu_{cB_c}(P_c[v]))^2}
+       {2d_{cB_c}^2(P_c[v])}.
+\]
+Dropping either contribution changes the stationary target. The implementation
+uses the full expression for every family, so the CGB simplification is
+obtained by cancellation rather than a different update path.
+
+The augmented state includes a component label even for overlapping
+continuous components. Holding a child's label fixed is correct for this
+augmented sampler; replacing its density by a collapsed mixture in just
+some parent moves would require a separately justified partially collapsed
+scheme. Each node's own move jointly proposes its value and component,
+allowing transitions to and from the exact spike.
+
+\subsection{Matrix statistics and feature-factor updates}
+For modality \(m\), let \(M^m_{it}\) indicate an observed entry, and define
+the residual excluding factor \(k\) using \emph{realized} current values:
+\[
+E^m_{it,-k}=Y^m_{it}-\sum_{\ell\ne k}L^m_{i\ell}F^m_{t\ell}.
+\]
+For a loading coordinate,
+\[
+a^m_{ik}=\tau_m\sum_tM^m_{it}(F^m_{tk})^2,\qquad
+b^m_{ik}=\tau_m\sum_tM^m_{it}E^m_{it,-k}F^m_{tk}.
+\]
+For the feature-factor block, use
+\[
+a^m_{tk}=\tau_m\sum_iM^m_{it}(L^m_{ik})^2,\qquad
+b^m_{tk}=\tau_m\sum_iM^m_{it}E^m_{it,-k}L^m_{ik}.
+\]
+These are conditional sampling statistics, not the mean-field statistics
+that substitute posterior second moments. They support arbitrary missing
+entries as well as entire missing modality rows.
+
+The HMM block update first integrates each component's value to obtain
+its emission likelihood, then samples the entire state sequence by
+forward filtering and backward sampling, and finally samples each
+component and factor value conditional on the sampled state. Positive
+HMM components use truncated-normal draws, including exact atoms;
+negative HMM components use reflection. With \(a=b=0\) at a position,
+its emission likelihood is exactly one, so adjacent positions can still
+inform the hidden state. Independent draws from smoothed marginal state
+probabilities would not sample the correct Markov path.
+
+\subsection{Parameter learning: what the prototype does and does not optimize}
+For the coupled ATAC--RNA prototype, the initial independent
+\texttt{gbinary}/HMM fits determine factor counts, ordering and initial HMM
+distributions. The automatic single-matrix route uses independent
+Gaussian-mixture, generalized-binary or HMM initialization as appropriate
+for its selected families; supplied initial factors skip this preliminary
+fit. Rescaling a loading column by
+\(1/c_k\) requires multiplying its feature factors, HMM means and HMM
+standard deviations by \(c_k>0\). The scale convention and HMM parameters
+are then fixed while the latent factors continue to be updated.
+The initial independent loading estimates initialize conditional-prior
+networks; they are not extra observations in the final likelihood.
+
+The optional generalized Monte Carlo EM phase draws augmented loading
+states under the current joint model and approximately maximizes, for
+each node,
+\begin{equation}
+\widehat Q_u(\theta_u)=\frac1{SN}\sum_{s=1}^S\sum_{i=1}^N
+\left[
+\log w_{uB_{iu}^{(s)}}(P_{iu}^{(s)};\theta_u)
++\log G_{uB_{iu}^{(s)}}(V_{iu}^{(s)}\mid P_{iu}^{(s)};\theta_u)
+\right].
+\label{eq:implementedmcem}
+\end{equation}
+Parents, values and labels from each draw stay together in this expression;
+their empirical dependence is not broken into products of marginal means.
+No measurement variance is subtracted from these already latent draws.
+After each training epoch, the full saved-draw objective is evaluated and
+the best finite parameter state is retained, including the starting state.
+This safeguards \(\widehat Q_u\), not the true evidence: a finite,
+potentially poorly mixed Monte Carlo E-step is still approximate.
+
+For CASH/LCASH only the gate parameters are learned, and their zero-centered
+scale grid is fixed. For CGB the global mean, slab variance and neural gate
+are trainable. For EMDN the weights, means and scales are learned jointly.
+Both sharp variants keep their initialized narrow slab scales fixed by
+default. If scale learning is requested, the actual effective variance is
+learned; \(\omega\) then only changes initialization. Multiplying an
+unconstrained ML variance estimate by \(\omega<1\) at every M-step is not a
+maximization of \eqref{eq:implementedmcem}. With an unrestricted base
+variance, the parameterization \(d^2=\omega\sigma^2\) cannot by itself
+enforce persistent sharpening.
+
+The prototype explicitly bounds learned continuous standard deviations
+to a positive finite interval (default \([0.02,20]\)). This specifies an
+admissible subfamily and limits variance collapse; it does not remove
+the exact zero atom. The fixed ASH grid is supplied separately.
+The default model uses a neutral sparsity penalty of one. The automatic
+single-matrix route now supports the local log-spike regularizer via the
+explicit auxiliary-observation target in Section~\ref{sec:implementedelbo},
+including the additional latent-parent terms. The separate coupled-modality
+prototype described here retains its unpenalized target.
+
+The observation noise, HMM parameters, graph, preprocessing and factor
+count are held fixed in this reference implementation. It therefore
+performs joint latent inference conditional on fitted parameters, with
+optional partial empirical-Bayes learning of the loading priors and, for
+the automatic single-matrix route, any learned feature priors. It does
+not implement fully Bayesian parameter inference or joint evidence
+optimization over every HMM/noise parameter. The general parameter
+equations elsewhere in this note describe further extensions.
+
+After learning, parameters are frozen and a new burn-in precedes retained
+draws. Reconstruction uses
+\[
+\widehat{\E}(L^m(F^m)^\top\mid Y_{\rm obs},X)
+=\frac1S\sum_sL^{m,(s)}(F^{m,(s)})^\top,
+\]
+which generally differs from the product of marginal posterior means.
+Reported reconstruction standard deviations describe the latent signal,
+conditional on fitted parameters; they exclude new observation noise and
+hyperparameter uncertainty. Acceptance rates include accepted proposals
+that leave a zero value unchanged and are not convergence diagnostics.
+
+\input{cebmf_learning_algorithm.tex}
+\input{joint_elbo_diagnostic.tex}
+
+\section{Partial overlap and fixed side information}
+\label{sec:partialoverlap}
+Let \(I_A\) and \(I_R\) denote the observed sample IDs and
+\(I=I_A\cup I_R\). All rows are explicitly aligned to \(I\); row positions
+are not assumed to match. Let \(X_i\) be finite fixed side information,
+with any transformation fitted once and frozen. The directed loading
+model is
+\begin{equation}
+p(A_i,R_i\mid X_i)=
+\prod_{k=1}^{K_A}g^A_k(A_{ik}\mid A_{i,<k},X_i)
+\prod_{j=1}^{K_R}g^R_j(R_{ij}\mid A_i,R_{i,<j},X_i).
+\end{equation}
+Conditional on the masks, the observed-data target is
+\begin{align}
+p(A,R,F\mid Y_{\rm obs},X)
+&\propto p(F)\prod_{i\in I}p(A_i,R_i\mid X_i)\nonumber\\[-2pt]
+&\quad{}\times\prod_{m\in\{A,R\}}\prod_{(i,t):M^m_{it}=1}
+\Normal{Y^m_{it}}{\sum_kL^m_{ik}F^m_{tk}}{\tau_m^{-1}}.
+\label{eq:partialtarget}
+\end{align}
+This treats the observation pattern as ignorable for the modeled
+measurements, conditional on the supplied information. An informative
+measurement-selection mechanism would need its own model.
+
+For an RNA-only row and fixed factors and parameters,
+\begin{equation}
+p(R_i\mid Y^R_i,X_i)
+\propto p(Y^R_i\mid R_i,F^R)
+\int p(R_i\mid A_i,X_i)p(A_i\mid X_i)\,dA_i.
+\label{eq:missingatac}
+\end{equation}
+Thus the \emph{marginal prior} for its RNA loadings is a function of fixed
+side information and the learned population relationship, integrating out
+unknown ATAC loadings. At a particular RNA coordinate it also conditions
+on earlier RNA coordinates as prescribed by the DAG. This is generally
+not the same distribution obtained by deleting the ATAC inputs, using
+their means, or setting them to zero.
+
+The sampler retains \(A_i\) as latent variables. Their own ATAC likelihood
+has \(a=b=0\), while their RNA-child correction remains active. This
+allows RNA evidence to inform an unobserved ATAC state and propagates its
+uncertainty back to RNA. It does not pretend that an ATAC measurement was
+observed. Conversely, for an ATAC-only row, integrating all unobserved RNA
+loadings gives
+\(\int p(R_i\mid A_i,X_i)dR_i=1\).
+At fixed parameters they provide no additional marginal ATAC likelihood,
+although sampling them can affect individual conditional moves and
+their joint draw can be used for prediction.
+
+The accompanying example includes paired, RNA-only and ATAC-only rows,
+arbitrary held-out entries, and deliberately reordered RNA rows. Finite
+fixed covariates must be provided for every union ID. NaNs in measurement
+matrices represent missing likelihood terms; NaNs are not passed to the
+conditional networks.
+
+Some paired samples or suitable external identifying information are
+needed to learn the cross-modality relationship. Without overlap, many
+distinct couplings can yield the same observed modality marginals; shared
+side information alone does not generally remove this ambiguity. The
+prototype therefore requires some paired rows for initialization. Even
+with overlap, an unpaired population far outside the paired population's
+support requires extrapolation. Neither the derivation nor the example
+guarantees improved reconstruction for both modalities.
+
+\section{Variational and score-based alternatives}
+\label{sec:approximation}
+\subsection{A numerical augmented variational update}
+The coordinate solution in Section~\ref{sec:augmented} already applies
+to all the scalar families. An implementable approximation would draw
+uncertain parents from the current variational distribution, hold these
+draws fixed within a coordinate step, evaluate
+\(\mathsf A_h,\mathsf B_h,\mathsf C_h\) and \(D_u^{\rm aug}(v)\), and
+integrate each tilted Gaussian using adaptive quadrature. Include
+the separate atom mass, normalize all component masses together, and
+update both first and second moments from the same integrals.
+
+Two approximations must be kept distinct: Monte Carlo error in the
+expected log prior, and quadrature error in the one-dimensional tilt.
+Replacing a tilted component by a moment-matched Gaussian is an
+additional variational-family restriction. A finite collection of
+quadrature nodes by itself is a numerical integration device, not a
+continuous posterior density with a valid differential entropy.
+One cannot claim an ELBO for a node-based update while substituting
+Gaussian entropy without specifying this extra approximation.
+
+A practical alternative is to explicitly restrict each continuous
+variational component to a Gaussian,
+\[
+q_u(dv,h)=r_{uh}\N(dv;m_{uh},s_{uh}^2)
+\quad(h\ {\rm continuous}),
+\]
+with a separate atom when present. Evaluate the augmented ELBO by
+enumerating the target's component label, reparameterizing its Gaussian
+draw, and using Monte Carlo samples for other nodes. Its exact per-node
+entropy is
+\[
+\mathcal H(q_u)=-\sum_h r_{uh}\log r_{uh}
++\sum_{h\ {\rm continuous}}\frac{r_{uh}}2
+       \log(2\pi e\,s_{uh}^2).
+\]
+This is entropy on the \emph{augmented} space, not the entropy of a
+collapsed overlapping Gaussian mixture. Full label enumeration across
+all uncertain parents is generally exponential; score-function
+estimators with variance reduction or structured approximations may be
+needed for their discrete variables. Relaxing a point mass to a
+continuous variable changes the approximation and requires separate
+validation. Fixed-parameter HMM variational block updates remain as
+derived in Section~\ref{sec:hmm}.
+
+Mean-field VI can be much faster than long MCMC runs but can underestimate
+dependence and uncertainty. A row-structured \(q(A_i,R_i)\), or a
+row-wise amortized inference model, can retain more cross-modality
+dependence at additional cost. There is no conjugate universal
+EBNM-only update for arbitrary neural conditional priors. The present
+code implements the sampling reference and exact within-component
+scores, not these proposed VI algorithms.
+
+\subsection{The exact conditional score is already available}
+For a fixed continuous target component \(h\), the log conditional is
+\[
+\log p(v,h\mid{\rm rest})=C-\tfrac12av^2+bv
++\log w_{uh}(P_u)+\log\Normal{v}{\mu_{uh}(P_u)}{d_{uh}^2(P_u)}
++D_u(v).
+\]
+Because the target's own parents are fixed during this coordinate,
+\begin{equation}
+\partial_v\log p(v,h\mid{\rm rest})
+=-av+b-\frac{v-\mu_{uh}(P_u)}{d_{uh}^2(P_u)}
++D'_u(v).
+\label{eq:exactscore}
+\end{equation}
+The implementation exposes this derivative by automatic differentiation
+of the normalized mixture model and verifies it against centered finite
+differences. No score-matching training is required to obtain it.
+For a Gaussian child with \(e=V_c-\mu_c(v)\), its contribution is
+\begin{equation}
+\partial_v\log w_c(v)
++\frac{e}{d_c^2(v)}\,\mu'_c(v)
++\left(\frac{e^2}{d_c^2(v)}-1\right)
+   \partial_v\log d_c(v).
+\label{eq:childscore}
+\end{equation}
+The last two terms are essential for EMDN. These derivatives are defined
+almost everywhere for the package's ReLU networks; at a kink the software
+uses its automatic-differentiation convention.
+
+\subsection{What learning a score would and would not solve}
+Classical score matching fits continuous density scores without requiring
+the density's normalization constant, under its regularity
+assumptions~\cite{hyvarinen}. Here it could amortize repeated evaluations
+of \eqref{eq:exactscore} across contexts, using simulations or reference
+posterior draws. But component-specific continuous scores do not identify
+the relative component masses, and in particular do not determine an
+exact spike probability. The model still needs explicit discrete
+probabilities and transitions between the spike and continuous states.
+Training on observed noisy values also does not directly learn a latent
+loading prior without accounting for the likelihood.
+
+There is a second obstacle for hierarchical priors. Suppose a conditional
+energy defines
+\[
+g_c(v\mid P)=\exp f_c(v,P)/Z_c(P).
+\]
+Its own value score \(\partial_v f_c(v,P)\) omits \(Z_c(P)\), but updating
+a parent requires
+\[
+\partial_P\log g_c(v\mid P)
+=\partial_P f_c(v,P)-\partial_P\log Z_c(P).
+\]
+The omitted normalizer generally depends on the parents. Learning
+conditional value scores alone therefore does not supply all the
+child messages needed for a coherent joint update. The normalized
+mixture parameterization avoids this obstacle.
+
+A learned, evaluable proposal can still accelerate the reference
+sampler while retaining the target. For example, within one continuous
+component, propose
+\[
+v'\sim\N\!\left(v+\tfrac{\epsilon^2}2s_\phi(v,{\rm context}),
+                  \epsilon^2\right).
+\]
+For a fixed proposal network, accept using
+\begin{equation}
+\alpha=\min\left\{1,
+\frac{p(v',h\mid{\rm rest})\,q_\phi(v\mid v',{\rm context})}
+     {p(v,h\mid{\rm rest})\,q_\phi(v'\mid v,{\rm context})}\right\}.
+\end{equation}
+The full ratio is needed; the child-only cancellation in
+\eqref{eq:implementedaccept} applies specifically to \(q_0\).
+Interleave these continuous moves with valid joint value/component moves
+to reach other labels and the spike. An unevaluable implicit proposal
+cannot simply be inserted into this acceptance ratio. Adaptation must
+stop before ordinary fixed-kernel posterior collection, or meet a
+separately justified adaptive-MCMC condition.
+
+The recommended sequence is therefore: validate the normalized joint
+target and component transitions; measure mixing and computational cost;
+then compare structured VI or learned proposals with the reference on
+small problems and held-out data. Score learning is a possible
+acceleration, not a substitute for the missing hierarchical terms.

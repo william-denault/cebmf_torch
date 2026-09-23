@@ -1,0 +1,30 @@
+{
+  "simulation_identical": true,
+  "signal_loading_rank": 4,
+  "gaussian_expected_log_density": -2.936293167267592,
+  "plugin_log_density": -2.201293167267595,
+  "variance_correction": -0.7349999999999999,
+  "exact_gaussian_posterior_mean": [
+    0.6562500000000001,
+    0.6875000000000002
+  ],
+  "exact_gaussian_posterior_covariance": [
+    [
+      0.34375000000000006,
+      0.31250000000000006
+    ],
+    [
+      0.3125000000000001,
+      0.3750000000000001
+    ]
+  ],
+  "mean_field_variance": [
+    0.08333333333333333,
+    0.09090909090909091
+  ],
+  "exact_em_one_step_slope": 0.9861286254728878,
+  "mean_field_em_one_step_slope": 0.8777707409753011,
+  "plugin_one_step_slope": 1.0476190476190477,
+  "point_parent_no_feedback_evidence_max_error": 3.552713678800501e-15,
+  "note": "Illustrative one-step parameter updates, not an accuracy benchmark."
+}

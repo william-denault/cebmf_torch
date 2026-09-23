@@ -1,0 +1,41 @@
+{
+  "scope": "Independent derivation checks; implementation regressions live in tests/test_conditional_*.py.",
+  "gaussian_mixture_no_self_reference": {
+    "max_absolute_error": 1.9984014443252818e-15,
+    "includes_spike_and_missing_likelihood": true
+  },
+  "profile_log_normalizer_matches_optimized_ELBO": {
+    "max_variation_in_theta_independent_constant": 6.661338147750939e-16,
+    "parameter_settings_checked": 4
+  },
+  "binary_no_self_reference": {
+    "max_coordinate_probability_error": 0.0,
+    "exact_elbo_gains": [
+      0.0025576991161292417,
+      0.11388828602965995,
+      0.09458816500107536
+    ]
+  },
+  "binary_with_self_reference": {
+    "max_coordinate_probability_error": 1.1102230246251565e-16,
+    "exact_elbo_gains": [
+      0.0011526027751391776,
+      0.0485945637279348,
+      0.023790534615766745
+    ]
+  },
+  "structured_loading_F_update": {
+    "correct_numerator": 0.0,
+    "mean_product_numerator": 0.25
+  },
+  "no_self_one_M_step_is_not_collapsed_EBNM": {
+    "observation": 2.0,
+    "noise_variance": 1.0,
+    "fixed_prior_variance": 1.0,
+    "old_prior_mean": 0.0,
+    "collapsed_EBNM_fitted_prior_mean": 2.0,
+    "one_exact_EM_fitted_prior_mean": 1.0,
+    "collapsed_EBNM_posterior_mean": 2.0,
+    "posterior_mean_after_one_EM_step": 1.5
+  }
+}

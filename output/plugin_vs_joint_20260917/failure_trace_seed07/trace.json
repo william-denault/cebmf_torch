@@ -1,0 +1,189 @@
+{
+  "complete": true,
+  "records": [
+    {
+      "sweep": 23,
+      "coordinate": 0,
+      "negative_objective_before": 332698.90625,
+      "negative_objective_after": 332698.90625,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 23,
+      "coordinate": 1,
+      "negative_objective_before": 332698.90625,
+      "negative_objective_after": 332698.90625,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 23,
+      "coordinate": 2,
+      "negative_objective_before": 332698.84375,
+      "negative_objective_after": 332698.84375,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0126953125
+    },
+    {
+      "sweep": 23,
+      "coordinate": 3,
+      "negative_objective_before": 332698.84375,
+      "negative_objective_after": 332698.78125,
+      "increase": -0.0625,
+      "surrogate_improvement": 0.05029296875
+    },
+    {
+      "sweep": 23,
+      "coordinate": 4,
+      "negative_objective_before": 332698.78125,
+      "negative_objective_after": 332698.71875,
+      "increase": -0.0625,
+      "surrogate_improvement": 0.007568359375
+    },
+    {
+      "sweep": 23,
+      "coordinate": 5,
+      "negative_objective_before": 332698.71875,
+      "negative_objective_after": 332698.6875,
+      "increase": -0.03125,
+      "surrogate_improvement": 0.02306365966796875
+    },
+    {
+      "sweep": 24,
+      "coordinate": 0,
+      "negative_objective_before": 332698.6875,
+      "negative_objective_after": 332698.6875,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 24,
+      "coordinate": 1,
+      "negative_objective_before": 332698.65625,
+      "negative_objective_after": 332698.65625,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 24,
+      "coordinate": 2,
+      "negative_objective_before": 332698.6875,
+      "negative_objective_after": 332698.6875,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0087890625
+    },
+    {
+      "sweep": 24,
+      "coordinate": 3,
+      "negative_objective_before": 332698.65625,
+      "negative_objective_after": 332698.625,
+      "increase": -0.03125,
+      "surrogate_improvement": 0.052734375
+    },
+    {
+      "sweep": 24,
+      "coordinate": 4,
+      "negative_objective_before": 332698.59375,
+      "negative_objective_after": 332698.59375,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0099334716796875
+    },
+    {
+      "sweep": 24,
+      "coordinate": 5,
+      "negative_objective_before": 332698.59375,
+      "negative_objective_after": 332698.5625,
+      "increase": -0.03125,
+      "surrogate_improvement": 0.0471649169921875
+    },
+    {
+      "sweep": 25,
+      "coordinate": 0,
+      "negative_objective_before": 332698.53125,
+      "negative_objective_after": 332698.53125,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 25,
+      "coordinate": 1,
+      "negative_objective_before": 332698.53125,
+      "negative_objective_after": 332698.53125,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 25,
+      "coordinate": 2,
+      "negative_objective_before": 332698.5,
+      "negative_objective_after": 332698.5,
+      "increase": 0.0,
+      "surrogate_improvement": 0.009765625
+    },
+    {
+      "sweep": 25,
+      "coordinate": 3,
+      "negative_objective_before": 332698.5,
+      "negative_objective_after": 332698.4375,
+      "increase": -0.0625,
+      "surrogate_improvement": 0.0458984375
+    },
+    {
+      "sweep": 25,
+      "coordinate": 4,
+      "negative_objective_before": 332698.4375,
+      "negative_objective_after": 332699.09375,
+      "increase": 0.65625,
+      "surrogate_improvement": 0.040378570556640625
+    },
+    {
+      "sweep": 25,
+      "coordinate": 5,
+      "negative_objective_before": 332699.09375,
+      "negative_objective_after": 332698.25,
+      "increase": -0.84375,
+      "surrogate_improvement": 0.4731178283691406
+    },
+    {
+      "sweep": 26,
+      "coordinate": 0,
+      "negative_objective_before": 332698.25,
+      "negative_objective_after": 332698.25,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 26,
+      "coordinate": 1,
+      "negative_objective_before": 332698.21875,
+      "negative_objective_after": 332698.21875,
+      "increase": 0.0,
+      "surrogate_improvement": 0.0
+    },
+    {
+      "sweep": 26,
+      "coordinate": 2,
+      "negative_objective_before": 332698.21875,
+      "negative_objective_after": 332698.1875,
+      "increase": -0.03125,
+      "surrogate_improvement": 0.009765625
+    },
+    {
+      "sweep": 26,
+      "coordinate": 3,
+      "negative_objective_before": 332698.1875,
+      "negative_objective_after": 332698.15625,
+      "increase": -0.03125,
+      "surrogate_improvement": 0.05322265625
+    },
+    {
+      "sweep": 26,
+      "coordinate": 4,
+      "negative_objective_before": 332698.15625,
+      "negative_objective_after": 1523776.5,
+      "increase": 1191078.34375,
+      "surrogate_improvement": 292.326416015625
+    }
+  ]
+}

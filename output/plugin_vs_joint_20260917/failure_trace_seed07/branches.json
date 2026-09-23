@@ -1,0 +1,105 @@
+{
+  "complete": true,
+  "records": [
+    {
+      "method": "quadratic",
+      "parents": 32,
+      "points": 24,
+      "coordinate": 4,
+      "before": {
+        "32": 332698.15625,
+        "256": 332700.71875
+      },
+      "after": {
+        "32": 1523776.0,
+        "256": 1855150.75
+      },
+      "difference": {
+        "32": 1191077.84375,
+        "256": 1522450.03125
+      },
+      "max_loading_shift": 4.351743221282959,
+      "surrogate_improvement": 292.326416015625
+    },
+    {
+      "method": "quadratic",
+      "parents": 256,
+      "points": 24,
+      "coordinate": 4,
+      "before": {
+        "32": 332698.15625,
+        "256": 332700.71875
+      },
+      "after": {
+        "32": 2713085.0,
+        "256": 2308955.5
+      },
+      "difference": {
+        "32": 2380386.84375,
+        "256": 1976254.78125
+      },
+      "max_loading_shift": 4.691731929779053,
+      "surrogate_improvement": 293.96331787109375
+    },
+    {
+      "method": "quadrature",
+      "parents": 32,
+      "points": 24,
+      "coordinate": 4,
+      "before": {
+        "32": 332698.15625,
+        "256": 332700.71875
+      },
+      "after": {
+        "32": 332698.3125,
+        "256": 332698.625
+      },
+      "difference": {
+        "32": 0.15625,
+        "256": -2.09375
+      },
+      "max_loading_shift": 0.5151278972625732,
+      "surrogate_improvement": 0.052764892578125
+    },
+    {
+      "method": "quadrature",
+      "parents": 32,
+      "points": 96,
+      "coordinate": 4,
+      "before": {
+        "32": 332698.15625,
+        "256": 332700.71875
+      },
+      "after": {
+        "32": 332698.28125,
+        "256": 332698.625
+      },
+      "difference": {
+        "32": 0.125,
+        "256": -2.09375
+      },
+      "max_loading_shift": 0.516038179397583,
+      "surrogate_improvement": 0.052890777587890625
+    },
+    {
+      "method": "no_feedback",
+      "parents": 32,
+      "points": 24,
+      "coordinate": 4,
+      "before": {
+        "32": 332698.15625,
+        "256": 332700.71875
+      },
+      "after": {
+        "32": 332756.8125,
+        "256": 332757.3125
+      },
+      "difference": {
+        "32": 58.65625,
+        "256": 56.59375
+      },
+      "max_loading_shift": 2.956024646759033,
+      "surrogate_improvement": 0.11461646854877472
+    }
+  ]
+}

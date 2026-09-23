@@ -4,1801 +4,726 @@
 \usepackage[margin=25mm,headheight=14pt]{geometry}
 \usepackage{amsmath,amssymb,mathtools,bm}
 \usepackage{booktabs,array,enumitem,microtype}
-\usepackage{longtable}
 \usepackage[dvipsnames]{xcolor}
-\usepackage{hyperref,fancyhdr}
+\usepackage{hyperref,fancyhdr,graphicx,longtable}
 \hypersetup{colorlinks=true,linkcolor=MidnightBlue,urlcolor=MidnightBlue,
- citecolor=MidnightBlue,pdftitle={Hierarchical conditional empirical Bayes matrix factorization},
- pdfauthor={Derivation prepared for the cEBMF project}}
+  pdftitle={Hierarchical conditional empirical Bayes matrix factorization},
+  pdfauthor={Methods manuscript for the cEBMF project}}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small Hierarchical conditional empirical Bayes}
-\fancyhead[R]{\small Models and inference}
+\fancyhead[L]{\small Conditional loading priors in cEBMF}
+\fancyhead[R]{\small Derivation}
 \fancyfoot[C]{\thepage}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{5pt}
-\setlist{itemsep=3pt,topsep=4pt}
+\setlength{\parindent}{0pt}\setlength{\parskip}{5pt}
+\setlist{itemsep=3pt,topsep=4pt,leftmargin=*}
 \allowdisplaybreaks[1]
-\numberwithin{equation}{section}
 \newcommand{\E}{\mathbb E}
-\newcommand{\R}{\mathbb R}
 \newcommand{\N}{\mathcal N}
-\newcommand{\Q}{\mathcal Q}
 \newcommand{\LL}{\mathcal L}
 \newcommand{\pa}{\operatorname{pa}}
 \newcommand{\ch}{\operatorname{ch}}
-\newcommand{\KL}{\operatorname{KL}}
-\newcommand{\sigmoid}{\operatorname{sigmoid}}
-\newcommand{\logit}{\operatorname{logit}}
+\newcommand{\R}{\mathbb R}
 \newcommand{\Var}{\operatorname{Var}}
 \newcommand{\Cov}{\operatorname{Cov}}
-\newcommand{\ind}{\mathbf 1}
-\newcommand{\Normal}[3]{\varphi\!\left(#1;#2,#3\right)}
-\newcommand{\given}{\mid}
-\title{Hierarchical conditional empirical Bayes matrix factorization\\[4pt]
-\large Gaussian, exponential and sparse priors for coupled molecular programs}
+\newcommand{\sigmoid}{\operatorname{sigmoid}}
+\newcommand{\logit}{\operatorname{logit}}
+\newcommand{\Normal}[3]{\varphi(#1;#2,#3)}
+\newcommand{\note}[1]{\par\smallskip\noindent\colorbox{blue!5}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{#1}}\par\smallskip}
+\title{\textbf{Hierarchical conditional empirical Bayes
+matrix factorization}\\[7pt]
+\Large Learning $p(L_k\mid L_{<k})$ for partially paired multi-omics}
 \author{Methods manuscript for the cEBMF project}
-\date{15 September 2026}
+\date{16 September 2026}
+
+
 \begin{document}
 \maketitle
+\thispagestyle{fancy}
 \begin{abstract}
-We study multi-modal matrix factorization in which the distributions of
-sample loadings depend on earlier latent programs and fixed side information.
-A normalized directed prior links modality-specific additive factorizations,
-while hidden Markov priors regularize ordered feature factors. We derive a
-common inference construction for conditional Gaussian mixtures, exponential
-mixtures, optional fixed point masses, and the one- and two-slab CGB families.
-Each loading update combines a Gaussian normal-means likelihood, its own
-conditional prior, and the likelihood contributions of its children.
-Analytic component posteriors provide proposals for a Metropolis correction
-that preserves the joint latent target, including transitions to and from
-exact zero. We also derive augmented variational coordinates and
-complete-data parameter updates, distinguish exact identities from numerical
-approximations, and handle partially overlapping modalities by integrating
-or sampling missing latent programs. A comparison with population-prior
-matrix factorization establishes an explicit autoregressive representation
-of vector Gaussian mixtures and delineates the additional structural
-assumptions of the proposed framework. An experimental Gaussian-mixture
-implementation and independent numerical checks support the derivations;
-exponential-mixture solver support and comparative empirical validation
-remain future work. The construction does not imply causal identification
-or guaranteed improvement in either modality.
+We study matrix factorizations whose loading distributions depend on earlier
+latent programs and fixed covariates. The target is a normalized directed
+prior, $p_\theta(L)=\prod_k p_{\theta_k}(L_k\mid L_{<k})$, learned jointly
+with the latent loadings. We derive a variational coordinate that combines
+the original cEBMF Gaussian likelihood calculation with uncertainty in
+parents and feedback from children. Profiling out the coordinate posterior
+gives a prior-learning objective that reduces to the original cEBNM
+marginal-likelihood problem when latent-covariate edges are absent.
+Ordinary ash updates are retained for feature factors. For partially paired
+ATAC--RNA data, two observation models are linked through their loading
+prior; completely unobserved terminal branches are integrated out to avoid
+an unnecessary variational penalty. A Gaussian-mixture implementation uses
+one-dimensional quadrature and fixed parent-integration points. The dependent
+prior is distinguished from the factorized posterior approximation and from
+the stronger alternative of correlated row blocks. Comparisons with TwinEB,
+learned VAE priors and multi-omics methods delimit the structural contribution
+without claiming unique representational capacity, causal identification or
+established predictive superiority.
 \end{abstract}
 
+\paragraph{Positioning.}
+EBMF learns priors and factors through normal-means problems \cite{wang};
+cEBMF allows fixed covariates to inform these priors \cite{cebmf}. Our target
+extends the covariates to uncertain loading coordinates while preserving
+that learning structure. The contribution to evaluate is the usefulness of
+explicit conditional program distributions and their compatible inference,
+not the general ability to represent dependence. Population mixtures,
+autoregressive priors and nonlinear multi-omics models already represent
+many forms of dependence.
+
+\paragraph{Scope.}
+The principal implementation uses Gaussian observations, conditional
+Gaussian mixtures (with optional exact zero spikes) for loadings, and ash
+on features. HMM feature smoothing remains an optional, separate prior.
+Exponential loading slabs and correlated posterior blocks are extensions,
+not part of the principal validated example. The supplied simulation is an
+executable illustration; a comparative scientific benchmark remains needed.
 \clearpage
-\begingroup\small\setlength{\parskip}{0pt}
-\tableofcontents
-\endgroup
+\section{Conditional loading model}
+Let \(Y\in\mathbb R^{n\times p}\), \(L\in\mathbb R^{n\times K}\), and
+\(F\in\mathbb R^{p\times K}\). Here \(L_k=L_{:k}\) means the \emph{kth
+loading column}, and \(L_{<k}=L_{:,1:(k-1)}\). The observation model is
+\begin{equation}
+Y_{ij}\mid L,F,\tau\sim
+\N\!\left(\sum_{k=1}^KL_{ik}F_{jk},\tau_{ij}^{-1}\right),
+\qquad (i,j)\in\Omega.
+\label{eq:likelihood}
+\end{equation}
+The desired autoregressive loading prior is
+\begin{equation}
+\boxed{p_\theta(L\mid X)=\prod_{k=1}^Kp_{\theta_k}(L_k\mid L_{<k},X).}
+\label{eq:desired}
+\end{equation}
+As in the existing conditional-prior networks, we use the rowwise form
+\begin{equation}
+p_{\theta_k}(L_k\mid L_{<k},X)
+=\prod_{i=1}^ng_{\theta_k}(L_{ik}\mid X_i,L_{i,<k}).
+\label{eq:rows}
+\end{equation}
+The parameters \(\theta_k\) are shared across rows. If fixed covariates are
+unavailable, omit \(X_i\). Conditional independence across rows in
+\eqref{eq:rows} is a specified architecture; it is not independence across
+loading columns.
+
+For example, a CGB network learns
+\[
+g_{\theta_k}(dv\mid P)=\pi_{k0}(P)\delta_0(dv)
++[1-\pi_{k0}(P)]\N(dv;\mu_k,s_k^2),\quad P=(X_i,L_{i,<k}).
+\]
+Earlier loadings predict whether a later loading is active. An EMDN can
+also let earlier loadings predict component means and variances. Multiplying
+these normalized, acyclic conditionals defines a normalized joint prior.
+The ordering permits dependencies; it does not uniquely identify a tree.
+
 \clearpage
-
-\section{Introduction}\label{sec:introduction}
-Multi-modal measurements can reveal different aspects of a sample's latent
-biological programs. Separate matrix factorizations allow each modality to
-have its own programs, but independent priors do not express how the
-activation or amplitude of one program informs another. Conversely,
-substituting estimated loadings from one modality into a conditional prior
-for another treats those estimates as observed and omits feedback through
-their dependent programs.
-
-Empirical Bayes matrix factorization reduces factor updates to normal-means
-problems \cite{wang}, and cEBMF allows observed covariates to inform the prior
-\cite{cebmf}. TwinEB learns flexible population mixtures on entire row and
-column latent vectors \cite{twineb}. Learned VAE priors also include
-encoder-tied population mixtures, autoregressive flows and conditionally
-factorized priors for identifiable representation learning
-\cite{vampprior,vlae,ivae}. Shared-subspace and hierarchical
-multi-omics models provide complementary integration strategies
-\cite{mofa,jive,cavachon}. Building on these ideas, we consider normalized
-conditional loading distributions whose inputs include uncertain latent
-programs as well as fixed covariates. The inferential target is the resulting
-joint posterior, conditional on estimated parameters in an empirical-Bayes
-analysis.
-
-The methodological construction has three parts. First, analytic
-normal-means posteriors for Gaussian, exponential and atomic components
-provide a common computational primitive. Second, child-prior contributions
-supply the missing upstream feedback, through either exact-target sampling
-or explicitly defined variational coordinates. Third, sequence updates for
-feature factors and missing-modality likelihoods complete the model without
-changing its directed loading-prior semantics. The resulting modularity
-covers the one- and two-slab CGB variants while retaining their actual
-support and scale constraints.
-
-The paper develops these identities and their implementation requirements.
-It does not present a completed empirical benchmark. We distinguish the
-prototype's implemented Gaussian/atomic sampler from derived extensions,
-and identify the experiments required to assess computational efficiency,
-uncertainty calibration and scientific utility. Section~\ref{sec:twineb}
-positions the contribution relative to population-prior factorization;
-Section~\ref{sec:vaepriors} distinguishes density flexibility from explicit
-program relationships and compares inference requirements;
-Section~\ref{sec:comparison} also covers multi-omics alternatives.
-
-\section{Notation and assumptions}\label{sec:notation}
-We observe paired cells in two matrices, with no requirement that their features
-or ranks agree:
+\section{Prior dependence and posterior approximation}
+The earlier loadings are latent, not observed covariates. A parent loading
+therefore receives information both from the matrix likelihood and from
+later loading-prior terms. For two loading coordinates in one row,
 \[
-Y^A\in\R^{N\times P_A},\quad Y^R\in\R^{N\times P_R},\quad
-A\in\R^{N\times K_A},\quad R\in\R^{N\times K_R},\quad
-F^m\in\R^{P_m\times K_m}\quad(m\in\{A,R\}).
+p(l_1,l_2)=g_1(l_1)g_2(l_2\mid l_1)
+\quad\Longrightarrow\quad
+p(l_1\mid l_2,Y,F)\propto p(Y\mid l_1,l_2,F)g_1(l_1)g_2(l_2\mid l_1).
 \]
-Here \(A=L_{\rm ATAC}\), \(R=L_{\rm RNA}\), and \(L^A=A,L^R=R\).
-The package stores factors in the orientation \(L^m(F^m)^\top\).
-Indices \(i,t,k,j\) denote cells, features, ATAC components and RNA components,
-respectively. \(\Omega_m\) is the set of observed entries. Rows are aligned
-between modalities; feature positions need not be aligned between modalities.
+This posterior feedback follows from the requested joint model itself.
+It does not introduce a reverse-direction generative prior.
 
-\begin{enumerate}[label=(\roman*)]
-\item The observations have independent Gaussian errors conditional on latent
-variables and positive precisions \(\tau^m_{it}\). This matches the notebook's
-Gaussian simulation. It does not assert a count likelihood for raw RNA or ATAC.
-\item Loading priors act within each cell, with parameters shared across cells.
-External covariates, if present, are fixed and are suppressed in most formulas.
-\item Any centering/scaling transformation supplied to a prior network is
-\emph{fixed during the inference target}. Dynamic standardization is discussed
-in Section~\ref{sec:scaling}; it would otherwise invalidate the cell-local
-Markov blankets used below.
-\item Factor ordering, ranks, HMM state supports and component supports are
-fixed unless an explicitly evaluated model-selection step changes them.
-\item The main derivation uses the unpenalized model, equivalent to a sparsity
-penalty of one. Optional regularization must be defined in the common objective
-(Section~\ref{sec:penalty}).
-\end{enumerate}
-
-Write \(\Normal{x}{\mu}{v}\) for a Gaussian density with \emph{variance} \(v>0\).
-All distributions and log densities involving a spike are interpreted on their
-mixed discrete/continuous space, not by assigning an infinite ordinary density
-to zero. Empty products equal one; empty sums equal zero.
-
-\section{Hierarchical factorization model}\label{sec:models}
-\subsection{Observation models}
-For \((i,t)\in\Omega_m\),
-\begin{equation}\label{eq:observation}
-Y^m_{it}\mid L^m,F^m,\tau^m
-\sim \N\left(\sum_{k=1}^{K_m}L^m_{ik}F^m_{tk},(\tau^m_{it})^{-1}\right).
-\end{equation}
-Denote the product likelihood by \(p_m(Y^m\mid L^m,F^m,\tau^m)\).
-Unobserved entries contribute no likelihood term. Precisions may be known or
-shared within identifiable groups, such as a modality, a row or a column.
-
-\subsection{Independent and fixed-covariate fits}
-An independent baseline uses
-\begin{equation}
-p_0(A,R)=\prod_{i,k}g^A_k(A_{ik})\prod_{i,j}g^R_j(R_{ij}).
-\end{equation}
-A conditional RNA fit supplied with an estimated ATAC matrix \(\widehat A\)
-instead uses, for example,
-\begin{equation}\label{eq:pluginprior}
-p(R\mid\widehat A)=\prod_i\prod_jg^R_j(R_{ij}\mid R_{i,<j},\widehat A_i).
-\end{equation}
-This is a valid conditional model if its factors are normalized. Treating
-\(\widehat A\) as fixed does not infer ATAC loadings using RNA evidence.
-Even within \eqref{eq:pluginprior}, full RNA inference includes the effects of
-\(R_{ij}\) on later RNA priors. Plugging estimated earlier RNA loadings into
-successive EBNM calls does not include those effects.
-
-\subsection{Ordered joint loading prior}
-The proposed joint prior is
-\begin{equation}\label{eq:orderedprior}
-\boxed{p(A,R\mid\theta)=
-\prod_{i=1}^N\left\{
-\prod_{k=1}^{K_A}g^A_k(A_{ik}\mid A_{i,<k};\theta^A_k)
-\prod_{j=1}^{K_R}g^R_j(R_{ij}\mid R_{i,<j},A_i;\theta^R_j)
-\right\}.}
-\end{equation}
-It is normalized by integrating in reverse generative order. The within-cell
-ordering consists of all ATAC components followed by all RNA components.
-This is an
-autoregressive prior, not a causal identification result. Omitting unnecessary
-parent inputs gives a sparser directed graph.
-
-For a generic loading node \(V_u\), let \(P_u=\pa(V_u)\) and
-\(\mathcal C_u=\ch(V_u)\). With all proposed dependencies present,
+\subsection{Mixture labels and the variational family}
+For clarity, represent a loading mixture by a label \(Z_{ik}\):
 \begin{align}
-\mathcal C_{A_{ik}}&=\{A_{ih}:h>k\}\cup\{R_{ij}:1\leq j\leq K_R\},\\
-\mathcal C_{R_{ij}}&=\{R_{ih}:h>j\}.
+p(Z_{ik}=0,L_{ik}\in dv\mid P_{ik})
+  &=\pi_{k0}(P_{ik})\delta_0(dv),\notag\\
+p(Z_{ik}=h,L_{ik}\in dv\mid P_{ik})
+  &=\pi_{kh}(P_{ik})\Normal{v}{\mu_{kh}(P_{ik})}{s_{kh}^2(P_{ik})}\,dv,
+  \quad h>0.
+\label{eq:mixture}
 \end{align}
-Only actual children contribute when a network structurally omits an input.
+Here \(P_{ik}\) contains the fixed covariates and the selected earlier
+parents. These labels only identify existing mixture components. They
+are not an additional representation or upper latent layer.
 
-\subsection{CGB loading prior and related families}\label{sec:cgbmodel}
-The mathematical CGB family matching \texttt{cov\_gb\_prior.py} is
-\begin{align}
-\pi_u(P_u)&=\sigmoid\{h_{\theta_u}(S_u(P_u))\},\label{eq:gate}\\
-Z_u\mid P_u&\sim\operatorname{Bernoulli}(\pi_u(P_u)),\\
-V_u\mid Z_u=0,P_u&=0,\qquad
-V_u\mid Z_u=1,P_u\sim\N(\mu_u,d_u^2),\label{eq:cgbmodel}
-\end{align}
-where \(S_u\) denotes a fixed affine preprocessing transformation and
-\(d_u^2>0\). Parameters are shared over cells for each component. In the source,
-\texttt{pi\_2} is our slab probability \(\pi_u\), \texttt{pi\_1} is \(1-\pi_u\),
-\texttt{mu\_2} is \(\mu_u\), and \texttt{sigma2\_sq} is \(d_u^2\).
-The slab is signed; CGB is neither an exact Bernoulli prior nor a positive
-truncated-normal prior. Only its mixing probability depends on parents.
-
-More generally, replace the slab by a normalized distribution \(G_u(dv\mid P_u)\):
-\begin{equation}\label{eq:generalspike}
-g_u(dv\mid P_u)=(1-\pi_u(P_u))\delta_0(dv)+\pi_u(P_u)G_u(dv\mid P_u).
-\end{equation}
-Examples include a positive truncated Gaussian, a point-exponential model, or
-the strict binary slab \(G_u=\delta_1\). The package's intended
-\texttt{gbinary} family uses a positive truncated Gaussian with
-\(d_u=\omega|\mu_u|\); this is a different family from CGB. For such a slab,
-the normalizing constant is \(\Phi(\mu_u/d_u)\), which reduces to
-\(\Phi(1/\omega)\) only when \(\mu_u>0\). These are model equations, not a
-claim that every numerical boundary case of that separate solver is audited here.
-
-\subsection{HMM factor priors}\label{sec:hmmmodel}
-For each modality and factor, independently across \((m,k)\), introduce a state
-chain \(Q^m_{1:P_m,k}\) and mixture labels \(C^m_{1:P_m,k}\). Suppress \((m,k)\):
-\begin{align}
-Q_1&\sim\operatorname{Categorical}(\alpha), &
-Q_t\mid Q_{t-1}=a&\sim\operatorname{Categorical}(T_{a,\cdot}),\\
-C_t\mid Q_t=b&\sim\operatorname{Categorical}(\rho_{b,\cdot}), &
-F_t\mid Q_t=b,C_t=c&\sim G_{bc}.
-\end{align}
-Thus
-\begin{equation}\label{eq:hmmprior}
-p_H(F,Q,C\mid\psi)=\alpha_{Q_1}
-\prod_{t=2}^{P_m}T_{Q_{t-1},Q_t}
-\prod_{t=1}^{P_m}\rho_{Q_t,C_t}G_{Q_t,C_t}(dF_t).
-\end{equation}
-Rows of \(T\) and \(\rho\), and \(\alpha\), sum to one. The signed HMM uses
-\(G_{bc}=\N(c_b,v_c)\) for \(v_c>0\), and \(G_{bc}=\delta_{c_b}\) for
-\(v_c=0\). The positive model uses
-\begin{equation}\label{eq:tn}
-G^+_{bc}(df)=
-\frac{\Normal{f}{c_b}{v_c}\ind\{f>0\}}{\Phi(c_b/\sqrt{v_c})}\,df
-\quad(v_c>0),
-\end{equation}
-with nonnegative atoms when \(v_c=0\). The negative model is the reflection
-of the positive model. A designated null state can be exactly \(\delta_0\).
-This captures the probability model of the current HMM implementation; its
-automatic grids, moving centers and pruning are estimation procedures.
-
-Each chain follows the existing feature order with unit spacing. There is no
-cross-modality feature alignment, distance-dependent transition, or learned
-dependence on \texttt{X\_f} in this HMM specification. Unrelated sequences require
-separate chains or an explicitly specified reset.
-
-\subsection{Complete joint density and inferential targets}
-Let \(\mathcal H\) collect all factor chains and mixture labels, and let
-\(\Theta=(\theta,\psi,\tau)\) collect parameters. Then
-\begin{equation}\label{eq:joint}
-\begin{split}
-p(Y^A,Y^R,A,R,F^A,F^R,\mathcal H\mid\Theta)
-={}&p_A(Y^A\mid A,F^A,\tau^A)p_R(Y^R\mid R,F^R,\tau^R)\\
-&\times p(A,R\mid\theta)
-\prod_{m\in\{A,R\}}\prod_{k=1}^{K_m}p_H(F^m_k,\mathcal H^m_k\mid\psi^m_k).
-\end{split}
-\end{equation}
-An empirical Bayes analysis estimates \(\Theta\) and targets the joint latent
-posterior conditional on that estimate. A fully Bayesian analysis additionally
-specifies \(p(\Theta)\) and infers parameter uncertainty. Joint latent inference
-does not require fully Bayesian treatment of every hyperparameter. Conversely,
-optimizing all latent variables jointly as point estimates is joint MAP, not
-posterior uncertainty propagation. With spikes, MAP also needs a precise
-discrete/continuous parameterization; comparing an atom's mass to a continuous
-density is not an invariant decision rule.
-
-\section{Exact full conditionals}\label{sec:exact}
-\subsection{Gaussian contribution for one loading}
-Hold other variables and parameters fixed and set
-\begin{align}
-e^m_{it,-k}&=Y^m_{it}-\sum_{h\ne k}L^m_{ih}F^m_{th},\\
-a^m_{ik}&=\sum_{t:(i,t)\in\Omega_m}\tau^m_{it}(F^m_{tk})^2,
-&b^m_{ik}&=\sum_{t:(i,t)\in\Omega_m}\tau^m_{it}F^m_{tk}e^m_{it,-k}.
-\end{align}
-Terms depending on a candidate \(v=L^m_{ik}\) reduce exactly to
-\begin{equation}\label{eq:quadratic}
-\ell_u(v)=-\tfrac12a_u v^2+b_uv.
-\end{equation}
-If \(a_u>0\), define \(s_u^2=1/a_u\), \(x_u=b_u/a_u\).
-Then \(\exp\ell_u(v)\propto\Normal{x_u}{v}{s_u^2}\).
-If \(a_u=0\), there is no direct data information and \(b_u=0\); retain the
-constant likelihood rather than inventing information through an epsilon.
-Children can still inform the loading in this case.
-
-\subsection{Own prior and child contributions}
-Use \(P_c[v]\) for a child's parent vector with the target replaced by \(v\).
-The exact conditional is
-\begin{equation}\label{eq:exactgeneric}
-\boxed{p(dv\mid\mathrm{rest},Y,\Theta)\ \propto\
-\exp\{\ell_u(v)\}\,g_u(dv\mid P_u)
-\prod_{c\in\mathcal C_u}g_c(V_c\mid P_c[v]).}
-\end{equation}
-For continuous slabs a zero child uses its spike probability, while a nonzero
-child uses its slab weight times its slab density. This interpretation also
-follows by introducing the indicators in \eqref{eq:cgbmodel}.
-In particular,
-\begin{align}
-p(dA_{ik}\mid\mathrm{rest},Y,\Theta)&\propto
-e^{\ell^A_{ik}(A_{ik})}g^A_k(dA_{ik}\mid A_{i,<k})\nonumber\\[-2pt]
-&\quad\times\prod_{h>k}g^A_h(A_{ih}\mid A_{i,<h})
-\prod_jg^R_j(R_{ij}\mid R_{i,<j},A_i),\label{eq:exactA}\\
-p(dR_{ij}\mid\mathrm{rest},Y,\Theta)&\propto
-e^{\ell^R_{ij}(R_{ij})}g^R_j(dR_{ij}\mid R_{i,<j},A_i)
-\prod_{h>j}g^R_h(R_{ih}\mid R_{i,<h},A_i).\label{eq:exactR}
-\end{align}
-Only terms depending on the target need evaluation. The RNA likelihood is
-constant in \eqref{eq:exactA} when \(R,F^R\) are fixed; its evidence reaches
-ATAC through the inferred RNA loadings and the RNA conditional priors.
-This is posterior feedback under the original ATAC-to-RNA joint prior.
-
-Sampling these full conditionals, together with valid updates for all remaining
-unknowns, gives a Gibbs or Metropolis-within-Gibbs scheme for one joint target.
-Replacing samples by conditional means is not Gibbs sampling. Fitting two
-unrelated reverse-direction conditional priors does not ensure that they are
-full conditionals of \eqref{eq:joint}. Re-estimating parameters during sampling
-also changes the target; a Bayesian sampler must update those parameters under
-their conditional distributions, or an EB analysis must separate estimation
-from inference conditional on the fitted parameters.
-
-\section{A joint variational objective and coordinate derivation}\label{sec:vi}
-\subsection{Structured mean-field family}
-Keep each factor's HMM sequence intact, but initially factorize loading nodes:
-\begin{equation}\label{eq:qfamily}
-q=\left\{\prod_{i,k}q^A_{ik}(A_{ik})\prod_{i,j}q^R_{ij}(R_{ij})\right\}
-\prod_{m,k}q^m_{F,k}(F^m_k,\mathcal H^m_k).
-\end{equation}
-Each loading factor can contain an exact spike and an unrestricted continuous
-slab. The approximation loses posterior dependence between different loading
-nodes, but retains their uncertainty and includes every joint-prior term in
-the objective. The factor sequences are independent across \((m,k)\) under
-\(q\), not independent across feature positions within a sequence.
-
-For fixed \(\Theta\), the evidence lower bound is
-\begin{equation}\label{eq:elbo}
-\boxed{\LL(q,\Theta)=\E_q\log p(Y,A,R,F,\mathcal H\mid\Theta)-\E_q\log q.}
-\end{equation}
-It equals \(\log p(Y\mid\Theta)-\KL(q\Vert p(\cdot\mid Y,\Theta))\).
-For this model it can be organized as
-\begin{equation}\label{eq:elboexpanded}
-\begin{split}
-\LL={}&\sum_m\E_q\log p_m(Y^m\mid L^m,F^m,\tau^m)
- +\sum_u\E_q\log g_u(V_u\mid P_u)\\
-&+\sum_u H(q_u)
- -\sum_{m,k}\KL(q^m_{F,k}\Vert p_H^m(\cdot\mid\psi^m_k)).
-\end{split}
-\end{equation}
-Every conditional prior appears \emph{once}. It may enter the updates of
-several variables because it depends on each of them. This is not double
-counting in the objective. If parameters have a prior and are point-estimated,
-add \(\log p(\Theta)\) for a MAP parameter objective. A variational distribution
-over parameters requires its own expected prior and entropy terms instead.
-
-\subsection{Derivation, not just the coordinate identity}
-Holding \(q_{-u}\) fixed, collect
-\(f_u(v)=\E_{q_{-u}}\log p(Y,V_u=v,V_{-u},F,\mathcal H\mid\Theta)\).
-The terms varying with \(q_u\) are
+Use the variational approximation
 \begin{equation}
-\int q_u(v)f_u(v)\,d\nu_u(v)
--\int q_u(v)\log q_u(v)\,d\nu_u(v)
-=-\KL(q_u\Vert q_u^*)+\log Z_u,
+q(L,Z,F)=\prod_{i,k}q_{ik}(L_{ik},Z_{ik})\prod_{j,k}q^F_{jk}(F_{jk}).
+\label{eq:q}
 \end{equation}
-where \(q_u^*(v)=\exp f_u(v)/Z_u\), with a suitable mixed reference measure
-\(\nu_u\). Thus the unrestricted coordinate optimum is
-\begin{equation}\label{eq:cavi}
-\log q_u^*(v)=C+\E_{q_{-u}}\log p(Y,V,F,\mathcal H\mid\Theta).
-\end{equation}
-This standard identity is reviewed by Blei et al.~\cite{blei}; the remaining
-expressions below follow by expanding this particular joint model. Exact
-coordinate maximization cannot decrease \eqref{eq:elbo}. A Gaussian
-approximation to a tilted slab, noisy quadrature or incomplete network
-optimization does not inherit that guarantee automatically.
+Each value stays dependent on its own label. The generative prior
+\eqref{eq:desired} remains dependent even though this posterior
+approximation factorizes across loading coordinates. Thus this method
+\emph{learns the requested conditional prior}, but does not represent
+posterior covariance between distinct loading coordinates. Section~\ref{sec:structured}
+states the alternative if that covariance is also required.
 
-\subsection{Normal-means statistics with posterior uncertainty}
-Define \(m^L_{ik}=\E L_{ik}\), \(M^L_{ik}=\E L_{ik}^2\),
-\(m^F_{tk}=\E F_{tk}\), \(M^F_{tk}=\E F_{tk}^2\), separately by modality.
-Using \eqref{eq:qfamily} and fixed precisions gives
+For overlapping Gaussian components, augmenting the labels before making
+the mean-field approximation can give a different approximation from
+marginalizing them first. Both describe the same generative marginal model.
+With fixed parents and no children, the local optimum is the usual
+normal-means posterior, so augmentation does not spoil the cEBMF limit.
+
+\subsection{A single objective}
+Let \(g^F_{\eta_k}\) be the ordinary ash prior on feature column \(k\), with
+mixture weights estimated during fitting. The unpenalized ELBO is
 \begin{align}
-a^m_{ik}&=\sum_{t:(i,t)\in\Omega_m}\tau^m_{it}M^{F,m}_{tk},\label{eq:viastat}\\
-b^m_{ik}&=\sum_{t:(i,t)\in\Omega_m}\tau^m_{it}m^{F,m}_{tk}
-\left(Y^m_{it}-\sum_{h\ne k}m^{L,m}_{ih}m^{F,m}_{th}\right).\label{eq:vibstat}
+\LL(q,\theta,\eta,\tau)
+={}&\E_q\log p(Y\mid L,F,\tau)+H(q)\notag\\
+ &+\sum_{i,k}\E_q\log g_{\theta_k}(L_{ik},Z_{ik}\mid P_{ik})
+ +\sum_{j,k}\E_q\log g^F_{\eta_k}(F_{jk}).
+\label{eq:elbo}
 \end{align}
-The coefficient of \(v^2\) uses a \emph{second moment}, not the squared mean.
-For an independent variational precision factor replace \(\tau\) by \(\E\tau\).
-The remainder of the coordinate update is
-\begin{equation}\label{eq:generalvi}
-\boxed{\log q_u^*(v)=C-\tfrac12a_uv^2+b_uv+
-\E\log g_u(v\mid P_u)+D_u(v),\quad
-D_u(v)=\sum_{c\in\mathcal C_u}\E\log g_c(V_c\mid P_c[v]).}
-\end{equation}
-Expectations integrate all other uncertain arguments, never the candidate
-\(v\). Evaluating a network at posterior means generally differs from the
-expected log probability in this equation.
+For the loading terms, densities and entropy are taken with respect to a
+label-specific reference measure: unit mass at zero for the spike and
+Lebesgue measure for continuous components. Gaussian densities are not
+added to spike probability mass at zero.
 
-The current conditional EBNM approximation effectively uses
-\begin{equation}\label{eq:current}
-q^{\rm plug}_u(dv)\propto
-\Normal{x_u}{v}{s_u^2}\,g_u(dv\mid\E P_u).
-\end{equation}
-It both omits \(D_u\) and replaces uncertain predictors by their means.
-An ordinary local EBNM marginal likelihood cannot be substituted for all the
-joint-prior and entropy terms in \eqref{eq:elboexpanded} after this change.
-
-\section{A general update for the learned registry}\label{sec:generalregistry}
-\subsection{One normalized equation for any evaluable conditional prior}
-Assume that the conditional priors admit densities with respect to specified
-reference measures with fixed supports, and that the following normalizer is
-positive and finite. These assumptions cover the scalar learned priors in
-the registry with fixed component supports and positive variances. Define
+\clearpage
+\section{Deriving a loading-coordinate update}
+\subsection{The original cEBMF likelihood calculation}
+Write \(w_{ij}=M_{ij}\tau_{ij}\), where \(M\) is the observation mask. Let bars
+denote first posterior moments, and define
+\begin{align}
+\bar R_{ij,-k}&=Y_{ij}-\sum_{h\ne k}\bar L_{ih}\bar F_{jh},\notag\\
+a_{ik}&=\sum_jw_{ij}\E_q[F_{jk}^2],&
+b_{ik}&=\sum_jw_{ij}\bar R_{ij,-k}\bar F_{jk}.
+\label{eq:stats}
+\end{align}
+All sums involving observed Y are over observed entries. Expanding the
+expected squared error while holding the other variational factors fixed
+gives the loading-dependent likelihood term
 \begin{equation}
-U_u(v)=-\tfrac12a_uv^2+b_uv+
-\E\log g_u(v\mid P_u)+\sum_{c\in\mathcal C_u}\E\log g_c(V_c\mid P_c[v]).
+\E_{q_{-ik}}\log p(Y\mid L,F,\tau)
+=-\tfrac12a_{ik}v^2+b_{ik}v+\text{constant},\qquad v=L_{ik}.
+\label{eq:quadratic}
 \end{equation}
-Then the general mean-field coordinate update and its moments are
-\begin{equation}\label{eq:universal}
-\boxed{q_u^*(dv)=\frac{e^{U_u(v)}\nu_u(dv)}{\int e^{U_u(w)}\nu_u(dw)},
-\qquad \E_{q_u^*}f(V_u)=
-\frac{\int f(v)e^{U_u(v)}\nu_u(dv)}{\int e^{U_u(v)}\nu_u(dv)}.}
-\end{equation}
-For a spike at zero plus a continuous density, \(\nu=\delta_0+\text{Lebesgue}\).
-The density at the atom is its probability mass. Its value on the continuous
-part is the continuous mixture density; one must not add a Gaussian density
-evaluated at zero to the atom's mass. Other finite atoms are handled by adding
-their separate mass terms to the integrals. Priors with moving supports or
-singular parameter-dependent transformations need separate treatment.
+The denominator uses \(\E[F_{jk}^2]\), not \((\E F_{jk})^2\), as in
+ordinary cEBMF. F need not be sampled.
 
-Equation~\eqref{eq:universal} is a \emph{general update}, but not a universal
-closed-form solver. It requires conditional log-prior evaluation for arbitrary
-candidate values and uncertain parent inputs. A function returning only
-\texttt{post\_mean}, \texttt{post\_mean2} and a local marginal likelihood
-does not expose enough information to evaluate it.
-
-\subsection{Reusing an EBNM posterior as a reference distribution}
-Freeze prior parameters and choose a reference parent value \(p_\star\).
-Let an ordinary normal-means posterior be
+\subsection{The own-prior and child terms}
+Define
 \begin{equation}
-q_{0u}(dv)\propto\Normal{x_u}{v}{s_u^2}\,g_u(dv\mid p_\star).
+A_{ik}(v,z;\theta_k)=
+\E_{q(P_{ik})}\log g_{\theta_k}(v,z\mid P_{ik}).
+\label{eq:own}
 \end{equation}
-Suppose it is positive everywhere the desired update has positive mass or
-density. With all densities defined against the same reference measure, put
+Only latent parents are averaged; the external covariates are fixed.
+Changing v also changes every direct child's prior. Their contribution is
 \begin{equation}
-C_u(v)=\E\log g_u(v\mid P_u)-\log g_u(v\mid p_\star)+D_u(v).
+D_{ik}(v)=\sum_{c\in\ch(k)}
+\E_{q(L_{ic},Z_{ic})q(P_{ic}\setminus L_{ik})}
+\log g_{\theta_c}(L_{ic},Z_{ic}\mid P_{ic}[v]).
+\label{eq:child}
 \end{equation}
-Then
-\begin{equation}\label{eq:universaltilt}
-\boxed{q_u^*(dv)=\frac{q_{0u}(dv)e^{C_u(v)}}{\E_{q_{0u}}e^{C_u(V_u)}}.}
-\end{equation}
-Thus quadrature or importance sampling from an existing conditional posterior
-can in principle support every scalar learned family, including EMDN with
-parent-dependent means and variances. For samples \(v_b\sim q_{0u}\), a
-self-normalized approximation is
-\(\E f(V_u)\approx\sum_b\widetilde w_bf(v_b)\),
-\(\widetilde w_b\propto e^{C_u(v_b)}\).
-This finite-sample ratio is not unbiased, can have highly variable weights,
-and needs support and tail checks. If spike probability is small, integrating
-its mass separately is preferable to hoping it appears in a finite sample.
-The identity is exact; this numerical procedure need not be.
-
-\subsection{An exact-target Metropolis-within-Gibbs update}\label{sec:mh}
-There is an especially simple general route if sampling is acceptable.
-For an exact scalar full conditional, all other latent variables are fixed.
-Compute \(a_u,b_u\) from their \emph{realized values} as in
-Section~\ref{sec:exact}, not from the variational moments in
-\eqref{eq:viastat}--\eqref{eq:vibstat}, and take \(p_\star=P_u\).
-Then the correction in
-\eqref{eq:universaltilt} is just the exact child log likelihood
+Under the total ordering, every later coordinate is a possible direct
+child; structurally omitted network inputs create no edge. Holding the
+other q factors and parameters fixed, the variational coordinate is
 \begin{equation}
-D_u^{G}(v)=\sum_{c\in\mathcal C_u}\log g_c(V_c\mid P_c[v]).
+\boxed{q^*_{ik}(v,z)\propto
+\exp\{-a_{ik}v^2/2+b_{ik}v+A_{ik}(v,z;\theta_k)+D_{ik}(v)\}.}
+\label{eq:qstar}
 \end{equation}
-Propose \(v'\sim q_{0u}\), the \emph{ordinary conditional normal-means
-posterior} under the fixed fitted prior. From the current value \(v\), accept
-with probability
-\begin{equation}\label{eq:mh}
-\boxed{\mathcal A(v,v')=\min\left\{1,
-\exp\big[D_u^{G}(v')-D_u^{G}(v)\big]\right\}.}
+This follows by maximizing the terms of \eqref{eq:elbo} involving \(q_{ik}\):
+expected log joint plus its entropy.
+
+\note{\textbf{Two necessary corrections to plug-in conditioning.}
+Average the \emph{log prior} over uncertain parents and include the
+children's prior terms. In general,
+\(\E\log g(v\mid P)\ne\log g(v\mid\E P)\) and
+\(\E\log g(v\mid P)\ne\log\E g(v\mid P)\).
+Using fitted earlier loadings as fixed inputs does not perform these steps.}
+
+\clearpage
+\section{Learning the conditional prior and posterior together}
+Write the exponent in \eqref{eq:qstar} as
+\(\Psi_{ik}(v,z;\theta_k)\), and define its normalizer
+\begin{equation}
+\mathcal Z_{ik}(\theta_k)=\sum_z\int
+\exp\{\Psi_{ik}(v,z;\theta_k)\}\,d\nu_z(v).
+\label{eq:normalizer}
 \end{equation}
-To verify it, write the target \(t(v)\propto q_{0u}(v)e^{D_u^G(v)}\).
-The independence Metropolis ratio~\cite{hastings} is
-\(t(v')q_{0u}(v)/[t(v)q_{0u}(v')]=e^{D_u^G(v')-D_u^G(v)}\).
-The cancellation works for both atom masses and continuous densities on the
-mixed measure. It does not require differentiation, a Gaussian slab, or a
-normalizing integral for the tilted target.
-
-For a fixed-parent Gaussian mixture, sampling \(q_{0u}\) is straightforward:
-sample a component using weights proportional to its prior weight times its
-normal-means evidence, then sample its Gaussian posterior or atom. All scalar
-learned registry families below have that form once their parameters and
-parents are fixed. The existing interface would need to expose this posterior,
-not merely its moments. If a different proposal \(r\) is used, the acceptance
-ratio must include the uncancelled target/proposal terms.
-
-One or several such invariant transitions per coordinate yields
-Metropolis-within-Gibbs, provided the overall chain has the required support
-and ergodicity. This is exact-target MCMC, not an exact independent posterior
-draw in finitely many steps. Strong child constraints may make acceptance
-poor and mixing slow. For a complete sampler, factor HMM blocks must also be
-\emph{sampled} using forward-filter/backward-sampling and component/effect
-draws, with pseudo-data formed from realized current loadings, rather than
-replaced by posterior means. Parameters must be fixed for
-conditional EB inference or updated under their Bayesian conditionals.
-Refitting an EBNM prior on each proposal destroys this cancellation and fixed
-target unless that parameter update is separately justified.
-
-\subsection{Which probability models the registry supplies}\label{sec:registrymap}
-The mapping below is based on the current \texttt{LearnedPriorType} and solver
-sources. A Gaussian whose mean is constrained positive still has signed
-support. A sharpening step during estimation is not itself a different
-normalized likelihood or a proof of a joint-objective ascent step.
-\small
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.19\textwidth}>{\raggedright\arraybackslash}p{0.41\textwidth}>{\raggedright\arraybackslash}p{0.34\textwidth}@{}}
-\toprule Registry name & Conditional prior & Joint-update consequence\\\midrule
-\endfirsthead
-\toprule Registry name & Conditional prior & Joint-update consequence\\\midrule
-\endhead
-\texttt{cash} & Spike at zero plus zero-centered Gaussian scale mixture;
-neural mixture weights. & Fixed-component mixture formulas apply; child
-messages involve the full mixture density or explicit component labels.\\[5pt]
-\texttt{lcash} & Same scale mixture; linear softmax weights. & Same generic
-mixture update, with a simpler gate.\\[5pt]
-\texttt{po\_lcash} & Same scale mixture; ordered-logistic probabilities. &
-Same generic mixture update; respect ordered cut-point constraints.\\[5pt]
-\texttt{cgb} & Spike plus one signed Gaussian; neural slab probability,
-global mean and variance. & Section~\ref{sec:cgb} gives its simpler scalar
-spike/tilted-Gaussian update.\\[5pt]
-\texttt{cgb\_sharp} & Same probability family as CGB at fixed parameters;
-variance sharpening during fitting. & Conditional inference has the CGB form;
-the sharpening rule needs a separate objective justification.\\[5pt]
-\texttt{cgb\_sharp\_2} & Spike plus two signed Gaussians with global
-positive/negative mean constraints and neural weights. & General mixture
-form; sign-constrained means do not truncate the slabs.\\[5pt]
-\texttt{emdn} & Gaussian mixture whose weights, means and variances depend
-on covariates. No exact spike. & Include parent effects on every mixture
-parameter in child messages.\\[5pt]
-\texttt{spiked\_emdn} & Exact zero spike plus EMDN Gaussian slabs. & Same
-EMDN message with a separate spike mass.\\[5pt]
-\texttt{hmm}, \texttt{hmm\_pos}, \texttt{hmm\_neg} & Sequence priors with
-latent Markov states; ignore covariates. & Treat the dependent sequence as
-a block. They are not scalar covariate-density priors merely because they
-appear in the learned registry.\\\bottomrule
-\end{longtable}
-\normalsize
-For scalar priors, automatic component grids should be fixed while deriving
-one target, or changed only through evaluated model proposals. Conditional
-variances must remain positive for continuous components. Fixed-component
-weights can change with parents without moving the underlying atom support.
-
-\subsection{A common augmented-mixture variational update}\label{sec:augmented}
-All scalar entries in the table can be represented, at the probability-model
-level, using a component label \(B_u\):
-\begin{equation}\label{eq:augprior}
-p(B_u=h,V_u\mid P_u)=w_{uh}(P_u)\,G_{uh}(V_u\mid P_u),
-\qquad \sum_h w_{uh}(P_u)=1.
+The network parameters are distinct for different loading columns.
+Consequently \(D\) is fixed when optimizing \(\theta_k\), even though it varies
+with the candidate loading \(v\). The Gibbs variational identity gives
+\begin{equation}
+\max_{q_{ik}}\{\E_{q_{ik}}\Psi_{ik}+H(q_{ik})\}
+=\log\mathcal Z_{ik}(\theta_k).
+\label{eq:profile}
 \end{equation}
-The labels in this subsection are distinct from the HMM mixture labels.
-For continuous components, write
-\(G_{uh}=\N(\mu_{uh}(P_u),d_{uh}^2(P_u))\); an optional component is the
-fixed zero atom. Use the variational family
-\(\prod_u q_u(V_u,B_u)\prod_{m,k}q_{F,k}^m\), so that the value and its own
-label are \emph{not} forced independent. Parents enter the model through
-their values, not through these auxiliary labels.
+The joint prior-and-posterior update is therefore
+\begin{equation}
+\boxed{\theta_k^{\rm new}\in\arg\max_{\theta_k}\sum_i\log\mathcal Z_{ik}(\theta_k),
+\qquad q_{ik}^{\rm new}=q^*_{ik}(\cdot;\theta_k^{\rm new}).}
+\label{eq:learning}
+\end{equation}
+The neural prior is learned from all rows using the same ELBO as the
+loading inference. An exact block optimizer cannot decrease that ELBO.
+Approximate integration and finite neural optimization require their own
+accuracy controls; they do not inherit an automatic monotonicity guarantee.
 
-This is a different variational family on an augmented joint model. In general,
+\subsection{Proof of the reduction to ordinary cEBMF}
+With no latent-covariate edges, there are neither uncertain parents nor
+child messages:
 \[
-\E\log\sum_h w_hG_h\ne\log\sum_h\exp\{\E\log(w_hG_h)\}.
+A_{ik}(v,z;\theta_k)=\log g_{\theta_k}(v,z\mid X_i),\qquad D_{ik}(v)=0.
 \]
-The augmented update must not be advertised as the exact collapsed
-coordinate \eqref{eq:universal} when parents are uncertain. Both target the
-same generative marginal model, but their variational approximations differ.
-
-Let \(r_{ch}=q(B_c=h)\), and for a continuous child component let
-\(m_{ch}=\E(V_c\mid B_c=h)\), \(M_{ch}=\E(V_c^2\mid B_c=h)\).
-The downstream contribution in the augmented family is
-\begin{equation}\label{eq:augmessage}
-D_u^{\rm aug}(v)=\sum_{c\in\mathcal C_u}\sum_h r_{ch}
-\E_{P_c\setminus V_u}\left[
-\log w_{ch}(P_c[v])+J_{ch}(P_c[v])\right],
-\end{equation}
-where, for a Gaussian child component,
-\begin{equation}\label{eq:Jchild}
-J_{ch}(p)=-\tfrac12\log(2\pi d_{ch}^2(p))
--\frac{M_{ch}-2\mu_{ch}(p)m_{ch}+\mu_{ch}^2(p)}{2d_{ch}^2(p)}.
-\end{equation}
-For the fixed spike component, \(J_{c0}=0\) on its supported event. This uses
-the per-node mean-field independence from parents while preserving
-\(q(V_c,B_c)\). It handles parent-dependent EMDN means and variances, not
-only weight-dependent CGB gates.
-
-For each continuous component of the target, define
+For \(a=a_{ik}>0\), set \(x=b_{ik}/a\) and \(s^2=1/a\). Then
+\[
+e^{-av^2/2+bv}=\sqrt{2\pi/a}\,e^{b^2/(2a)}\Normal{x}{v}{1/a}.
+\]
+After summing over the component label,
 \begin{align}
-\mathsf A_h&=a_u+\E[d_{uh}^{-2}(P_u)],\\
-\mathsf B_h&=b_u+\E[\mu_{uh}(P_u)d_{uh}^{-2}(P_u)],\\
-\mathsf C_h&=\E\log w_{uh}(P_u)
--\tfrac12\E\log(2\pi d_{uh}^2(P_u))
--\tfrac12\E[\mu_{uh}^2(P_u)d_{uh}^{-2}(P_u)].
+\log\mathcal Z_{ik}(\theta_k)
+={}&\log\left\{\int\Normal{x}{v}{s^2}\,
+g_{\theta_k}(dv\mid X_i)\right\}\notag\\
+ &+\tfrac12\log(2\pi/a)+b^2/(2a).
+\label{eq:reduction}
 \end{align}
-Assume these expectations are finite and \(\mathsf A_h>0\). Put
-\(v_h=1/\mathsf A_h\), \(m_h=\mathsf B_h/\mathsf A_h\),
-\(I_{rh}=\int v^r\Normal{v}{m_h}{v_h}e^{D_u^{\rm aug}(v)}dv\).
+The last two terms do not depend on \(\theta_k\). Thus \eqref{eq:learning} is
+\textbf{exactly the original cEBNM marginal-likelihood fit}, and
+\eqref{eq:qstar} gives its posterior. Feature and noise updates below also
+reduce to their ordinary cEBMF forms.
+
+In code, use this analytic limit and call the existing cEBNM solver with
+the same options, initialization and update schedule. A single
+complete-data EM M-step, even using infinitely many exact posterior draws,
+is not generally the same update as this marginal-likelihood fit.
+
+For \(a=b=0\) use \eqref{eq:qstar} directly. Also, do not renormalize \(\exp(A)\)
+as an ordinary prior and discard its normalizer: with uncertain parents
+that normalizer generally depends on \(\theta_k\).
+
+\clearpage
+\section{Gaussian mixtures and exact zero spikes}
+Suppress the row and loading indices. For each continuous component h,
+the expected log own prior is quadratic in v. Define
+\begin{align}
+\alpha_h&=a+\E_P[s_h(P)^{-2}],\notag\\
+\beta_h&=b+\E_P[\mu_h(P)s_h(P)^{-2}],\notag\\
+\gamma_h&=\E_P\log\pi_h(P)-\tfrac12\E_P\log(2\pi s_h(P)^2)
+-\tfrac12\E_P[\mu_h(P)^2s_h(P)^{-2}].
+\label{eq:abc}
+\end{align}
+Assume these expectations are finite and \(\alpha_h>0\). Put
+\(m_h=\beta_h/\alpha_h\), \(V_h=1/\alpha_h\), and
+\begin{equation}
+I_{rh}=\int v^r\Normal{v}{m_h}{V_h}e^{D(v)}dv,
+\qquad r=0,1,2.
+\label{eq:integrals}
+\end{equation}
 Completing the square gives unnormalized component masses
 \begin{align}
-W_h&=\exp\left\{\mathsf C_h+
-\frac{\mathsf B_h^2}{2\mathsf A_h}\right\}
-\sqrt{\frac{2\pi}{\mathsf A_h}}\,I_{0h},\quad h\text{ continuous},\label{eq:augweights}\\
-W_0&=\exp\{\E\log w_{u0}(P_u)+D_u^{\rm aug}(0)\}
-\quad\text{if a zero atom is present}.\label{eq:augatom}
+W_h&=\exp\{\gamma_h+\beta_h^2/(2\alpha_h)\}
+\sqrt{2\pi/\alpha_h}\,I_{0h},\quad h>0,\notag\\
+W_0&=\exp\{\E_P\log\pi_0(P)+D(0)\}.
+\label{eq:weights}
 \end{align}
-There is no normal-means evidence constant in \eqref{eq:augatom} because the
-common likelihood factor \(\exp\ell_u(v)\), rather than a normalized Gaussian
-in \(x\), was used for \emph{all} components. After setting
-\(r_{uh}=W_h/\sum_bW_b\),
-\begin{equation}\label{eq:augq}
-\boxed{q_u^*(dv,B_u=h)=r_{uh}
-\frac{\Normal{v}{m_h}{v_h}e^{D_u^{\rm aug}(v)}}{I_{0h}}dv
-\quad(h\text{ continuous}),}
+The zero-spike likelihood factor is one in the natural-parameter form
+\(e^{-av^2/2+bv}\). There is no omitted Gaussian evidence constant in \(W_0\).
+Normalize with \(r_h=W_h/\sum_tW_t\). Then
+\begin{align}
+q(v\mid z=h)&=\frac{\Normal{v}{m_h}{V_h}e^{D(v)}}{I_{0h}},\quad h>0,
+\notag\\
+\E_qv&=\sum_{h>0}r_hI_{1h}/I_{0h},&
+\E_qv^2&=\sum_{h>0}r_hI_{2h}/I_{0h}.
+\label{eq:moments}
+\end{align}
+Omit the spike for an unspiked EMDN. Compute component masses in log
+space. With deterministic parents and \(D=0\) these are the ordinary analytic
+Gaussian-mixture normal-means formulas.
+
+\subsection{How to calculate the child message}
+For child c, let \(r_{ch}=q(Z_c=h)\),
+\(u_{ch}=\E(L_c\mid Z_c=h)\), and
+\(T_{ch}=\E(L_c^2\mid Z_c=h)\). A Gaussian component contributes
+\begin{equation}
+J_{ch}(P)=-\tfrac12\log(2\pi s_{ch}^2(P))
+-\frac{T_{ch}-2\mu_{ch}(P)u_{ch}+\mu_{ch}(P)^2}{2s_{ch}^2(P)}.
+\label{eq:childdensity}
 \end{equation}
-with mass \(r_{u0}\) at the spike. Therefore
-\(\E V_u=\sum_{h\text{ cont}}r_{uh}I_{1h}/I_{0h}\) and
-\(\E V_u^2=\sum_{h\text{ cont}}r_{uh}I_{2h}/I_{0h}\).
-This is a common tilted-Gaussian-mixture update for every scalar learned
-registry family, including EMDN. It remains nonconjugate through the downstream
-tilt and uncertain-parent expectations, but no new family-specific derivation
-is needed for each choice of gate or covariate-dependent Gaussian parameters.
-
-For fixed Gaussian components, simplify the expectations in
-\(\mathsf A_h,\mathsf B_h,\mathsf C_h\) to their constant values and expected
-log weights. For CGB, the zero and Gaussian components have disjoint supports
-up to a measure-zero event, so these equations reduce to
-Section~\ref{sec:cgb}. For overlapping Gaussian mixtures, component
-augmentation genuinely changes the chosen mean-field approximation.
-
-The augmented parameter update is likewise general:
-\begin{equation}\label{eq:augMstep}
-\theta_u^{\rm new}\in\arg\max_{\theta_u}
-\sum_i\E_{q(P_{iu})q(V_{iu},B_{iu})}
-\left[\log w_{uB_{iu}}(P_{iu};\theta_u)
-+\log G_{uB_{iu}}(V_{iu}\mid P_{iu};\theta_u)\right]
-+\log p(\theta_u).
+Consequently,
+\begin{equation}
+D(v)=\sum_{c\in\ch(k)}\sum_h r_{ch}
+\E_{P_c\setminus v}\left[\log\pi_{ch}(P_c[v])+J_{ch}(P_c[v])\right],
+\label{eq:Dmoments}
 \end{equation}
-For EMDN this trains weights, means and variances together using latent
-posterior expectations; for fixed-component mixtures only the weight-network
-terms vary. It is not generally the old isolated EBNM marginal-likelihood
-training call. The augmented ELBO must retain component-label entropy and
-expected complete-data prior terms consistently.
+with \(J_{c0}=0\) for the fixed zero atom. For CGB with a global slab, J is
+constant in v and drops from the v-dependent tilt. For EMDN, its means
+and variances depend on parents, so J must remain. Child labels and values
+can be integrated using their probabilities and moments rather than sampled.
 
-\subsection{Sequence priors and a general factor-graph statement}
-For a block \(V_B\), the same principle is
-\begin{equation}\label{eq:blockgeneral}
-\log q_B^*(v_B)=C+\E_{q_{-B}}
-\sum_{f:\,\operatorname{scope}(f)\cap B\ne\varnothing}\log f(v).
+\clearpage
+\section{A two-loading example of the desired dependency}
+As a transparent illustration, suppose the loadings are strictly binary:
+\begin{equation}
+L_1\sim\operatorname{Bernoulli}(\rho),\qquad
+L_2\mid L_1\sim\operatorname{Bernoulli}\{s(\alpha+\beta L_1)\},
+\quad s(t)=\sigmoid(t).
+\label{eq:binarymodel}
 \end{equation}
-Sum every joint factor touching the block, not just scalar parent/child terms.
-This covers HMM priors without falsely making their coordinates independent.
-In the requested model the HMM is on \(F\), where it has no loading children,
-so Section~\ref{sec:hmm} gives the direct block update.
-If an HMM were placed on \(L\), it would couple ordered cells; those states
-and neighbors must be included. When its downstream correction factorizes
-over positions, smoothing can still use emissions obtained by
-one-dimensional component integrals with the extra tilt. More general
-cross-position corrections need a different block solver. An HMM posterior
-proposal can also be Metropolis-corrected using the full block downstream
-log-likelihood difference, provided the proposal can be sampled and the
-required support condition holds.
+This directly models \(p(L_2\mid L_1)\). Under
+\(q(L_1)q(L_2)\), let \(r_1=q(L_1=1)\) and \(r_2=q(L_2=1)\).
+Since \(v^2=v\) for binary \(v\), the likelihood log-odds contribution
+is \(b_k-a_k/2\). The child update is
+\begin{equation}
+\logit(r_2^{\rm new})=b_2-a_2/2+\alpha+\beta r_1.
+\label{eq:binarychild}
+\end{equation}
+For the parent, write \(s_0=s(\alpha)\) and \(s_1=s(\alpha+\beta)\).
+Its update contains feedback from the inferred child activation:
+\begin{align}
+\logit(r_1^{\rm new})
+={}&b_1-a_1/2+\logit(\rho)\notag\\
+&+r_2\log(s_1/s_0)+(1-r_2)\log\{(1-s_1)/(1-s_0)\}.
+\label{eq:binaryparent}
+\end{align}
+If \(\beta>0\), a confidently active child tends to favor parent
+activation. If \(\beta=0\), the child correction vanishes and both equations
+reduce to ordinary independent Bernoulli-prior normal-means updates.
 
-\subsection{The reusable interface implied by the mathematics}
-A general solver needs, conceptually:
+This example distinguishes three objects: the learned conditional prior
+in \eqref{eq:binarymodel}, the posterior approximation \(r_1,r_2\), and the
+posterior feedback required by that prior. A factorized q does not remove
+the conditional relationship being learned in p.
+
+\section{Keeping the feature update as ordinary ash}
+Under the scalar-factorized approximation \eqref{eq:q}, set
+\begin{align}
+a^F_{jk}&=\sum_iw_{ij}\E_q[L_{ik}^2],\notag\\
+b^F_{jk}&=\sum_iw_{ij}
+\left(Y_{ij}-\sum_{h\ne k}\bar L_{ih}\bar F_{jh}\right)\bar L_{ik}.
+\label{eq:Fstats}
+\end{align}
+Fit the existing ash normal-means model at
+\(b^F_{jk}/a^F_{jk}\), with SE \((a^F_{jk})^{-1/2}\). Update its mixture
+weights and posterior moments at each fitting iteration. Its configured
+penalty and other options are preserved.
+
+This is the original feature-side empirical Bayes update. Merely drawing F
+from a prior fitted during initialization would not implement this learning
+algorithm. No HMM or feature-side neural model is needed for this derivation.
+
+\clearpage
+\section{Noise, entropy and regularization}
+\subsection{Observation noise}
+Under \eqref{eq:q}, the expected squared residual is
+\begin{align}
+\E_q[(Y_{ij}-L_i^TF_j)^2]
+={}&(Y_{ij}-\bar L_i^T\bar F_j)^2\notag\\
+&+\sum_k\{\E[L_{ik}^2]\E[F_{jk}^2]-\bar L_{ik}^2\bar F_{jk}^2\}.
+\label{eq:residual}
+\end{align}
+For unknown constant precision,
+\begin{equation}
+\tau^{\rm new}=\frac{|\Omega|}
+{\sum_{ij\in\Omega}\E_q[(Y_{ij}-L_i^TF_j)^2]}.
+\label{eq:noise}
+\end{equation}
+The corresponding row- or column-specific versions use the same sums
+restricted to their groups. Known noise remains fixed.
+
+\subsection{Entropy of the actual variational approximation}
+For a continuous loading component in \eqref{eq:moments},
+\begin{equation}
+H_h=\tfrac12\log(2\pi V_h)
++\frac{\E_h[(v-m_h)^2]}{2V_h}-\E_h[D(v)]+\log I_{0h}.
+\label{eq:entropy}
+\end{equation}
+The value-and-label entropy is
+\(-\sum_hr_h\log r_h+\sum_{h>0}r_hH_h\). The atom has zero
+within-component entropy. For F, use the ordinary EBNM identity to compute
+its prior KL contribution. Thus the ELBO can be evaluated for the actual
+q used by the algorithm, rather than a separate distribution fitted
+afterward to sampler marginals.
+
+When later coordinates or priors change, a previously updated q must stay
+fixed until its next explicit update. A stored tilted density cannot silently
+reevaluate itself using newly changed parent distributions or neural
+parameters. Its representation must preserve the state that defined it.
+
+\subsection{A consistent sparsity penalty}
+First validate the unpenalized case. The existing neural spike regularizer
+can then be included as
+\begin{equation}
+R(q,\theta)=\sum_{i,k}(\lambda_k-1)
+\E_q\log\pi_{k0}(P_{ik}),\qquad \lambda_k\geq1.
+\label{eq:penalty}
+\end{equation}
+The own penalty is constant in the candidate \(L_{ik}\), so it can be added outside
+the log normalizer during \(\theta_k\) optimization. A child's penalty depends
+on \(L_{ik}\) and must be included in \(D(v)\). Without latent parents these become
+the fixed-covariate parameter penalties, preserving the ordinary penalized
+cEBNM limit.
+
+This is a regularized ELBO, or a bound for an augmented observation model;
+it is not the unpenalized model's evidence. The ash global mixture-weight
+penalty has its existing, separate semantics and should be preserved.
+
+\clearpage
+\section{The learning algorithm}
+\note{\textbf{One cEBMF iteration.}
+Retain the original residual-based \(L_k/F_k\) schedule. Extend only the loading
+fit to account for uncertain parents and child feedback.}
 \begin{enumerate}
-\item Frozen prior parameters, normalized conditional log densities and
-explicit atom masses at arbitrary parent values, with fixed preprocessing.
-\item A representation of the prior and posterior components, and either
-posterior sampling or numerical integration support.
-\item Expected log-prior and parameter-gradient evaluations under uncertain
-parents and child values, if using variational inference.
-\item A joint dependency graph and one consistent objective, including any
-component-label entropy, HMM block terms and declared penalties.
+\item Initialize \(L,F\) and their moments using the existing cEBMF scheme.
+Preserve supplied factors and their scaling. There is no universal
+statistical justification for thresholding initial loadings at 0.5.
+\item For \(k=1,\ldots,K\):
+  \begin{enumerate}[label=(\alph*)]
+  \item Calculate \(a^L,b^L\) from current variational moments using
+  \eqref{eq:stats}.
+  \item If \(k\) has no latent parents or children, call its original cEBNM
+  solver. Otherwise compute \eqref{eq:own}--\eqref{eq:child} and jointly
+  fit the conditional prior and posterior through \eqref{eq:learning}.
+  \item Store loading component probabilities, moments and the fixed
+  variational representation needed for later expectations and entropy.
+  \item Update \(F_k\) with the original ash fit using \eqref{eq:Fstats}, and
+  refresh residuals.
+  \end{enumerate}
+\item Update unknown noise using the expected residuals and evaluate the
+same variational objective.
+\item Repeat until the chosen iteration limit or convergence criterion.
 \end{enumerate}
-The experimental implementation described in Section~\ref{sec:implemented}
-now supplies the density, component-sampling and joint-graph interfaces for
-the scalar families; the variational extensions remain specifications.
-The current registry can select the component family; its moment-returning
-\texttt{fit} contract alone is insufficient for a universal joint update.
-The same scalar formulas apply to a feature-factor entry if a learned
-conditional prior is placed on \(F\), after substituting its factor-side
-Gaussian coefficients and its actual parent/child graph. With fixed external
-feature covariates and no factor children, the update reduces to the ordinary
-conditional EBNM problem. Latent self-covariates on \(F\) introduce the same
-expected-parent and child-message requirements as on \(L\).
+The target remains \(\prod_kp_\theta(L_k\mid L_{<k})\). This variational
+algorithm does not require a final full-matrix MCMC burn-in and sampling stage.
 
-\input{mixture_family_derivations.tex}
+\subsection{Where numerical approximation remains}
+Each integral over the target loading in \eqref{eq:integrals} is
+one-dimensional. Adaptive quadrature or Gauss--Hermite integration around
+the Gaussian base components can evaluate it. Expectations over several
+uncertain parents can require separate quadrature or Monte Carlo integration.
+Keep parent integration nodes or draws fixed during a local parameter fit,
+and check results by increasing integration accuracy.
 
-\section{Normalized CGB updates}\label{sec:cgb}
-\subsection{Simplifying the downstream term}
-Let \(\gamma_c=q(Z_c=1)\) denote a child's posterior slab probability. Because
-CGB's \(\mu_c,d_c^2\) are global and independent of parents, its slab-density
-term is constant in the parent's candidate \(v\). Under \eqref{eq:qfamily},
-we may therefore use the following representative of \(D_u\), dropping
-additive constants:
-\begin{equation}\label{eq:cgbmessage}
-\boxed{D_u(v)=\sum_{c\in\mathcal C_u}
-\left[(1-\gamma_c)\E\log(1-\pi_c(P_c[v]))
- +\gamma_c\E\log\pi_c(P_c[v])\right].}
-\end{equation}
-The expectation is only over the child's other parents. This formula uses
-independence between a child's loading and its parents under the chosen
-variational family. It would require modification for a structured joint
-loading approximation. A parent-dependent slab mean or variance also adds
-expected child slab-density terms; they cannot then be dropped.
+Sharp child constraints can make these calculations demanding. A practical
+implementation must assess runtime and approximation error; the derivation
+does not guarantee a fast neural optimizer or a predictive improvement.
+When there are no latent edges, however, use the analytic cEBNM route and
+avoid introducing numerical approximation unnecessarily.
 
-For an exact scalar Gibbs conditional, use actual parents, no expectations,
-and \(\gamma_c=Z_c\) in \eqref{eq:cgbmessage}. Conditional on the other
-loadings the same normalized formulas below apply. For a continuous slab,
-\(Z_c=\ind\{V_c\ne0\}\) almost surely.
+\subsection{Compatibility and convergence requirements}
+The no-edge route should preserve the old prior options, initialization,
+RNG behavior, \(L_k/F_k\) schedule, noise updates and pruning policy. With a
+hierarchy, deleting a factor changes child input identities and needs an
+explicit graph/network policy. Fixing rank is reasonable for an initial
+controlled comparison only when the comparator uses the same rank.
 
-Define the target's expected log gate weights
-\begin{equation}\label{eq:etagate}
-\eta_{u0}=\E\log(1-\pi_u(P_u)),\qquad
-\eta_{u1}=\E\log\pi_u(P_u).
-\end{equation}
-Their exponentials need not sum to one. Replacing them by
-\(1-\pi_u(\E P_u)\) and \(\pi_u(\E P_u)\) is an additional approximation.
+The exact variational argument gives nondecrease of the ELBO for exact
+block fits. Existing approximate scalar solvers and finite neural updates
+are not all exact maximizers; behavioral compatibility must not be confused
+with an unconditional monotonicity theorem.
 
-\subsection{Spike and tilted Gaussian slab}
-Suppress the node index and assume \(a>0\). Gaussian multiplication gives
-\begin{align}
-v_0&=(s^{-2}+d^{-2})^{-1}, &
-m_0&=v_0(x/s^2+\mu/d^2),\label{eq:baseposterior}\\
-\Normal{x}{v}{s^2}\Normal{v}{\mu}{d^2}
-&=\Normal{x}{\mu}{s^2+d^2}\Normal{v}{m_0}{v_0}.\label{eq:normalproduct}
-\end{align}
-Let
-\begin{equation}\label{eq:integrals}
-I_r=\int_{\R}v^r\Normal{v}{m_0}{v_0}\exp\{D(v)\}\,dv,
-\qquad r=0,1,2.
-\end{equation}
-The unnormalized posterior masses and their normalization are
-\begin{align}
-w_0&=e^{\eta_0}\Normal{x}{0}{s^2}e^{D(0)},\label{eq:w0}\\
-w_1&=e^{\eta_1}\Normal{x}{\mu}{s^2+d^2}I_0,
-&\gamma&=\frac{w_1}{w_0+w_1}.\label{eq:w1}
-\end{align}
-Consequently the exact optimum within the unrestricted scalar family is
-\begin{equation}\label{eq:qtilt}
-\boxed{q^*(dv)=(1-\gamma)\delta_0(dv)+
-\gamma\frac{\Normal{v}{m_0}{v_0}e^{D(v)}}{I_0}\,dv.}
-\end{equation}
-Its moments are
-\begin{equation}\label{eq:tiltmoments}
-\boxed{\E V=\gamma I_1/I_0,\qquad
-\E V^2=\gamma I_2/I_0,\qquad
-\Var(V)=\gamma I_2/I_0-(\gamma I_1/I_0)^2.}
-\end{equation}
-The posterior null probability is \(1-\gamma\). These moments alone do not
-specify a general non-Gaussian slab. To evaluate future expected log gates,
-the algorithm must retain a representation of that slab (for example,
-quadrature nodes and weights, or samples), or declare an additional approximation.
-
-An equivalent log-odds form isolates the downstream correction:
-\begin{equation}\label{eq:odds}
-\boxed{\logit\gamma=
-\eta_1-\eta_0+
-\log\frac{\Normal{x}{\mu}{s^2+d^2}}{\Normal{x}{0}{s^2}}
-+\log I_0-D(0).}
-\end{equation}
-With no children, choose \(D=0\): \(I_0=1,I_1=m_0,I_2=m_0^2+v_0\),
-recovering the usual spike-and-Gaussian posterior, with expected-log gate
-weights for uncertain parents. With fixed parents this is ordinary CGB EBNM.
-The last RNA component has no children, but its own parent uncertainty remains.
-
-If \(a=0\), replace the base Gaussian by \(\N(\mu,d^2)\) directly and use
-\(w_0=e^{\eta_0+D(0)}\), \(w_1=e^{\eta_1}I_0\). This is also the appropriate
-limit of the likelihood-kernel derivation. Compute weights in log space.
-
-\subsection{Positive and other slabs}
-For a positive Gaussian slab, the ordinary un-tilted slab posterior is
-\(\N_+(m_0,v_0)\). Its marginal normal-means likelihood is
-\begin{equation}\label{eq:positiveevidence}
-B_+(x)=\Normal{x}{\mu}{s^2+d^2}
-\frac{\Phi(m_0/\sqrt{v_0})}{\Phi(\mu/d)}.
-\end{equation}
-Use \(I_r^+=\E_{V\sim\N_+(m_0,v_0)}[V^re^{D(V)}]\), and replace
-\(\Normal{x}{\mu}{s^2+d^2}I_0\) in \eqref{eq:w1} by \(B_+(x)I_0^+\).
-The moment formula is otherwise unchanged. This is a possible positive
-\emph{loading} model; selecting \texttt{hmm\_pos} for \(F\) does not make the
-existing CGB loading slab positive.
-
-For a parent-independent exponential slab with rate \(\lambda>0\), its
-un-tilted posterior is \(\N_+(x-\lambda s^2,s^2)\) and its evidence is
+\clearpage
+\section{A structured posterior alternative}
+\label{sec:structured}
+The same conditional-prior model can also be fitted with posterior covariance
+between loading coordinates. For this additional inference choice, consider
+\[
+q(L,F)=\prod_iq_i(L_i)\prod_{j,k}q^F_{jk}(F_{jk}).
+\]
+The optimal row coordinate is
 \begin{equation}
-B_{\exp}(x)=\lambda\exp\{-\lambda x+\lambda^2s^2/2\}
-\Phi(x/s-\lambda s).
+q_i^*(L_i)\propto p_\theta(L_i\mid X_i)
+\exp\{-\tfrac12L_i^TH_iL_i+h_i^TL_i\},
+\label{eq:rowblock}
 \end{equation}
-The same spike/slab evidence-times-tilt construction applies. For general
-parent-dependent slabs, start from \eqref{eq:generalvi}; neither this Gaussian
-base nor the simplified CGB message is generally available.
-
-\subsection{Why the generic update is difficult}
-For a scalar full conditional, \(D(v)\) can be evaluated with all other
-variables fixed, so normalization is one-dimensional, even for a neural gate.
-For a variational update, evaluating \(D(v)\) and \(\eta_z\) also requires
-expectations over uncertain parent vectors. There is usually no analytic
-formula for these logistic/neural expectations. Deterministic quadrature over
-all parents scales poorly; Monte Carlo replaces it with sampling error.
-
-A possible numerical calculation draws parents from their current variational
-factors, reuses those draws across candidate \(v\), averages \emph{log} gate
-probabilities, and then integrates \eqref{eq:integrals} in one dimension. It
-must preserve the exact spike weight and check normalization and tails.
-Exponentiating an unbiased estimate of \(\E\log g\) is not an unbiased
-estimate of its exponential. Finite Monte Carlo coordinate steps are therefore
-approximations to CAVI, not exact monotone updates. Arbitrary neural gates can
-also produce multiple slab modes.
-
-\section{Factor HMM updates remain tractable}\label{sec:hmm}
-\subsection{Normal-means reduction for an entire factor}
-Because loading priors do not depend on \(F\), no loading-child term enters a
-factor update. Under \eqref{eq:qfamily}, define
-\begin{align}
-a^{F,m}_{tk}&=\sum_{i:(i,t)\in\Omega_m}\tau^m_{it}M^{L,m}_{ik},\\
-b^{F,m}_{tk}&=\sum_{i:(i,t)\in\Omega_m}\tau^m_{it}m^{L,m}_{ik}
-\left(Y^m_{it}-\sum_{h\ne k}m^{L,m}_{ih}m^{F,m}_{th}\right),\\
-(s_{tk}^{F,m})^2&=(a^{F,m}_{tk})^{-1},\qquad
-x^{F,m}_{tk}=b^{F,m}_{tk}/a^{F,m}_{tk}.
-\end{align}
-For positive \(a^{F,m}_{tk}\),
-\begin{equation}\label{eq:hmmq}
-\boxed{q^{m*}_{F,k}(dF,Q,C)\propto
-p_H(dF,Q,C\mid\psi^m_k)
-\prod_t\Normal{x^{F,m}_{tk}}{F_t}{(s_{tk}^{F,m})^2}.}
-\end{equation}
-This is precisely an HMM normal-means smoothing problem. If a location has
-\(a^{F,m}_{tk}=0\), its emission likelihood is one: the chain still supplies
-information. A finite-SE-only solver needs an explicit missing-emission
-extension for that case; a large finite SE is only an approximation.
-
-\subsection{Emissions, forward/backward and moments}
-Suppress \((m,k)\) and write \(x_t,s_t^2\). For state \(b\), component \(c\),
-\begin{equation}\label{eq:emission}
-e_{tbc}=\int\Normal{x_t}{f}{s_t^2}G_{bc}(df),\qquad
-B_t(b)=\sum_c\rho_{bc}e_{tbc}.
-\end{equation}
-For a signed Gaussian component,
-\(e_{tbc}=\Normal{x_t}{c_b}{s_t^2+v_c}\); for an atom,
-\(e_{tbc}=\Normal{x_t}{c_b}{s_t^2}\). For a positive continuous component,
-put \(v_*=(s_t^{-2}+v_c^{-1})^{-1}\),
-\(m_*=v_*(x_t/s_t^2+c_b/v_c)\), and use
+where
+\[
+H_i=\sum_jw_{ij}\E[F_jF_j^T],\qquad
+h_i=\sum_jw_{ij}Y_{ij}\E[F_j].
+\]
+This retains the same conditional-prior model, but the feature numerator
+must now use cross moments:
 \begin{equation}
-e^+_{tbc}=\Normal{x_t}{c_b}{s_t^2+v_c}
-\frac{\Phi(m_*/\sqrt{v_*})}{\Phi(c_b/\sqrt{v_c})}.
+b^F_{jk}=\sum_iw_{ij}\left[
+Y_{ij}\E[L_{ik}]-\sum_{h\ne k}\E[L_{ik}L_{ih}]\E[F_{jh}]\right].
+\label{eq:cross}
 \end{equation}
-Compute state smoothing using scaled or log-space versions of
-\begin{align}
-f_1(b)&=\alpha_bB_1(b), &
-f_t(b)&=B_t(b)\sum_a f_{t-1}(a)T_{ab},\\
-g_{P_m}(b)&=1, &
-g_t(a)&=\sum_bT_{ab}B_{t+1}(b)g_{t+1}(b).
-\end{align}
-After normalization,
-\begin{align}
-\Gamma_t(b)&\propto f_t(b)g_t(b),\\
-\Xi_t(a,b)&\propto f_{t-1}(a)T_{ab}B_t(b)g_t(b),\quad t\ge2,\\
-W_{tbc}&=\Gamma_t(b)\frac{\rho_{bc}e_{tbc}}{B_t(b)}.
-\end{align}
-Each \(\Gamma_t\), \(\Xi_t\), and \(W_t\) sums to one over its state indices.
-Within a component, the conditional effect posterior is a Gaussian
-\(\N(m_*,v_*)\), its positive truncation, or the corresponding atom. For the
-positive truncation let \(z=m_*/\sqrt{v_*}\) and
-\(r(z)=\varphi(z;0,1)/\Phi(z)\). Then
-\begin{equation}
-\E(F_t\mid b,c,x)=m_*+\sqrt{v_*}r(z),\quad
-\E(F_t^2\mid b,c,x)=m_*^2+v_*+m_*\sqrt{v_*}r(z).
-\end{equation}
-Weight these moments by \(W_{tbc}\). Stable tail evaluation is necessary when
-\(z\) is very negative. Reflection gives the negative model's moments.
-If requested, \(\mathrm{lfsr}_t=\min\{q(F_t\le0),q(F_t\ge0)\}\); an atom at
-zero is in both tails, so in either one-sided model this equals \(q(F_t=0)\).
+Relative to \eqref{eq:Fstats}, the extra term is
+\[
+-\sum_iw_{ij}\sum_{h\ne k}\Cov(L_{ik},L_{ih})\bar F_{jh}.
+\]
+Thus one cannot sample a correlated L block and pass only marginal means
+and variances into an unchanged mean-residual feature update.
 
-\subsection{What can be reused}
-For fixed HMM parameters, the existing forward/backward and emission-moment
-machinery solves \eqref{eq:hmmq}. Learning HMM parameters by increasing its
-normal-means marginal likelihood, while optimizing the corresponding factor
-posterior and holding the rest fixed, can serve as an EB block update.
-This requires an increase in the relevant common objective; it is not a
-guarantee for every heuristic initialization, center move or pruning proposal.
-State-support changes need particular care (Section~\ref{sec:support}).
+Full row blocks do not automatically recover mean-field cEBMF when prior
+edges vanish: the likelihood can still correlate loading coordinates.
+For exact reduction, define blocks by connected components of the prior
+graph and split them into singleton columns in the no-edge case.
+Singleton blocks recover ordinary cEBNM; larger blocks require a
+multivariate profile objective.
 
-\section{Learning parameters and evaluating one objective}\label{sec:learning}
-\subsection{Neural gates}
-For each component, hold the variational distribution fixed and maximize
-\begin{equation}\label{eq:gateMstep}
-\sum_i\left[(1-\gamma_{iu})\E\log(1-\pi_{\theta_u}(P_{iu}))
-+\gamma_{iu}\E\log\pi_{\theta_u}(P_{iu})\right]+\log p(\theta_u).
-\end{equation}
-Omit the last term for unpenalized EB. This is expected Bernoulli
-cross-entropy with soft responses and uncertain predictors. Sampling parent
-values supplies a stochastic estimate of its gradient. During this parameter
-step, \(q\) is fixed. During a \emph{loading} step, dependence of all relevant
-child probabilities on that loading must be retained. These are distinct
-operations. The current isolated normal-means network fit does not by itself
-implement this global alternating optimization.
+\input{missing_modality_derivation.tex}
 
-\subsection{Global Gaussian slab mean and variance}
-Let \(m_{iu}=\E V_{iu}\), \(M_{iu}=\E V_{iu}^2\), and
-\(G_u=\sum_i\gamma_{iu}>0\). Without parameter priors, the M-step is
-\begin{equation}\label{eq:slabM}
-\boxed{\mu_u^{\rm new}=\frac{\sum_i m_{iu}}{G_u},\qquad
-d_u^{2\,\rm new}=\frac{\sum_i\{M_{iu}-2\mu_u^{\rm new}m_{iu}
-+(\mu_u^{\rm new})^2\gamma_{iu}\}}{G_u}.}
-\end{equation}
-These are posterior latent moments; there is no subtraction of the
-normal-means observation variance here. Formula \eqref{eq:slabM} is for a free
-Gaussian slab, not for a truncated slab or the constraint \(d=\omega|\mu|\).
-Those cases require their own expected log-density optimization, including
-normalizing constants. If \(G_u=0\), slab parameters are unidentified and an
-explicit convention or prior is needed. A variance floor changes the domain
-of the optimization and should be stated.
-
-\subsection{HMM parameters on fixed component supports}
-For one chain, standard expected-count maximizers are
-\begin{equation}\label{eq:hmmM}
-\alpha_b^{\rm new}=\Gamma_1(b),\quad
-T_{ab}^{\rm new}=\frac{\sum_{t=2}^{P_m}\Xi_t(a,b)}
-{\sum_{t=2}^{P_m}\Gamma_{t-1}(a)},\quad
-\rho_{bc}^{\rm new}=\frac{\sum_tW_{tbc}}{\sum_t\Gamma_t(b)}.
-\end{equation}
-Only update parameters that are free. Fixed initial probabilities, tied
-mixtures, forbidden transitions and zero-occupancy states require corresponding
-constraints or conventions. In particular, if \(\alpha\) is constrained to be
-the stationary distribution of the \emph{current} \(T\), it cannot be optimized
-independently with these formulas. The package's default initial probabilities
-are fixed during an individual fit after their initialization.
-Dirichlet MAP parameters add \(\alpha^{\rm prior}-1\) pseudo-counts on allowed
-entries where an interior MAP update exists.
-
-\subsection{Noise and likelihood terms}
-Under \eqref{eq:qfamily},
-\begin{equation}\label{eq:residualmoment}
-\mathcal E^m_{it}=\E\left(Y^m_{it}-\sum_kL^m_{ik}F^m_{tk}\right)^2
-=\left(Y^m_{it}-\sum_km^{L,m}_{ik}m^{F,m}_{tk}\right)^2
-+\sum_k\left(M^{L,m}_{ik}M^{F,m}_{tk}-(m^{L,m}_{ik}m^{F,m}_{tk})^2\right).
-\end{equation}
-For a shared precision in an observed-entry group \(\mathcal G\), its
-unpenalized maximizer is
-\begin{equation}
-\tau_{\mathcal G}^{\rm new}=\frac{|\mathcal G|}{\sum_{(i,t)\in\mathcal G}\mathcal E_{it}}.
-\end{equation}
-This presumes positive total residual and nonempty groups; unrestricted
-entry-specific variance estimation is generally not an appropriate model.
-With a Gamma prior of shape \(a_0\), rate \(b_0\), an independent variational
-factor is Gamma with shape \(a_0+|\mathcal G|/2\), rate
-\(b_0+\sum\mathcal E_{it}/2\). A Gibbs noise update uses realized squared
-residuals instead. Known precisions are not re-estimated.
-
-The likelihood contribution to the ELBO is
-\begin{equation}
-\E\log p_m(Y^m\mid\cdot)=\frac12\sum_{(i,t)\in\Omega_m}
-\left[\log\tau^m_{it}-\log(2\pi)-\tau^m_{it}\mathcal E^m_{it}\right]
-\end{equation}
-for fixed precisions. Use \(\E\log\tau\) and \(\E\tau\), respectively, under
-an independent variational precision factor. For a loading mixture,
-\(H(q_u)=-(1-\gamma_u)\log(1-\gamma_u)-\gamma_u\log\gamma_u
-+\gamma_u h(q_{u,1})\), on the disjoint spike/slab reference space.
-The tilted slab entropy can be evaluated from
-\(\log q_{u,1}(v)=\log\Normal{v}{m_0}{v_0}+D_u(v)-\log I_0\).
-The HMM KL can be evaluated from its prior, normalized posterior and
-normal-means evidence; one need not force feature-position independence.
-
-\section{Simpler cases and a stronger variational alternative}\label{sec:alternatives}
-\subsection{Strict binary loadings: a closed-form scalar probability}
-Consider the different model \(V_u\in\{0,1\}\) with
-\(g_u(1\mid P_u)=\pi_u(P_u)\). Under independent Bernoulli variational
-factors, set \(\gamma_u=q(V_u=1)\). Then \eqref{eq:generalvi} gives
-\begin{equation}\label{eq:binaryupdate}
-\boxed{\logit\gamma_u=b_u-\tfrac12a_u+
-\E\logit\pi_u(P_u)+D_u(1)-D_u(0).}
-\end{equation}
-The \(-a_u/2\) term is essential because \(1^2-0^2=1\).
-There is no continuous integral. Parent expectations may still require sums
-or approximation. For a small number of binary parents they can be enumerated
-exactly. The exact Gibbs probability uses fixed parents and children in the
-same expression. This is an excellent reference model for the notebook's
-binary truth, but it is not the package's continuous \texttt{gbinary} or CGB.
-
-\subsection{Linear-logistic CGB: a log-concave slab}\label{sec:linearlogistic}
-Suppose each child gate has a linear logit in the candidate loading,
-\(\pi_c(P_c[v])=\sigmoid(\beta_{cu}v+\zeta_c)\), where \(\zeta_c\) depends
-on the other parents. Then under the same mean-field assumptions,
-\begin{align}
-D_u'(v)&=\sum_{c\in\mathcal C_u}\beta_{cu}
-\{\gamma_c-\E\pi_c(P_c[v])\},\label{eq:messagegradient}\\
-D_u''(v)&=-\sum_{c\in\mathcal C_u}\beta_{cu}^2
-\E\{\pi_c(P_c[v])(1-\pi_c(P_c[v]))\}\leq0.
-\end{align}
-Hence the CGB slab log posterior has second derivative
-\(-1/v_0+D_u''(v)<0\). It is strictly log-concave and has one mode.
-One-dimensional quadrature or a suitable slice sampler is therefore simpler
-than for arbitrary neural logits. This result assumes parent-independent
-Gaussian slabs and linear logits; it is not a claim about the existing ReLU
-networks. Interactions can be introduced carefully, but an arbitrary nonlinear
-function of the target need not retain concavity.
-
-For a child with positive \(\beta_{cu}\), an inferred activation exceeding the
-gate's predicted activation makes \(D_u'(v)>0\) for that contribution. It
-pushes the parent upward. This gives a direct algebraic interpretation of
-RNA-to-ATAC posterior information.
-
-\subsection{Keep all loadings of a cell together}\label{sec:rowblocks}
-A richer alternative replaces the product of scalar loading factors by
-\(\prod_iq_i(A_i,R_i)\). It can retain both within-modality and cross-modality
-posterior dependence. With all other blocks fixed, define
-\begin{align}
-H^m_i&=\sum_{t:(i,t)\in\Omega_m}\tau^m_{it}
-\E(F^m_{t,:}(F^m_{t,:})^\top),\\
-h^m_i&=\sum_{t:(i,t)\in\Omega_m}\tau^m_{it}Y^m_{it}\E F^m_{t,:}.
-\end{align}
-Here \(F^m_{t,:}\) is understood as a column vector. The unrestricted row
-coordinate is
-\begin{equation}\label{eq:rowq}
-q_i^*(a,r)\propto p(a,r\mid\theta)
-\exp\left\{-\tfrac12a^\top H^A_i a+(h^A_i)^\top a
--\tfrac12r^\top H^R_i r+(h^R_i)^\top r\right\}.
-\end{equation}
-For strict binary loadings this can be normalized by enumerating
-\(2^{K_A+K_R}\) states per cell. With five factors in each modality this is
-1,024 states per cell; feasibility still depends on network evaluation and
-the number of cells and iterations. Continuous CGB loadings make the row
-integral multivariate and substantially harder.
-
-Row dependence changes the factor pseudo-data. In particular, replace the
-factor numerator by
-\begin{equation}\label{eq:structuredF}
-b^{F,m}_{tk}=\sum_{i:(i,t)\in\Omega_m}\tau^m_{it}
-\left[Y^m_{it}\E L^m_{ik}
--\sum_{h\ne k}\E(L^m_{ik}L^m_{ih})\E F^m_{th}\right].
-\end{equation}
-The denominator is \(\sum_i\tau^m_{it}\E[(L^m_{ik})^2]\), using the
-second moment rather than \((\E L^m_{ik})^2\).
-The HMM form remains intact, but the existing mean-field residual formula is
-insufficient: within-row cross moments are needed. Likewise the residual
-second moment must be evaluated with those cross moments. Conditional on
-fixed \(F\), exact binary row Gibbs uses the same construction with realized
-factor products in place of their expectations.
-
-\section{Qualifications needed for a coherent implementation}\label{sec:qualifications}
-\subsection{Covariate standardization}\label{sec:scaling}
-The package's \texttt{standard\_scale} computes a column mean and standard
-deviation over the current input rows. If these statistics are recomputed as
-functions of latent loading columns \emph{inside the probability model},
-changing one \(A_{ik}\) changes transformed covariates for other cells.
-Later conditional priors in those cells then enter its Markov blanket too.
-The cell-local equations above would be incomplete.
-
-For a first joint specification, choose fixed offsets/scales, for example
-from an initialization, and regard them as known transformations. Alternatively
-define a model with explicit transformation parameters and optimize them under
-one objective. Recomputing transformations between steps without accounting
-for their effect does not preserve a fixed joint inference target.
-
-\subsection{The current sparsity penalty is not automatically a parameter prior}\label{sec:penalty}
-With fixed covariates the CGB loss adds
-\((\lambda-1)\sum_i\log(1-\pi_{iu}(X_i))\) to the log-likelihood criterion.
-If the covariates become latent parents, that expression depends on latent
-variables, not only on neural parameters. One possible explicitly regularized
-variational criterion is
-\begin{equation}
-\LL_{\rm reg}(q,\Theta)=\LL(q,\Theta)+
-(\lambda-1)\sum_u\E_q\log(1-\pi_u(P_u)).
-\end{equation}
-Its loading-coordinate update must include the added terms whenever the
-target is a parent. It is not the ELBO of the unpenalized joint model.
-To interpret the same factor as a new normalized tilted joint density, its
-normalizing constant must be included; this generally depends on parameters
-and affects their learning. Simply multiplying each child's conditional by
-a function of its parents and renormalizing that conditional cancels the
-function, so it does not give the intended regularization.
-
-A clean initial derivation therefore uses \(\lambda=1\), with optional
-proper priors or explicit regularizers on \emph{parameters alone}. HMM
-Dirichlet parameter priors have a different, direct expected-count interpretation.
-The same numerical penalty value across different solvers need not mean the
-same statistical regularization.
-
-\subsection{Ordering, rescaling, support changes and pruning}\label{sec:support}
-For each modality, \(L_k\mapsto cL_k,F_k\mapsto F_k/c\) preserves the fitted
-matrix for \(c\ne0\). It need not preserve the complete prior or the joint
-objective. Prior parameters, neural input transformations and HMM supports
-must be transformed consistently before treating rescaling as a mere
-reparameterization. Fix a scale convention for interpretation and initialization.
-
-Order matters in \eqref{eq:orderedprior}. Pruning or permuting a component
-changes the identities and dimensions of later predictors. Such changes
-require model reconstruction and objective evaluation, not only deletion of
-one loading column. A deterministic neural conditional can also create
-nearly hard dependencies and poor single-coordinate mixing; bounded gate
-probabilities and row-block inference can help, but change the approximation
-or admissible parameter space and should be specified.
-
-Moving the location of a point mass while holding its old posterior fixed can
-make the expected prior log density minus infinity. One should not apply an
-ordinary fixed-posterior M-step blindly to moving atoms. Keeping HMM atoms
-and grids fixed is the simplest derivation. Jointly refitting a factor posterior
-and its HMM under a changed support can instead be considered as an EB block
-proposal, assessed using its collapsed marginal likelihood and the consistent
-joint objective. The distinction is between a valid evaluated block proposal
-and an assumed fixed-support EM update.
-
-\subsection{A mathematically defined iteration}
-For the unpenalized fixed-rank, fixed-scaling model, one possible schedule is:
-\begin{enumerate}
-\item Initialize all loading distributions, factor HMM posteriors and parameters.
-\item Update each ATAC loading using \eqref{eq:generalvi}, including later ATAC
-and RNA children; retain its spike and slab representation.
-\item Update each RNA loading, including its later RNA children.
-\item Update each factor sequence by \eqref{eq:hmmq} and forward/backward.
-\item Update shared loading-prior, HMM and noise parameters using the common
-objective. A generalized EM step must increase that objective, even if not
-maximizing it completely.
-\item Evaluate the \emph{single} objective \eqref{eq:elboexpanded} at the current
-state. Check convergence and numerical accuracy; repeat if needed.
-\end{enumerate}
-Other scan orders are possible. Exact coordinate steps optimize the same
-objective; local optima and rates of convergence can still depend on order
-and initialization. Keeping old per-factor KL values after changing their
-parents does not evaluate the current joint objective. A Gibbs version samples
-full conditionals instead and targets a posterior rather than an ELBO.
-
-\section{Scientific scope and evaluation}\label{sec:useful}
-\subsection{What the construction could provide}
-\begin{enumerate}
-\item \textbf{Bidirectional use of paired data.} RNA can resolve ambiguous
-ATAC loadings and ATAC can resolve ambiguous RNA loadings under one directed
-prior. A separate reverse prior is not required.
-\item \textbf{Different ranks and modality-specific programs.} This model
-does not force \(A=R\) or equal ranks. It models relationships among activity
-patterns while preserving modality-specific feature factors.
-\item \textbf{A precise extension of EBNM modularity.} The ordinary Gaussian
-normal-means reduction remains, and the HMM factor block remains reusable.
-Equation~\eqref{eq:odds} identifies exactly what a new loading solver must add.
-\item \textbf{A testable objective.} The derivation separates a joint-model
-inference algorithm from a useful but uncalibrated covariate-exchange heuristic.
-It specifies what must be monitored and which terms a proposed shortcut drops.
-\end{enumerate}
-This makes the derivation useful before investing in a general neural solver.
-It does not establish novelty, identifiability, causal direction or guaranteed
-improvement. EBMF's normal-means reduction is established work
-\cite{wang}; covariate-modulated priors are the cEBMF setting \cite{cebmf}.
-The present note derives their ordered joint extension for this project.
-
-\subsection{Why the supplied simulation is informative}
-The noiseless RNA profiles distinguish the four binary ATAC states. For the
-three RNA blocks at positions 200--249, 500--549 and 700--749 (Python indexing),
-the mapping is
-\begin{center}
-\begin{tabular}{ccccc}\toprule
-ATAC loading 1&ATAC loading 2&RNA block 1&RNA block 2&RNA block 3\\\midrule
-0&0&1&1&0\\
-0&1&1&1&1\\
-1&0&0&1&1\\
-1&1&1&0&1\\\bottomrule
-\end{tabular}
-\end{center}
-Thus RNA has information about the ATAC state that could improve ATAC
-inference when its own observations are noisy. The two independent noise
-realizations make combining their evidence sensible under the correctly
-specified joint model. The four one-hot RNA loading columns used to generate
-the data do not force fitted RNA rank four: the noiseless matrix has rank three,
-and a three-block factorization is another representation.
-
-Finite-sample estimation, misspecified gates, incorrect pairing and local optima
-can make sharing harmful. Under a correct known model, conditioning on more
-data cannot increase the expected Bayes squared-error risk of a posterior mean;
-that statement does not guarantee improvement in every realized dataset or
-for fitted empirical Bayes/variational approximations. More concretely, for
-a square-integrable target \(U\), the conditional-expectation identity gives
-\begin{equation}
-\E\{(U-\E[U\mid Y_A])^2\}
--\E\{(U-\E[U\mid Y_A,Y_R])^2\}
-=\E\{(\E[U\mid Y_A,Y_R]-\E[U\mid Y_A])^2\}\ge0.
-\end{equation}
-
-\subsection{The most informative first comparison}
-A small strict-binary version with exact enumeration can validate the
-posterior-feedback equations without neural or quadrature uncertainty.
-A linear-logistic CGB version can then isolate the continuous-loading problem
-while retaining a log-concave scalar slab. A flexible neural version becomes
-more informative after those reference cases are understood.
-
-Useful comparisons include independent fits, each fixed one-direction fit,
-the covariate-exchange heuristic, and the joint-target method. Evaluate both
-modalities, using held-out observations excluded from \emph{every} preprocessing
-and fitting stage that could leak those values. In simulations also compare
-against the noiseless matrices and assess loading uncertainty where a common
-scale/order is defined. Check shuffled cell pairing, multiple initializations,
-different scan orders, and weak or absent cross-modality dependence.
-Section~\ref{sec:comparison} places these comparisons in the existing
-literature; the derivation alone does not establish methodological novelty.
-
-\section{Positioning among learned priors and multi-omics methods}\label{sec:comparison}
-\subsection{Scope and notation}
-This section compares the proposed model with learned latent priors and multi-omics
-methods, using the literature reviewed through 15 September 2026. It is a
-comparison of statistical structure and inferential requirements, not an
-empirical performance ranking or an exhaustive novelty review.
-Throughout, \(L^m\) denotes sample loadings and \(F^m\) denotes feature factors;
-some cited methods use the opposite terminology.
-
-Three questions must be separated: which finite signal matrices can be
-represented, which joint distributions of sample programs can be modeled,
-and how accurately those distributions can be learned and their posteriors
-approximated. A more flexible conditional family need not improve
-finite-sample prediction, calibration, or computation.
-
-For reference, a shared-score linear predictor has the form
-\begin{equation}\label{eq:comparisonscores}
-Y^m=ZW_m^\top+E^m,
-\end{equation}
-whereas a shared/private decomposition can be written schematically as
-\begin{equation}\label{eq:comparisonprivate}
-Y^m=SU_m^\top+V_mB_m^\top+E^m.
-\end{equation}
-Here \(Z,S\) are sample-score matrices shared across views and \(V_m\)
-contains view-specific sample scores. The proposed formulation instead
-uses \(Y^A=AF_A^\top+E^A\), \(Y^R=RF_R^\top+E^R\), and the normalized
-conditional prior~\eqref{eq:orderedprior}. These schematic matrix equations
-do not identify methods' complete model classes: their priors, likelihoods,
-rank constraints, and identifiability restrictions can differ.
-
+\clearpage
+\section{Positioning among learned priors and multi-omics models}
+\label{sec:comparison}
+The comparison concerns three separate choices: the generative loading
+prior, the observation model, and the posterior approximation. Changing one
+does not establish superiority in the other two.
 \input{twineb_positioning.tex}
-
 \input{vae_prior_positioning.tex}
 
-\subsection{Structural comparison}
-Table~\ref{tab:methodcomparison} summarizes the cited formulations.
-A mechanism absent from a standard formulation may be possible in an
-extension. In particular, neither modality-specific programs nor joint
-borrowing of information is unique to the proposed hierarchy.
+\subsection{Shared representations and modality-specific programs}
+MOFA+ uses a shared sample representation with modality-specific feature
+weights \cite{mofa}; JIVE decomposes joint and individual variation
+\cite{jive}. The present construction instead specifies separate loading
+vectors and a conditional distribution between them. These are different
+structural assumptions, not an assertion that shared representations cannot
+encode the toy signal.
 
-\begingroup\small
-\setlength{\tabcolsep}{5pt}
-\renewcommand{\arraystretch}{1.10}
-\begin{longtable}{@{}
->{\raggedright\arraybackslash}p{.18\textwidth}
->{\raggedright\arraybackslash}p{.36\textwidth}
->{\raggedright\arraybackslash}p{.40\textwidth}@{}}
-\caption{Representative multi-omics methods and their relation to the proposed
-conditional loading model. Dates refer to the cited papers.}
-\label{tab:methodcomparison}\\
+In the supplied example, two binary ATAC programs have four joint states.
+Four shared one-hot state indicators can represent the RNA programs, and
+each ATAC program is a sum of those indicators. A sufficiently rich shared
+linear representation therefore reconstructs both noiseless signals.
+The nonlinear relationship between a chosen pair of ATAC coordinates and
+four RNA coordinates does not prove a universal capacity limitation for
+MOFA or any other unrestricted shared-factor model. Comparisons must control
+rank, intercepts, parameter budgets and the task being evaluated.
+
+Hierarchical nonlinear integration, as in CAVACHON \cite{cavachon}, offers
+another way to organize modality relationships. MultiVI addresses paired
+and unpaired single-cell modalities with modality-appropriate generative
+models \cite{multivi}; GLUE supplies a guidance graph linking features
+across modalities \cite{glue}. Their assumptions, decoders and information
+sources differ from this Gaussian conditional-loading construction.
+They are relevant empirical comparators, not special cases automatically
+covered by the present implementation.
+
+Observed context and uncertain parents must also be distinguished. A fixed
+batch, donor or spatial covariate can enter a prior without becoming a
+latent loading. In contrast, substituting an estimated loading as a fixed
+covariate removes its uncertainty and downstream feedback. Neither joint
+fitting nor a directed prior by itself identifies causal regulatory effects.
+
+\subsection{Empirical comparisons required}
+At minimum compare independent cEBMF, fixed-loading covariates and the
+conditional-loading update with matched feature priors, ranks, initialization,
+noise treatment and tuning budgets. Assess several seeds and held-out
+cell-modality rows, including states sparsely represented in the paired
+subset. Separate numerical integration error from posterior approximation
+error; compare with exact enumeration or a well-diagnosed reference sampler
+on small problems. Assess conditional probability calibration and the
+stability of program definitions in addition to reconstruction error.
+
+\clearpage
+\section{Implementation, example and validation}
+\label{sec:implementation}
+\subsection{Two cEBMF objects, one joint fitting schedule}
+The maintained interface is
+\begin{verbatim}
+data = align_modalities(Y_atac, Y_rna, atac_ids, rna_ids)
+settings = dict(prior_L="cgb", prior_F="norm",
+                self_row_cov=True)
+atac = cEBMF(data.atac, K=2, **settings)
+rna  = cEBMF(data.rna,  K=4, **settings)
+atac_fit, rna_fit = fit_joint(atac, rna, maxit=20)
+\end{verbatim}
+The argument order defines the ATAC-to-RNA prior. Each model retains its own
+feature update and noise. The flag controls within-modality parents; the
+joint call supplies cross-modality parents. Passing \texttt{atac.L} as fixed
+RNA covariates is a different plug-in analysis. Repeated joint calls continue
+the same fit. Row IDs must be aligned before construction.
+
+\subsection{Numerical representation and supported scope}
+The implementation stores each coordinate's quadrature values, component
+weights, moments and continuous-and-label entropy. This state remains fixed
+until its next coordinate update. One uncertain parent is integrated with
+its full stored quadrature; multiple uncertain parents use fixed scrambled
+Sobol points. Child values and labels use component moments analytically.
+The target loading uses Gauss--Hermite integration around its Gaussian base
+components. These integration nodes do not define a discrete generative
+prior. The optimizer retains its best evaluated local profile objective;
+integration and finite training can still cause changes in the global
+approximate ELBO that are not monotone.
+
+Conditional CGB effective slab variances are optimized in that objective.
+For sharp families, omega affects initialization; repeatedly multiplying
+variance estimates by omega is not treated as an exact variational M-step.
+The no-edge route calls the original scalar solvers directly, preserving
+their options and finite optimization behavior. Conditional graphs retain
+their initial rank and ordering. Graph pruning and posterior covariance
+between loading coordinates are not implemented in this path.
+
+The former sampler is retained only as an explicitly selected experimental
+compatibility backend. It is not selected by \texttt{self\_row\_cov=True}
+alone. The primary example has no HMM, MCMC burn-in or frozen ash parameters.
+
+\subsection{Checks and their limits}
+Regression tests compare mixture log normalizers, moments and entropy with
+analytic normal-means formulas, and compare a quadratic child tilt and its
+profile gradient with a closed-form Gaussian result. They check exact
+single-factor no-edge compatibility, ordinary fixed-covariate dispatch,
+noise updates, both matrix axes, collapsed missing children, inferred missing
+parents, unchanged stored variational coordinates and explicit option
+validation. Existing reference-sampler tests remain separate.
+
+\clearpage
+\subsection{An executed toy illustration}
+The maintained notebook uses 120 cells, two ATAC factors, four RNA factors,
+60 ATAC features and 80 RNA features. Eighty cells are paired; twenty have
+only ATAC and twenty have only RNA. Gaussian observation SD is 0.7. The fit
+uses CGB loadings, ash features, unit sparsity penalties, eight variational
+sweeps, five neural epochs per loading block, and a 12-unit network with
+one additional hidden layer. Numerical settings are 16 quadrature points
+per component and 16 parent-integration points. The random seed is 8.
+
+\begin{center}
+\begin{tabular}{lrr}
 \toprule
-Method & Native model structure & Relation to this derivation\\
+Cell group & ATAC signal RMSE & RNA signal RMSE\\
 \midrule
-\endfirsthead
-\multicolumn{3}{l}{\small Table~\thetable\ continued}\\
-\toprule
-Method & Native model structure & Relation to this derivation\\
-\midrule
-\endhead
-\midrule
-\multicolumn{3}{r}{\small Continued on the next page}\\
-\endfoot
+Paired & 0.141 & 0.161\\
+ATAC only & 0.141 & 0.374\\
+RNA only & 0.333 & 0.176\\
 \bottomrule
-\endlastfoot
-TwinEB (2024)
-&
-Learns mixture population priors on complete row and column latent vectors,
-with joint variational empirical-Bayes estimation.
-&
-Vector mixtures already capture coordinate dependence. Explicit conditional
-covariates, modality structure and HMM adjacency are distinct choices;
-Section~\ref{sec:twineb} gives the precise relationship \cite{twineb}.\\[5pt]
-JIVE (2013); AJIVE (2018)
-&
-Decompose joint and individual low-rank sample subspaces. AJIVE uses
-subspace angles to estimate shared variation.
-&
-Original formulations describe linear shared structure rather than learned
-nonlinear conditional distributions between distinct sample programs
-\cite{jive,ajive}.\\[5pt]
-MOFA+ (2020)
-&
-Shared sample scores and view-specific feature weights, with shrinkage,
-groups, missing data, and several observation likelihoods.
-&
-Already supports shared, view-specific and subset-active factors.
-The standard score-prior construction differs from the autoregressive
-conditional loading prior~\eqref{eq:orderedprior} \cite{mofa}.\\[5pt]
-ProJIVE (2026)
-&
-Probabilistic joint and individual factorization, fitted by maximum
-likelihood with EM.
-&
-A probabilistic extension of JIVE already exists; probability modeling
-alone is not a distinguishing contribution \cite{projive}.\\[5pt]
-SLIDE (2019); BASS (2016)
-&
-Components shared across subsets of views. SLIDE uses structured
-sparsity; BASS uses Bayesian structured shrinkage.
-&
-Partial sharing and sparse/dense program structure are established
-capabilities, distinct from conditional dependence among programs
-\cite{slide,bass}.\\[5pt]
-BIDIFAC+ (2022); EV-BIDIFAC (2024)
-&
-Low-rank modules shared across subsets of linked row and column groups;
-EV-BIDIFAC uses empirical variational Bayes shrinkage.
-&
-Close empirical Bayes integration baselines, including missing-data
-imputation. The proposed additional mechanism is learning conditional
-program distributions \cite{bidifac,evbidifac}.\\[5pt]
-SIFA (2017)
-&
-Joint and individual factors partially informed by observed auxiliary
-covariates through nonparametric functions.
-&
-Nonlinear covariate-informed factors already exist. Uncertain latent
-parents and the required posterior feedback distinguish the present
-inference problem \cite{sifa}.\\[5pt]
-MuVI (2023); SOFA (2026)
-&
-MuVI incorporates feature-set information through structured shrinkage.
-SOFA links guided factors to sample-level guide variables and retains
-unguided factors.
-&
-Relevant comparisons when biological feature sets or sample annotations
-are supplied. They address other uses of prior information
-\cite{muvi,sofa}.\\[5pt]
-MEFISTO (2022)
-&
-Gaussian-process structure on sample factors along continuous covariates
-such as time and space.
-&
-Sample-axis covariance differs from the feature-axis HMM in
-Section~\ref{sec:hmm}. Structured factor priors themselves are not new
-\cite{mefisto}.\\[5pt]
-CAVACHON (2024 preprint)
-&
-A supplied modality DAG organizes a hierarchical VAE with mixture
-innovation latents and ancestor-aware decoders.
-&
-Close prior art for biological hierarchy and conditional independence;
-its decoder construction differs from normalized scalar loading priors
-with linear feature reconstruction \cite{cavachon}.\\[5pt]
-HALO (2025)
-&
-RNA/ATAC representations linked through learned mappings and causal
-constraint losses; an interpretable nonlinear additive decoder.
-&
-Hierarchical RNA--ATAC analysis and interpretable decoding already exist.
-Its objective differs from the normalized joint-prior construction here
-\cite{halo}.\\[5pt]
-MultiVI (2023); GLUE (2022)
-&
-MultiVI integrates paired and unpaired RNA/ATAC data with a multimodal VAE.
-GLUE links modality embeddings through a feature guidance graph.
-&
-Important single-cell comparators with different information requirements
-and observation models. The present paired Gaussian model has narrower
-scope \cite{multivi,glue}.\\
-\end{longtable}
-\endgroup
+\end{tabular}
+\end{center}
+The errors use the noiseless simulation signal. RNA error in ATAC-only cells
+and ATAC error in RNA-only cells assess complete missing-modality prediction.
+No true loadings, factors or held-out measurements enter fitting or
+initialization. This single run demonstrates the workflow and its limitations;
+it does not establish improvement over an independent or plug-in comparator.
 
-\subsection{Observed side information and uncertain latent parents}
-The model can combine fixed information \(x_i^A,x_i^R\) with latent
-programs:
-\begin{align}\label{eq:comparisoncovariates}
-A_{ik}\mid A_{i,<k},x_i^A
-&\sim g_k^A(\,\cdot\mid A_{i,<k},x_i^A),\\
-R_{ij}\mid R_{i,<j},A_i,x_i^R
-&\sim g_j^R(\,\cdot\mid R_{i,<j},A_i,x_i^R).\notag
-\end{align}
-This makes explicit the fixed covariates suppressed in most earlier
-equations. In~\eqref{eq:universal}, replace every
-\(g_u(v\mid P_u)\) by \(g_u(v\mid P_u,x_u)\), and every child density by
-\(g_c(V_c\mid P_c[v],x_c)\). Average over uncertain latent inputs, while
-holding the observed \(x\)'s fixed. The fixed inputs can modulate child
-feedback and do not disappear from those density evaluations.
+\begin{center}
+\includegraphics[width=\linewidth]{../atac_rna_joint/learning_and_errors.png}
+\end{center}
+The shared numerical objective decreased in this run. That observation is
+not an unconditional convergence guarantee. Run the notebook from top to
+bottom and increase integration resolution before drawing performance
+conclusions. The revised short example completed in about 22 seconds in the tested
+CPU environment with one torch thread; this is not a cross-method timing
+benchmark.
 
-EBMF's reduction to normal-means problems is established
-\cite{wang}, and flexible priors informed by fixed side information are
-already part of cEBMF \cite{cebmf}. Thus the added inferential problem is
-not simply concatenating more covariates. It is that changing a latent
-loading changes other factors' priors, requiring both uncertain-parent
-expectations and child contributions under one objective.
-The same framework can condition on observed context and latent programs
-simultaneously; it need not choose between them.
+\clearpage
+\input{numerical_stability_audit.tex}
 
-\subsection{Comparison with hierarchical neural models}
-CAVACHON's generative equations use Gaussian-mixture innovation variables
-and feed ancestor representations into the observation decoder
-\cite{cavachon}. In the present construction, the hierarchy acts on scalar
-loading distributions, while \(F^m(L_i^m)^\top\) retains a linear additive
-feature representation. These architectures impose different assumptions;
-neither comparison alone proves greater distributional capacity.
-
-HALO's displayed generative specification uses Gaussian latent priors,
-with additional mapping and causal-constraint terms in its training
-objective (Methods, Equations 17--24) \cite{halo}. It should therefore not
-be identified with exactly the normalized conditional-prior model
-in~\eqref{eq:orderedprior}. Conversely, hierarchical RNA--ATAC modeling
-and interpretability alone cannot distinguish this proposal from HALO.
-
-The potential contribution is a particular statistical model and
-inference construction: normalized conditional program distributions,
-explicit additive feature factors, and EBNM-based updates across multiple
-prior families. Accurate uncertainty, computational advantages and
-biological usefulness remain empirical questions.
-
-\subsection{Reconstruction capacity versus conditional dependence}
-\paragraph{Shared-score representation of any fitted pair.}
-Let \(M^A=AF_A^\top\), \(M^R=RF_R^\top\), and set
-\begin{equation}
-Z=[\,A\ R\,],\qquad
-W_A=[\,F_A\ 0\,],\qquad
-W_R=[\,0\ F_R\,].
-\end{equation}
-Then \(M^A=ZW_A^\top\) and \(M^R=ZW_R^\top\).
-A shared-score representation with at most \(K_A+K_R\) columns can
-therefore reproduce these finite fitted matrices exactly.
-This is a statement about matrix parameterization, not equality of
-their latent prior distributions or of the full model classes.
-It rules out a universal reconstruction advantage based solely on
-separate loading matrices.
-
-\paragraph{Linear Gaussian hierarchy as shared/private structure.}
-For column-vector loadings, suppose
-\(a\sim\N(0,\Sigma_A)\) and
-\(r=Ba+\eta\), with
-\(\eta\sim\N(0,\Sigma_\eta)\) independent of \(a\).
-The observation equations become
-\begin{equation}
-y^A=F_Aa+\epsilon_A,\qquad
-y^R=F_RBa+F_R\eta+\epsilon_R.
-\end{equation}
-Thus \(a\) supplies shared variation and \(\eta\) supplies RNA-specific
-variation. For positive-definite covariance matrices, whitening gives
-independent standard Gaussian scores with transformed feature weights.
-At the observation-distribution level this is shared/private linear
-Gaussian structure, although method-specific sparsity or orthogonality
-constraints can still differ.
-
-\paragraph{Nonlinear dependence.}
-Let \(A_1,A_2\) be independent \(\operatorname{Bernoulli}(1/2)\) variables
-and \(R=A_1\mathbin{\mathrm{xor}}A_2\). Then
-\(\E R=1/2\) and
-\(\Cov(A_1,R)=\Cov(A_2,R)=0\).
-The optimal affine predictor from these two inputs is \(1/2\), with
-population squared-error risk \(1/4\); the nonlinear oracle
-\begin{equation}
-\E(R\mid A_1,A_2)=A_1+A_2-2A_1A_2
-\end{equation}
-has zero risk. A neural CGB gate can approximate this relationship as
-its activation probabilities approach zero/one and its active slab
-concentrates near one. It is not exactly a binary prior at finite
-positive slab variance.
-
-This example establishes a limitation of affine prediction using the
-specified two inputs. An expanded basis containing \(A_1A_2\) represents
-the mean with a linear readout, and non-Gaussian latent models can have
-nonlinear posterior predictors. These calculations are not fitted MOFA+
-or JIVE error rates and do not prove that every configuration of those
-methods fails on XOR.
-
-\paragraph{Conditional variance can be useful without a mean association.}
-Suppose \(R\mid A=a\sim\N(0,v(a))\) and \(T=R+\varepsilon\) with
-independent \(\varepsilon\sim\N(0,s^2)\). Then \(\E(R\mid A)=0\), but
-\begin{equation}
-\E(R\mid T,A=a)=\frac{v(a)}{v(a)+s^2}T,\qquad
-\Var(R\mid T,A=a)=\frac{v(a)s^2}{v(a)+s^2}.
-\end{equation}
-ATAC can inform the amount of RNA shrinkage even without predicting its
-conditional mean from ATAC alone. This is relevant to the centered
-conditional scale-mixture families in Section~\ref{sec:registrymap}.
-Predictive dispersion and calibration should therefore supplement
-cross-modal mean prediction in a benchmark.
-
-\subsection{Implications for inference and empirical comparison}
-Full joint inference allows evidence from either modality to update the
-other, including when the generative prior is directed.
-This is not unique to the present model: shared latent-variable models
-also borrow information from all contributing views.
-The relevant question is whether the proposed conditional distributions
-provide better assumptions for a particular scientific problem.
-
-A dense graph with unrestricted conditionals can express any joint law
-by the chain rule in different orders. It does not identify biological
-causality. Sparse parents, restricted conditional families and anchored
-factor definitions can make a hierarchy more informative, but their
-assumptions and sensitivity require assessment. Scale, permutation,
-sign and possible rotation ambiguities must be accounted for when
-interpreting dependencies between estimated programs.
-
-An informative comparison should include independent cEBMF, one-way
-plug-in conditioning in each direction, within-modality hierarchy only,
-a linear conditional model, and the joint-target updates derived here.
-A two-stage nonlinear map between independently fitted loadings helps
-separate the benefit of flexible regression from that of joint inference.
-External comparators should include TwinEB and both linear/empirical Bayes methods
-and hierarchical neural models in Table~\ref{tab:methodcomparison}.
-
-Evaluate held-out prediction and calibration separately for both
-modalities, with ranks and tuning budgets treated fairly.
-Vary noise asymmetry, nonlinear gating, variance-only dependence,
-incorrect or absent dependence, and shuffled pairing.
-Hold feature priors fixed in loading-model ablations so that HMM
-smoothing is not mistaken for a benefit of the hierarchy.
-The HMM uses feature adjacency, whereas fixed genomic distances or
-sample coordinates are different inputs.
-
-For new-sample prediction, exclude held-out observations from preprocessing,
-factor fitting, covariate construction and conditional-network training.
-Separate entry-wise completion from entirely missing-modality prediction,
-and split by donors or studies when that is the unit of generalization.
-Compare predictions for the same observed quantity and units; raw
-ELBOs across different models or Gaussian transformed-data losses against
-count likelihoods are not direct performance comparisons.
-Original deterministic decompositions do not provide a predictive density
-without an additional model.
-
-The present Gaussian observation model does not automatically inherit
-count-data, batch-correction or unpaired-integration capabilities from
-the cited methods. Likewise, the general coordinate identity and
-Metropolis rule are established tools \cite{blei,hastings};
-their application is not itself a novel general theorem.
-A methodological contribution would require a coherent implemented
-solver, evidence that its approximation is accurate, and a demonstrated
-advantage of the conditional-program assumptions in appropriate settings.
-
-\appendix
-\section{Deriving the likelihood coefficients}
-For one observed entry, write the contribution excluding the target as
-\(S_{-k}=\sum_{h\ne k}L_{ih}F_{th}\). Expanding gives
-\begin{equation}
-(Y-vF_{tk}-S_{-k})^2
-=v^2F_{tk}^2-2vF_{tk}(Y-S_{-k})+(Y-S_{-k})^2.
-\end{equation}
-Under \eqref{eq:qfamily},
-\(\E F_{tk}^2=M^F_{tk}\) and
-\(\E[F_{tk}(Y-S_{-k})]=m^F_{tk}(Y-\sum_{h\ne k}m^L_{ih}m^F_{th})\).
-Multiplication by \(-\tau/2\) and summation over observed features gives
-\eqref{eq:viastat}--\eqref{eq:vibstat}. For a factor update, interchange
-loading and factor roles. If loading columns are dependent within a row,
-\(\E(L_{ik}L_{ih})\) cannot be factorized, yielding \eqref{eq:structuredF}.
-
-\section{Two-node binary illustration of posterior feedback}\label{sec:binaryexample}
-Let \(A,R\in\{0,1\}\), \(A\sim\operatorname{Bernoulli}(p)\),
-\(R\mid A=a\sim\operatorname{Bernoulli}(\rho_a)\). Suppose the ATAC likelihood
-alone contributes log odds \(\lambda_A\) for \(A=1\) against \(A=0\).
-Conditional on \(R=r\),
-\begin{equation}
-\logit p(A=1\mid R=r,Y_A)
-=\logit p+\lambda_A+
-r\log\frac{\rho_1}{\rho_0}+(1-r)\log\frac{1-\rho_1}{1-\rho_0}.
-\end{equation}
-For mean-field \(q(R=1)=\gamma_R\), replace \(r\) by \(\gamma_R\) to get
-the CAVI update. This is an expected \emph{log} message. By contrast, the
-exact marginal posterior for \(A\) given RNA data with likelihoods
-\(L_R(r)=p(Y_R\mid R=r)\) has the RNA likelihood ratio
-\begin{equation}
-\frac{(1-\rho_1)L_R(0)+\rho_1L_R(1)}
-{(1-\rho_0)L_R(0)+\rho_0L_R(1)}.
-\end{equation}
-The log of this ratio is generally not the mean-field expected-log term.
-This example distinguishes an exact scalar full conditional, an exact
-\emph{marginal} posterior, and a variational coordinate update. They are three
-different quantities even though they arise from the same joint model.
-
-\input{joint_implementation_sections.tex}
-
-\section{Verification and package correspondence}\label{sec:checks}
-The formulas were checked algebraically by expansion and by the limiting
-cases listed below. The original companion numerical script compares small finite-state and
-one-dimensional calculations independently of the implementation:
-\begin{enumerate}
-\item No children and fixed parents recover ordinary CGB posterior moments.
-\item A one-child tilted CGB conditional agrees with direct numerical
-integration of its spike and slab joint likelihood.
-\item A binary two-node full conditional agrees with enumeration of all four
-joint states. Its mean-field update agrees with direct coordinate maximization
-and increases the same finite-state ELBO.
-\item The EBNM-proposal Metropolis kernels satisfy detailed balance, and a
-complete two-coordinate sweep preserves the enumerated binary joint posterior.
-\item The augmented EMDN update agrees with direct integration of the
-expected joint log density when uncertain parents change weights, means and
-variances, and an EMDN child contributes a downstream term.
-\item The positive-slab evidence in \eqref{eq:positiveevidence} agrees with
-direct convolution, and the example's RNA block mapping agrees with its code.
-\end{enumerate}
-These checks validate the local identities, not convergence or empirical
-performance of a finite joint inference run. The associated numerical results are
-reported in the companion file
-\path{atac_rna_derivation_checks.txt}.
-The companion script \path{verify_atac_rna_derivation.py} reproduces these
-checks using Python, NumPy and SciPy. It is a verification script for this
-document, not a factorization solver.
-
-The additional script \path{verify_mixture_family_derivation.py} independently
-checks the Gaussian, exponential and atomic identities in
-Section~\ref{sec:mixturefamilies}. It compares normalizers and moments with
-numerical integration, tests missing-likelihood and reflected-exponential
-cases, checks the augmented Metropolis ratio across component types,
-verifies exponential variational coordinates with uncertain parents,
-and verifies the autoregressive vector-mixture identity in
-Section~\ref{sec:twineb}. Results are recorded in
-\path{mixture_family_derivation_checks.txt}. These checks concern mathematical
-identities; they do not implement an exponential-mixture factorization solver.
-
-The inspected source locations are relative to the repository root:
-\begin{itemize}
-\item \path{src/cebmf_torch/cebnm/cov_gb_prior.py}\par
-Gate-only covariate
-dependence, signed global Gaussian slab, local fitting criterion and penalty.
-\item \path{src/cebmf_torch/cebmf/cebmf.py}\par
-Loading and factor pseudo-data,
-posterior moments, covariate construction, local KL accounting and noise updates.
-\item \path{src/cebmf_torch/cebnm/hmm.py}\par
-Unit-spaced HMM normal-means
-model, state mixtures, signed/one-sided variants and smoothing.
-\item \path{src/cebmf_torch/utils/standard_scaler.py}\par
-Standardization
-recomputed from the current covariate matrix.
-\item \path{src/cebmf_torch/priors/learned.py}\par
-Learned registry names and the common moment-returning adapter. The CASH,
-LCASH, sharp CGB and EMDN solver modules define the conditional families
-mapped in Section~\ref{sec:registrymap}.
-\item \path{docs/source/ordered_loading_priors.rst} and
-\path{docs/source/hmm_priors.rst}\par
-Current user-facing model semantics.
-\end{itemize}
-The local CGB solver's moment-based slab-variance estimator is not being
-identified with the joint latent-variable M-step \eqref{eq:slabM}. This note
-defines the latter independently. The production cEBMF update is unchanged;
-the new experimental implementation is described in Section~\ref{sec:implemented}.
-Its tests compare every scalar parent--child family pairing against the
-complete joint Metropolis ratio, numerical quadrature, native network
-outputs, finite-difference scores, enumerated HMM path probabilities, and
-fixed-parameter HMM posterior moments. Whole-solver checks exercise all
-eight families with missing modality rows and missing entries, fixed
-preprocessing, parameter freezing, and joint reconstruction moments.
-The executable tests are \path{tests/test_joint_conditional.py} and
-\path{tests/test_joint_atac_rna.py}. These are correctness tests, not a
-convergence certificate or a benchmark against competing methods.
-
-\begingroup\raggedright
-\begin{thebibliography}{99}
+\begin{thebibliography}{99}\small
+\bibitem{wang} W. Wang and M. Stephens (2021). Empirical Bayes Matrix
+Factorization. \emph{JMLR} 22(120). \url{https://www.jmlr.org/papers/v22/20-589.html}.
+\bibitem{cebmf} W. R. P. Denault et al. (2025). Covariate-moderated Empirical
+Bayes Matrix Factorization. \url{https://arxiv.org/abs/2505.11639v2}.
 \bibitem{twineb} S. Salehi, A. Nazaret, S. P. Shah and D. M. Blei (2024).
-Population Priors for Matrix Factorization.
-\emph{Transactions on Machine Learning Research}, December 2024.
-\url{https://openreview.net/forum?id=AT9G5s1pOj}.
-
-\bibitem{vampprior} J. M. Tomczak and M. Welling (2018).
-VAE with a VampPrior.
-\emph{Proceedings of AISTATS}, PMLR 84, 1214--1223.
-\url{https://proceedings.mlr.press/v84/tomczak18a.html}.
-
-\bibitem{vlae} X. Chen, D. P. Kingma, T. Salimans, Y. Duan,
-P. Dhariwal, J. Schulman, I. Sutskever and P. Abbeel (2017).
-Variational Lossy Autoencoder.
-\emph{International Conference on Learning Representations}.
+Population Priors for Matrix Factorization. \emph{TMLR}.
+\url{https://openreview.net/forum?id=AT9G5s1p0j}.
+\bibitem{vampprior} J. M. Tomczak and M. Welling (2018). VAE with a VampPrior.
+\emph{AISTATS}, PMLR 84. \url{https://proceedings.mlr.press/v84/tomczak18a.html}.
+\bibitem{vlae} X. Chen et al. (2017). Variational Lossy Autoencoder.
 \url{https://arxiv.org/abs/1611.02731}.
-
-\bibitem{ivae} I. Khemakhem, D. P. Kingma, R. P. Monti and
-A. Hyv\"arinen (2020).
-Variational Autoencoders and Nonlinear ICA: A Unifying Framework.
-\emph{Proceedings of AISTATS}, PMLR 108, 2207--2217.
-\url{https://proceedings.mlr.press/v108/khemakhem20a.html}.
-
-\bibitem{hyvarinen} A. Hyv\"arinen (2005).
-\emph{Estimation of Non-Normalized Statistical Models by Score Matching}.
-Journal of Machine Learning Research 6, 695--709.
-\url{https://www.jmlr.org/papers/v6/hyvarinen05a.html}.
-
-\bibitem{hastings} W. K. Hastings (1970).
-\emph{Monte Carlo sampling methods using Markov chains and their applications}.
-Biometrika 57(1), 97--109.
-\href{https://doi.org/10.1093/biomet/57.1.97}{doi:10.1093/biomet/57.1.97}.
-Reference for the Metropolis--Hastings acceptance rule used in
-Section~\ref{sec:mh}; the EBNM cancellation is derived here.
-\bibitem{blei} D. M. Blei, A. Kucukelbir and J. D. McAuliffe (2017).
-\emph{Variational Inference: A Review for Statisticians}.
-Journal of the American Statistical Association 112(518), 859--877.
-\href{https://arxiv.org/abs/1601.00670}{arXiv:1601.00670}.
-Reference for the generic ELBO and mean-field coordinate identity.
-\bibitem{wang} W. Wang and M. Stephens (2021).
-\emph{Empirical Bayes Matrix Factorization}.
-Journal of Machine Learning Research 22(120), 1--40.
-\url{https://www.jmlr.org/papers/v22/20-589.html}.
-Reference for EBMF and its normal-means reduction.
-\bibitem{cebmf} W. R. P. Denault, K. Tayeb, P. Carbonetto, J. Willwerscheid
-and M. Stephens (2025).
-\emph{Covariate-moderated Empirical Bayes Matrix Factorization}.
-\href{https://arxiv.org/abs/2505.11639v2}{arXiv:2505.11639v2}.
-Reference for the covariate-moderated framework discussed in this project.
-The joint-loading equations in this note are derived for the proposed
-hierarchy; they are not attributed to this reference.
-\bibitem{mofa}
-Argelaguet et al. (2020).
-MOFA+: a statistical framework for comprehensive integration of
-multi-modal single-cell data. \emph{Genome Biology} 21, 111.
-\url{https://doi.org/10.1186/s13059-020-02015-1}
-
-\bibitem{jive}
-Lock, Hoadley, Marron and Nobel (2013).
-Joint and Individual Variation Explained (JIVE) for integrated analysis
-of multiple data types. \emph{Annals of Applied Statistics} 7, 523--542.
-\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC3671601/}
-
-\bibitem{ajive}
-Feng, Jiang, Hannig and Marron (2018).
-Angle-based joint and individual variation explained.
-\url{https://arxiv.org/abs/1704.02060}
-
-\bibitem{slide}
-Gaynanova and Li (2019).
-Structural learning and integrative decomposition of multi-view data.
-\emph{Biometrics} 75, 1121--1132.
-\url{https://arxiv.org/abs/1707.06573}
-
-\bibitem{bass}
-Zhao, Gao, Mukherjee and Engelhardt (2016).
-Bayesian group factor analysis with structured sparsity.
-\emph{Journal of Machine Learning Research} 17.
-\url{https://www.jmlr.org/papers/volume17/14-472/14-472.pdf}
-
-\bibitem{bidifac}
-Lock et al. (2022).
-Decomposition and imputation of bidimensionally linked matrices.
-\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC9060567/}
-
-\bibitem{evbidifac}
-Lock (2024).
-Empirical Bayes Linked Matrix Decomposition.
-\emph{Machine Learning} 113, 7451--7477.
-\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC11698509/}
-
-\bibitem{projive}
-Murden et al. (2026).
-Probabilistic Joint and Individual Variation Explained (ProJIVE) for
-Data Integration. \emph{Journal of Computational and Graphical Statistics};
-arXiv version accessed.
-\url{https://arxiv.org/abs/2603.12351}
-
-\bibitem{cavachon}
-Hsieh et al. (2024).
-CAVACHON: a hierarchical variational autoencoder to integrate multi-modal
-single-cell data. Preprint, arXiv:2405.18655v1.
-Earlier related paper presented at NeurIPS LMRL Workshop 2022.
-\url{https://arxiv.org/html/2405.18655v1}
-
-\bibitem{halo}
-Mao et al. (2025).
-HALO: hierarchical causal modeling for single cell multi-omics data.
-\emph{Nature Communications} 16, 8892.
-\url{https://www.nature.com/articles/s41467-025-63921-1}
-
-\bibitem{sifa}
-Li and Jung (2017).
-Incorporating Covariates into Integrated Factor Analysis of Multi-View
-Data. \emph{Biometrics} 73, 1433--1442.
-\url{https://arxiv.org/abs/1703.05794}
-
-\bibitem{muvi}
-Qoku and Buettner (2023).
-Encoding Domain Knowledge in Multi-view Latent Variable Models:
-A Bayesian Approach with Structured Sparsity. \emph{AISTATS}, PMLR 206.
-\url{https://proceedings.mlr.press/v206/qoku23a.html}
-
-\bibitem{sofa}
-Capraz et al. (2026).
-Semi-supervised Omics Factor Analysis (SOFA) disentangles known and latent
-sources of variation in multi-omic data.
-\emph{Nature Communications} 17, 8725. Published 20 August 2026.
-\url{https://www.nature.com/articles/s41467-026-74694-6}
-
-\bibitem{mefisto}
-Velten et al. (2022).
-Identifying temporal and spatial patterns of variation from multimodal
-data using MEFISTO. \emph{Nature Methods} 19, 179--186.
-\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC8828471/}
-
-\bibitem{multivi}
-Ashuach et al. (2023).
-MultiVI: deep generative model for the integration of multimodal data.
-\emph{Nature Methods}.
-\url{https://www.nature.com/articles/s41592-023-01909-9}
-
-\bibitem{glue}
-Cao and Gao (2022).
-Multi-omics single-cell data integration and regulatory inference with
-graph-linked embedding. \emph{Nature Biotechnology}.
-\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC9546775/}
+\bibitem{ivae} I. Khemakhem, D. P. Kingma, R. P. Monti and A. Hyv\"arinen
+(2020). Variational Autoencoders and Nonlinear ICA: A Unifying Framework.
+\emph{AISTATS}, PMLR 108. \url{https://proceedings.mlr.press/v108/khemakhem20a.html}.
+\bibitem{mofa} R. Argelaguet et al. (2020). MOFA+: a statistical framework for
+comprehensive integration of multi-modal single-cell data.
+\emph{Genome Biology} 21, 111. \url{https://doi.org/10.1186/s13059-020-02015-1}.
+\bibitem{jive} E. F. Lock et al. (2013). Joint and Individual Variation
+Explained (JIVE) for integrated analysis of multiple data types.
+\emph{Annals of Applied Statistics} 7, 523--542.
+\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC3671601/}.
+\bibitem{cavachon} Hsieh et al. (2024). CAVACHON: a hierarchical variational
+autoencoder to integrate multi-modal single-cell data.
+\url{https://arxiv.org/abs/2405.18655}.
+\bibitem{multivi} T. Ashuach et al. (2023). MultiVI: deep generative model
+for the integration of multimodal data. \emph{Nature Methods}.
+\url{https://www.nature.com/articles/s41592-023-01909-9}.
+\bibitem{glue} Z. J. Cao and G. Gao (2022). Multi-omics single-cell data
+integration and regulatory inference with graph-linked embedding.
+\emph{Nature Biotechnology}.
+\url{https://pmc.ncbi.nlm.nih.gov/articles/PMC9546775/}.
 \end{thebibliography}
-\endgroup
 \end{document}

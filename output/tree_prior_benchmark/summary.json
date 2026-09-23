@@ -1,0 +1,110 @@
+[
+  {
+    "scenario": "notebook",
+    "method": "gbinary",
+    "n": 5,
+    "rmse_mean": 0.11015167603573667,
+    "rmse_sd": 0.01125849642432286,
+    "seconds_median": 120.81840910000028,
+    "sigma_mean": 1.2504758358001709
+  },
+  {
+    "scenario": "notebook",
+    "method": "cgb",
+    "n": 5,
+    "rmse_mean": 0.18214729626436535,
+    "rmse_sd": 0.006070000437221875,
+    "seconds_median": 11.762233900008141,
+    "sigma_mean": 1.250853681564331
+  },
+  {
+    "scenario": "notebook",
+    "method": "cgb_plugin",
+    "n": 5,
+    "rmse_mean": 0.17125628131590503,
+    "rmse_sd": 0.0035922294688081873,
+    "seconds_median": 12.573888500002795,
+    "sigma_mean": 1.251120114326477
+  },
+  {
+    "scenario": "notebook",
+    "method": "cgb_self",
+    "n": 5,
+    "rmse_mean": 0.14687748785791988,
+    "rmse_sd": 0.0030168488605318523,
+    "seconds_median": 153.2301773999934,
+    "sigma_mean": 1.2511354446411134
+  },
+  {
+    "scenario": "notebook",
+    "method": "spiked",
+    "n": 5,
+    "rmse_mean": 0.08999943239798017,
+    "rmse_sd": 0.01027434452331749,
+    "seconds_median": 16.476374599995324,
+    "sigma_mean": 1.2509984493255615
+  },
+  {
+    "scenario": "notebook",
+    "method": "spiked_self",
+    "n": 5,
+    "rmse_mean": 0.08648922990368521,
+    "rmse_sd": 0.006090377670987323,
+    "seconds_median": 366.8030593000003,
+    "sigma_mean": 1.2500438213348388
+  },
+  {
+    "scenario": "corrected",
+    "method": "gbinary",
+    "n": 5,
+    "rmse_mean": 0.11529261317002694,
+    "rmse_sd": 0.020183210558854546,
+    "seconds_median": 55.59274419999565,
+    "sigma_mean": 1.2500187635421753
+  },
+  {
+    "scenario": "corrected",
+    "method": "cgb",
+    "n": 5,
+    "rmse_mean": 0.1810600769558163,
+    "rmse_sd": 0.004029733552899488,
+    "seconds_median": 9.660420699990937,
+    "sigma_mean": 1.250473713874817
+  },
+  {
+    "scenario": "corrected",
+    "method": "cgb_plugin",
+    "n": 5,
+    "rmse_mean": 0.17244346695675083,
+    "rmse_sd": 0.004268054079301242,
+    "seconds_median": 9.507219799997984,
+    "sigma_mean": 1.2510188341140747
+  },
+  {
+    "scenario": "corrected",
+    "method": "cgb_self",
+    "n": 5,
+    "rmse_mean": 0.14624966753878807,
+    "rmse_sd": 0.006785621140941655,
+    "seconds_median": 175.1775268999918,
+    "sigma_mean": 1.2509632587432862
+  },
+  {
+    "scenario": "corrected",
+    "method": "spiked",
+    "n": 5,
+    "rmse_mean": 0.09201551294116873,
+    "rmse_sd": 0.0030586372972175235,
+    "seconds_median": 15.840883000011672,
+    "sigma_mean": 1.2505743741989135
+  },
+  {
+    "scenario": "corrected",
+    "method": "spiked_self",
+    "n": 5,
+    "rmse_mean": 0.0868941614236576,
+    "rmse_sd": 0.005062829133205688,
+    "seconds_median": 336.0610345000023,
+    "sigma_mean": 1.2498400926589965
+  }
+]

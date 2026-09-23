@@ -1,0 +1,109 @@
+{
+  "config": {
+    "steps": 2,
+    "n": 64,
+    "p": 24,
+    "rank": 3,
+    "epochs": 1,
+    "hidden": 6,
+    "layers": 0,
+    "batch": 128,
+    "lr": 0.01,
+    "penalty": null,
+    "cgb_penalty": 1.0511,
+    "spiked_penalty": 1.1,
+    "cgb_omega": 0.01,
+    "ash_penalty": 10.0,
+    "omega": 0.1,
+    "components": 3,
+    "quadrature": 6,
+    "parents": 6,
+    "integration_seed": 0,
+    "holdout": 0.0,
+    "initialization": "svd",
+    "warm_steps": 10,
+    "seed": 1,
+    "scenario": "corrected",
+    "method": "cgb_sharp_self",
+    "protocol_version": 2,
+    "prior_L": "cgb_sharp",
+    "prior_L_kwargs": {
+      "hidden_dim": 6,
+      "n_layers": 0,
+      "n_epochs": 1,
+      "batch_size": 128,
+      "lr": 0.01,
+      "penalty": 1.0511,
+      "omega": 0.01
+    },
+    "prior_F_kwargs": {
+      "penalty": 10.0
+    }
+  },
+  "complete": true,
+  "data_rank": 4,
+  "signal_singular_values": [
+    47.86577344737386,
+    23.852228960740028,
+    13.947093676171185,
+    13.756527610362708,
+    1.668616824442959e-14,
+    6.844616737597151e-15,
+    4.437703456047149e-15,
+    2.8256712745034686e-15,
+    2.320811812948581e-29,
+    3.9732332943133256e-30
+  ],
+  "initialization_rmse": 0.6490235781880644,
+  "warm_seconds": 1.100008375942707e-06,
+  "warm_history": [],
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0.0,
+      "signal_rmse": 0.6490235781880644,
+      "train_observation_rmse": 1.2217252842576634,
+      "sigma": 1.221725344657898,
+      "rank": 3
+    },
+    {
+      "sweep": 1,
+      "seconds": 0.052714200006448664,
+      "signal_rmse": 0.7652898059388694,
+      "train_observation_rmse": 1.4585162207997402,
+      "sigma": 1.4988176822662354,
+      "rank": 3,
+      "objective": 2970.2021484375
+    },
+    {
+      "sweep": 2,
+      "seconds": 0.10315230001288,
+      "signal_rmse": 0.7294054705921675,
+      "train_observation_rmse": 1.4376257170076108,
+      "sigma": 1.4859485626220703,
+      "rank": 3,
+      "objective": 2943.570068359375
+    }
+  ],
+  "inference": "conditional_variational",
+  "conditional_prior_parameters": [
+    {
+      "log_slab_sd": [
+        -1.1750949621200562
+      ],
+      "net.mu_2": -7.121895790100098
+    },
+    {
+      "log_slab_sd": [
+        -1.7507593631744385
+      ],
+      "net.mu_2": 0.818799614906311
+    },
+    {
+      "log_slab_sd": [
+        -2.093137264251709
+      ],
+      "net.mu_2": -0.6790725588798523
+    }
+  ]
+}

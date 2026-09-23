@@ -1,0 +1,88 @@
+{
+  "config": {
+    "steps": 2,
+    "n": 64,
+    "p": 24,
+    "rank": 3,
+    "epochs": 1,
+    "hidden": 6,
+    "layers": 0,
+    "batch": 128,
+    "lr": 0.01,
+    "penalty": null,
+    "cgb_penalty": 1.0511,
+    "spiked_penalty": 1.1,
+    "cgb_omega": 0.01,
+    "ash_penalty": 10.0,
+    "omega": 0.1,
+    "components": 3,
+    "quadrature": 6,
+    "parents": 6,
+    "integration_seed": 0,
+    "holdout": 0.0,
+    "initialization": "svd",
+    "warm_steps": 10,
+    "seed": 1,
+    "scenario": "corrected",
+    "method": "cgb_plugin",
+    "protocol_version": 2,
+    "prior_L": "cgb",
+    "prior_L_kwargs": {
+      "hidden_dim": 6,
+      "n_layers": 0,
+      "n_epochs": 1,
+      "batch_size": 128,
+      "lr": 0.01,
+      "penalty": 1.0511
+    },
+    "prior_F_kwargs": {
+      "penalty": 10.0
+    }
+  },
+  "complete": true,
+  "data_rank": 4,
+  "signal_singular_values": [
+    47.86577344737386,
+    23.852228960740028,
+    13.947093676171185,
+    13.756527610362708,
+    1.668616824442959e-14,
+    6.844616737597151e-15,
+    4.437703456047149e-15,
+    2.8256712745034686e-15,
+    2.320811812948581e-29,
+    3.9732332943133256e-30
+  ],
+  "initialization_rmse": 0.6490235781880644,
+  "warm_seconds": 1.0999938240274787e-06,
+  "warm_history": [],
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0.0,
+      "signal_rmse": 0.6490235781880644,
+      "train_observation_rmse": 1.2217252842576634,
+      "sigma": 1.221725344657898,
+      "rank": 3
+    },
+    {
+      "sweep": 1,
+      "seconds": 0.025761299999430776,
+      "signal_rmse": 0.6455649837284673,
+      "train_observation_rmse": 1.2667741075103789,
+      "sigma": 1.3490930795669556,
+      "rank": 3,
+      "objective": 3012.588134765625
+    },
+    {
+      "sweep": 2,
+      "seconds": 0.05338510000729002,
+      "signal_rmse": 0.6677730740672141,
+      "train_observation_rmse": 1.2982344444381417,
+      "sigma": 1.3898409605026245,
+      "rank": 3,
+      "objective": 3003.4169921875
+    }
+  ],
+  "inference": "plugin"
+}

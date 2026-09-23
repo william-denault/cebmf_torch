@@ -1,0 +1,173 @@
+[
+  {
+    "checkpoint": "C:\\Document\\Serieux\\Travail\\python_work\\package\\cebmf_torch\\output\\tree_prior_benchmark\\main\\notebook_cgb_self_seed1_svd_0292d9a96b.model.pt",
+    "evaluated_rows": [
+      9,
+      11,
+      14,
+      20,
+      39,
+      40,
+      51,
+      54,
+      57,
+      90,
+      95,
+      115,
+      116,
+      168,
+      203,
+      216,
+      246,
+      250,
+      251,
+      262,
+      328,
+      329,
+      330,
+      339,
+      345,
+      349,
+      379,
+      388,
+      397,
+      440,
+      447,
+      461,
+      462,
+      493,
+      495,
+      500,
+      517,
+      606,
+      624,
+      643,
+      646,
+      648,
+      655,
+      681,
+      688,
+      719,
+      750,
+      786,
+      816,
+      822,
+      828,
+      833,
+      837,
+      838,
+      844,
+      869,
+      872,
+      893,
+      897,
+      899,
+      909,
+      911,
+      912,
+      936,
+      977,
+      998,
+      999
+    ],
+    "reference": "48 quadrature points, 256 parent points, seed 0",
+    "results": [
+      {
+        "quadrature": 8,
+        "parents": 8,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          2.2058932245272445e-06,
+          7.520729559473693e-05,
+          9.062242315849289e-05,
+          0.00032124013523571193,
+          0.017135903239250183,
+          0.0
+        ],
+        "relative_mean_rms": 0.006997097283601761,
+        "mean_abs_logz_difference": 0.0005432271282188594,
+        "reconstruction_rms_change": 0.0002580728614702821
+      },
+      {
+        "quadrature": 16,
+        "parents": 32,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          3.7425188565975986e-06,
+          4.82111718156375e-05,
+          3.284818012616597e-05,
+          6.954303535167128e-05,
+          0.003192385658621788,
+          0.0
+        ],
+        "relative_mean_rms": 0.0013038135366514325,
+        "mean_abs_logz_difference": 0.00025412903050892055,
+        "reconstruction_rms_change": 5.8781577536137775e-05
+      },
+      {
+        "quadrature": 32,
+        "parents": 128,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          1.5860830444580643e-06,
+          8.311048077302985e-06,
+          2.4072146516118664e-06,
+          2.614110962895211e-05,
+          0.0005583645543083549,
+          0.0
+        ],
+        "relative_mean_rms": 0.00022822929895482957,
+        "mean_abs_logz_difference": 2.9157670724089257e-05,
+        "reconstruction_rms_change": 1.1894047929672524e-05
+      },
+      {
+        "quadrature": 48,
+        "parents": 256,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "relative_mean_rms": 0.0,
+        "mean_abs_logz_difference": 0.0,
+        "reconstruction_rms_change": 0.0
+      },
+      {
+        "quadrature": 32,
+        "parents": 128,
+        "integration_seed": 1,
+        "relative_mean_rms_by_column": [
+          1.6331117649315274e-06,
+          7.534217274951516e-06,
+          1.696225240266358e-06,
+          8.240928764280397e-06,
+          0.0007954409229569137,
+          0.0
+        ],
+        "relative_mean_rms": 0.0003247707791160792,
+        "mean_abs_logz_difference": 4.175367939751595e-05,
+        "reconstruction_rms_change": 1.2228936611791141e-05
+      },
+      {
+        "quadrature": 8,
+        "parents": 8,
+        "integration_seed": 1,
+        "relative_mean_rms_by_column": [
+          2.0934560325258644e-06,
+          7.418280438287184e-05,
+          0.00019663905550260097,
+          0.00036313963937573135,
+          0.0030034733936190605,
+          0.0
+        ],
+        "relative_mean_rms": 0.001238069380633533,
+        "mean_abs_logz_difference": 0.00029119825921952724,
+        "reconstruction_rms_change": 0.00014385877875611186
+      }
+    ]
+  }
+]

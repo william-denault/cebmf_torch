@@ -1,0 +1,101 @@
+{
+  "config": {
+    "steps": 1,
+    "n": 1000,
+    "p": 200,
+    "rank": 6,
+    "epochs": 3,
+    "hidden": 12,
+    "layers": 0,
+    "batch": 128,
+    "lr": 0.01,
+    "penalty": 1.05,
+    "ash_penalty": 10.0,
+    "omega": 0.1,
+    "components": 3,
+    "quadrature": 12,
+    "parents": 16,
+    "integration_seed": 0,
+    "holdout": 0.0,
+    "initialization": "svd",
+    "warm_steps": 10,
+    "seed": 1,
+    "scenario": "notebook",
+    "method": "cgb_self"
+  },
+  "complete": true,
+  "data_rank": 6,
+  "signal_singular_values": [
+    422.24077672553744,
+    271.405282009786,
+    153.82729939187158,
+    143.63470201716737,
+    8.627486692933555,
+    6.18748233110044,
+    1.0399145094195663e-11,
+    8.457214575365883e-12,
+    7.130947794154981e-12,
+    5.323018635792078e-12
+  ],
+  "initialization_rmse": 0.267982505819837,
+  "warm_seconds": 1.6999983927235007e-06,
+  "warm_history": [],
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0.0,
+      "signal_rmse": 0.267982505819837,
+      "train_observation_rmse": 1.2240810781405091,
+      "sigma": 1.224081039428711,
+      "rank": 6
+    },
+    {
+      "sweep": 1,
+      "seconds": 17.56440049999219,
+      "signal_rmse": 0.20468027106615944,
+      "train_observation_rmse": 1.2320949280989177,
+      "sigma": 1.2488081455230713,
+      "rank": 6,
+      "objective": 339006.4228515625
+    }
+  ],
+  "inference": "conditional_variational",
+  "conditional_prior_parameters": [
+    {
+      "log_slab_sd": [
+        1.6747870445251465
+      ],
+      "net.mu_2": -14.986281394958496
+    },
+    {
+      "log_slab_sd": [
+        1.6378310918807983
+      ],
+      "net.mu_2": 5.846845626831055
+    },
+    {
+      "log_slab_sd": [
+        1.0857254266738892
+      ],
+      "net.mu_2": 0.07992175221443176
+    },
+    {
+      "log_slab_sd": [
+        0.9932177662849426
+      ],
+      "net.mu_2": 0.14055858552455902
+    },
+    {
+      "log_slab_sd": [
+        0.11686023324728012
+      ],
+      "net.mu_2": -0.01518005970865488
+    },
+    {
+      "log_slab_sd": [
+        0.10466805100440979
+      ],
+      "net.mu_2": 0.07163891941308975
+    }
+  ]
+}

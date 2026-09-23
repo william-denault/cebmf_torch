@@ -1,0 +1,15 @@
+{
+  "source_sha256": {
+    "examples\\benchmarks\\tree\\benchmark_plugin_vs_joint.py": "9a386533b16b0d67ae22430b302e34a14ef3c8026a5b5f18500ece82d4e4671f",
+    "examples\\benchmarks\\tree\\benchmark_tree_priors.py": "d73e00c0b633e75b3560cafb2057ea6d3f37d1cd5e764e5f4eb8d86c5b006fee",
+    "examples\\benchmarks\\tree\\tree_update_ablation.py": "e7b7e979d72ac58502bda5969b50448cb5f86df5b013d24e534222e4e4b0378b",
+    "examples\\benchmarks\\tree\\summarize_plugin_vs_joint.py": "4fa38fe914082037e83975402fc2951301ac4580190d181df946879d69a3ba36",
+    "examples\\benchmarks\\tree\\benchmark_warm_diagnostics.py": "4ac70eed3a1b303904de9de402431d17833df93920ce0d9c3ee3e3db5cadf36b",
+    "examples\\benchmarks\\tree\\audit_plugin_joint_math.py": "46e81998299d8b644c73d25e30634569196656c81d51fedd043f2cdbacb10de9",
+    "examples\\benchmarks\\tree\\audit_tree_quadrature.py": "4cb550fb5b64f46d0d6caf838ff171f08b14d268899443102d346c5532371943",
+    "examples\\benchmarks\\tree\\trace_quadratic_failure.py": "441499b7b66392633c114cf8d526f6b8ba9b1964a01771d3d37572487cd4bbc0",
+    "examples\\benchmarks\\tree\\compare_failure_updates.py": "3c8cf9523488331e28604414c238565fbc289c3a4a44a5fcaf816f852af4187d",
+    "examples\\benchmarks\\tree\\verify_plugin_joint_outputs.py": "2d3bfb70cbc594ab4d85aa824dbda8d1674814520142f4684f0c2d388ad80b4e"
+  },
+  "note": "Final analysis and diagnostic scripts. Production and primary-protocol source hashes are verified separately in primary/manifest.json."
+}

@@ -1,0 +1,63 @@
+{
+  "config": {
+    "steps": 1,
+    "n": 1000,
+    "p": 200,
+    "rank": 6,
+    "epochs": 5,
+    "hidden": 16,
+    "layers": 1,
+    "batch": 128,
+    "lr": 0.01,
+    "penalty": 1.05,
+    "ash_penalty": 10.0,
+    "omega": 0.1,
+    "components": 3,
+    "quadrature": 16,
+    "parents": 16,
+    "integration_seed": 0,
+    "holdout": 0.0,
+    "initialization": "svd",
+    "warm_steps": 10,
+    "seed": 1,
+    "scenario": "notebook",
+    "method": "cgb_plugin"
+  },
+  "complete": true,
+  "data_rank": 6,
+  "signal_singular_values": [
+    422.24077672553744,
+    271.405282009786,
+    153.82729939187158,
+    143.63470201716737,
+    8.627486692933555,
+    6.18748233110044,
+    1.0399145094195663e-11,
+    8.457214575365883e-12,
+    7.130947794154981e-12,
+    5.323018635792078e-12
+  ],
+  "initialization_rmse": 0.267982505819837,
+  "warm_seconds": 1.4999968698248267e-06,
+  "warm_history": [],
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0.0,
+      "signal_rmse": 0.267982505819837,
+      "train_observation_rmse": 1.2240810781405091,
+      "sigma": 1.224081039428711,
+      "rank": 6
+    },
+    {
+      "sweep": 1,
+      "seconds": 0.6424645999941276,
+      "signal_rmse": 0.21265749320236704,
+      "train_observation_rmse": 1.2314262598460723,
+      "sigma": 1.2476520538330078,
+      "rank": 6,
+      "objective": 337820.09375
+    }
+  ],
+  "inference": "plugin"
+}

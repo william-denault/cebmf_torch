@@ -1,0 +1,78 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "method": "mean",
+      "prior": "cgb",
+      "direct_marginal_kl": 13.66031643858799,
+      "evidence_identity_kl": 13.660319625201252,
+      "absolute_error": 3.18661326126346e-06,
+      "quadrature_refinement_error": 0.0,
+      "marginal_loglik_error": 3.0056128181854547e-06
+    },
+    {
+      "method": "mean",
+      "prior": "cgb_sharp_2",
+      "direct_marginal_kl": 8.497924093832934,
+      "evidence_identity_kl": 8.497928002481249,
+      "absolute_error": 3.908648315231744e-06,
+      "quadrature_refinement_error": 0.0,
+      "marginal_loglik_error": 2.348943226593292e-07
+    },
+    {
+      "method": "mean",
+      "prior": "spiked_emdn",
+      "direct_marginal_kl": 12.94618168223662,
+      "evidence_identity_kl": 12.94618117935131,
+      "absolute_error": 5.028853102828634e-07,
+      "quadrature_refinement_error": 3.552713678800501e-15,
+      "marginal_loglik_error": 3.941845250210463e-07
+    },
+    {
+      "method": "mean",
+      "prior": "ash",
+      "direct_marginal_kl": 14.251567473359454,
+      "evidence_identity_kl": 14.251565692129152,
+      "absolute_error": 1.7812303028108545e-06,
+      "quadrature_refinement_error": 0.0,
+      "marginal_loglik_error": 2.019081698279024e-06
+    },
+    {
+      "method": "mean_second",
+      "prior": "cgb",
+      "direct_marginal_kl": 12.833848965616003,
+      "evidence_identity_kl": 12.833849048189016,
+      "absolute_error": 8.257301331582312e-08,
+      "quadrature_refinement_error": 0.0,
+      "marginal_loglik_error": 2.157501874933132e-07
+    },
+    {
+      "method": "mean_second",
+      "prior": "cgb_sharp_2",
+      "direct_marginal_kl": 9.366944635991459,
+      "evidence_identity_kl": 9.366949095046781,
+      "absolute_error": 4.459055322314498e-06,
+      "quadrature_refinement_error": 0.0,
+      "marginal_loglik_error": 6.144779476358053e-07
+    },
+    {
+      "method": "mean_second",
+      "prior": "spiked_emdn",
+      "direct_marginal_kl": 12.622795138319677,
+      "evidence_identity_kl": 12.622795964358794,
+      "absolute_error": 8.260391162195901e-07,
+      "quadrature_refinement_error": 3.552713678800501e-15,
+      "marginal_loglik_error": 3.980164358097227e-07
+    },
+    {
+      "method": "mean_second",
+      "prior": "ash",
+      "direct_marginal_kl": 14.251567473359454,
+      "evidence_identity_kl": 14.251565692129152,
+      "absolute_error": 1.7812303028108545e-06,
+      "quadrature_refinement_error": 0.0,
+      "marginal_loglik_error": 2.019081698279024e-06
+    }
+  ],
+  "note": "Independent marginal-mixture entropy/KL integration, including exact point-mass contribution; CPU only."
+}

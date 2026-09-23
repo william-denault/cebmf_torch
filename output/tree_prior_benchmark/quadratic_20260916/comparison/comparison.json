@@ -1,0 +1,93 @@
+{
+  "torch": "2.11.0+cpu",
+  "cuda_available": false,
+  "device": "cpu",
+  "threads": 1,
+  "protocol": {
+    "ash_penalty": 10.0,
+    "batch": 128,
+    "cgb_omega": 0.01,
+    "cgb_penalty": 1.0511,
+    "components": 3,
+    "epochs": 2,
+    "hidden": 12,
+    "holdout": 0.0,
+    "initialization": "svd",
+    "integration_seed": 0,
+    "layers": 0,
+    "lr": 0.01,
+    "n": 200,
+    "omega": 0.1,
+    "p": 60,
+    "parents": 16,
+    "penalty": null,
+    "prior_F_kwargs": {
+      "penalty": 10.0
+    },
+    "protocol_version": 2,
+    "quadrature": 16,
+    "rank": 4,
+    "spiked_penalty": 1.1,
+    "steps": 12,
+    "warm_steps": 10
+  },
+  "note": "Sequential runs; timing excludes the first sweep. Small finite-budget diagnostic.",
+  "results": [
+    {
+      "scenario": "corrected",
+      "method": "cgb_self",
+      "approximation": "quadrature",
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "rmse_mean": 0.3341946307401586,
+      "rmse_sd": 0.03298411407828211,
+      "seconds_per_sweep_median": 1.8806122545449233,
+      "curvature_clipped_fraction": null
+    },
+    {
+      "scenario": "corrected",
+      "method": "cgb_self",
+      "approximation": "quadratic",
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "rmse_mean": 0.3341013035957267,
+      "rmse_sd": 0.03366704189538685,
+      "seconds_per_sweep_median": 0.1415522909082938,
+      "curvature_clipped_fraction": 0.0
+    },
+    {
+      "scenario": "corrected",
+      "method": "spiked_self",
+      "approximation": "quadrature",
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "rmse_mean": 0.25318715457778007,
+      "rmse_sd": 0.018287355598050933,
+      "seconds_per_sweep_median": 5.440671681818045,
+      "curvature_clipped_fraction": null
+    },
+    {
+      "scenario": "corrected",
+      "method": "spiked_self",
+      "approximation": "quadratic",
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "rmse_mean": 0.25447130626757375,
+      "rmse_sd": 0.0174982538408179,
+      "seconds_per_sweep_median": 0.20420736363633873,
+      "curvature_clipped_fraction": 0.0
+    }
+  ]
+}

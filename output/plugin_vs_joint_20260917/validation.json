@@ -1,0 +1,29 @@
+{
+  "complete": true,
+  "groups": {
+    "primary": {
+      "completed": 180,
+      "failed": 0,
+      "planned": 180,
+      "source_hashes_verified": 49
+    },
+    "ablations": {
+      "completed": 58,
+      "failed": 2,
+      "planned": 60,
+      "source_hashes_verified": 49
+    },
+    "rank4_diagnostic": {
+      "completed": 12,
+      "failed": 0,
+      "planned": 12,
+      "source_hashes_verified": 49
+    },
+    "warm_diagnostics": {
+      "completed": 15,
+      "planned": 15
+    }
+  },
+  "pending": [],
+  "recorded_failures": 2
+}

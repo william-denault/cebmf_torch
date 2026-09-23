@@ -31,8 +31,9 @@ both sides; factor signs are otherwise arbitrary in matrix factorization.
 RNA/ATAC example
 ----------------
 
-This is the HMM counterpart of the RNA fit in
-``examples/model_RNA_ATAC.ipynb``:
+This fits an RNA matrix with an ordered feature prior. For joint ATAC-RNA
+learning with ash features, use ``examples/ATAC_RNA_joint.ipynb``.
+The older exploration is preserved under ``examples/archive/atac_rna``.
 
 .. code-block:: python
 

@@ -1,0 +1,155 @@
+{
+  "signature": "a1d3cbd1fa9365f1f444a3ebe6039267d2a7784753cd10e9698d74a5272e48aa",
+  "seed": 25,
+  "method": "plugin",
+  "stage": "cgb",
+  "prior": "cgb",
+  "prior_kwargs": {
+    "penalty": 1.051
+  },
+  "scalar_network_defaults": {
+    "n_epochs": 10,
+    "n_layers": 4,
+    "hidden_dim": 32,
+    "batch_size": 128,
+    "lr": 0.001,
+    "penalty": 1.051
+  },
+  "resolved_training": {
+    "n_epochs": 10,
+    "n_layers": 4,
+    "hidden_dim": 32,
+    "batch_size": 128,
+    "lr": 0.001,
+    "penalty": 1.051
+  },
+  "conditional_options": null,
+  "fixed_rank": false,
+  "initial_rank": 6,
+  "steps": 10,
+  "initialization": {
+    "sweep": 0,
+    "seconds": 0,
+    "signal_rmse": 0.2610938847064972,
+    "observation_rmse": 1.224153757095337,
+    "sigma": 1.224153757095337,
+    "rank": 6,
+    "loading_variance": 0.0
+  },
+  "setup_seconds": 0.004509000020334497,
+  "complete": true,
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0,
+      "signal_rmse": 0.2610938847064972,
+      "observation_rmse": 1.224153757095337,
+      "sigma": 1.224153757095337,
+      "rank": 6,
+      "loading_variance": 0.0
+    },
+    {
+      "sweep": 1,
+      "seconds": 2.943582999985665,
+      "signal_rmse": 0.18961557745933533,
+      "observation_rmse": 1.2330365180969238,
+      "sigma": 1.2473227977752686,
+      "rank": 6,
+      "loading_variance": 0.9991932511329651,
+      "objective": 337203.34375
+    },
+    {
+      "sweep": 2,
+      "seconds": 5.736155699996743,
+      "signal_rmse": 0.17501406371593475,
+      "observation_rmse": 1.2355228662490845,
+      "sigma": 1.2490862607955933,
+      "rank": 6,
+      "loading_variance": 0.9628325700759888,
+      "objective": 336972.9375
+    },
+    {
+      "sweep": 3,
+      "seconds": 8.472519600007217,
+      "signal_rmse": 0.17151696979999542,
+      "observation_rmse": 1.2374459505081177,
+      "sigma": 1.2502453327178955,
+      "rank": 6,
+      "loading_variance": 0.9070746302604675,
+      "objective": 336925.875
+    },
+    {
+      "sweep": 4,
+      "seconds": 11.703829300007783,
+      "signal_rmse": 0.16983166337013245,
+      "observation_rmse": 1.2389310598373413,
+      "sigma": 1.251090407371521,
+      "rank": 6,
+      "loading_variance": 0.8564475178718567,
+      "objective": 336867.25
+    },
+    {
+      "sweep": 5,
+      "seconds": 14.640801800007466,
+      "signal_rmse": 0.16983243823051453,
+      "observation_rmse": 1.2394461631774902,
+      "sigma": 1.2513470649719238,
+      "rank": 6,
+      "loading_variance": 0.8181969523429871,
+      "objective": 336806.3125
+    },
+    {
+      "sweep": 6,
+      "seconds": 17.405385700025363,
+      "signal_rmse": 0.17074480652809143,
+      "observation_rmse": 1.2393438816070557,
+      "sigma": 1.251241683959961,
+      "rank": 6,
+      "loading_variance": 0.8116668462753296,
+      "objective": 336780.46875
+    },
+    {
+      "sweep": 7,
+      "seconds": 19.984654700034298,
+      "signal_rmse": 0.17136485874652863,
+      "observation_rmse": 1.239258050918579,
+      "sigma": 1.2511498928070068,
+      "rank": 6,
+      "loading_variance": 0.8063048124313354,
+      "objective": 336764.625
+    },
+    {
+      "sweep": 8,
+      "seconds": 23.022306500031846,
+      "signal_rmse": 0.17152650654315948,
+      "observation_rmse": 1.239245891571045,
+      "sigma": 1.2511250972747803,
+      "rank": 6,
+      "loading_variance": 0.8023724555969238,
+      "objective": 336754.28125
+    },
+    {
+      "sweep": 9,
+      "seconds": 25.81274000002304,
+      "signal_rmse": 0.17143464088439941,
+      "observation_rmse": 1.23934006690979,
+      "sigma": 1.251173734664917,
+      "rank": 6,
+      "loading_variance": 0.7935191988945007,
+      "objective": 336746.3125
+    },
+    {
+      "sweep": 10,
+      "seconds": 28.79313800003729,
+      "signal_rmse": 0.1715683490037918,
+      "observation_rmse": 1.2392998933792114,
+      "sigma": 1.25114107131958,
+      "rank": 6,
+      "loading_variance": 0.7949733138084412,
+      "objective": 336734.9375
+    }
+  ],
+  "fit_seconds": 28.79313800003729,
+  "checkpoint": "output\\plugin_vs_joint_20260917\\primary\\plugin\\seed25_cgb.model.pt",
+  "inference": "plugin"
+}

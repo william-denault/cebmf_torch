@@ -1,0 +1,33 @@
+{
+  "setup": {
+    "threshold_probe": {
+      "nonzero_L_before": 60,
+      "nonzero_L_after_constructor": 0
+    },
+    "ash_kwargs_have_no_effect_nonzero_loadings": true,
+    "legacy_cgb_heteroscedastic_variance_counterexample": {
+      "x": [
+        2.0,
+        0.0
+      ],
+      "se": [
+        0.10000000149011612,
+        10.0
+      ],
+      "old_variance": 4.0,
+      "new_variance": 9.999999974752427e-07,
+      "loglik_before": -5.353221416473389,
+      "loglik_after": -201.81790161132812
+    }
+  },
+  "metastability": {
+    "exact_parent_probability_one": 0.5,
+    "empirical_probability_one": 0.0,
+    "parent_acceptance": 0.4991825000000005,
+    "parent_actual_move_fraction": 0.0,
+    "child_acceptance": 1.0,
+    "epsilon": 1e-06,
+    "parallel_chains": 400,
+    "sweeps": 1000
+  }
+}

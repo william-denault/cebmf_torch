@@ -1,0 +1,120 @@
+[
+  {
+    "name": "aten::_local_scalar_dense",
+    "parents": [
+      "aten::_local_scalar_dense",
+      "aten::item",
+      "aten::fill_",
+      "cebmf_torch\\cebmf\\_conditional.py(86): quantiles",
+      "cebmf_torch\\cebmf\\_conditional.py(294): <listcomp>",
+      "cebmf_torch\\cebmf\\_conditional.py(292): parent_draws",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(395): update",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(527): step",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\cebmf.py(356): iter_once",
+      "torch\\utils\\_contextlib.py(120): decorate_context"
+    ],
+    "stack": []
+  },
+  {
+    "name": "aten::_local_scalar_dense",
+    "parents": [
+      "aten::_local_scalar_dense",
+      "aten::item",
+      "aten::fill_",
+      "cebmf_torch\\cebmf\\_conditional.py(86): quantiles",
+      "cebmf_torch\\cebmf\\_conditional.py(294): <listcomp>",
+      "cebmf_torch\\cebmf\\_conditional.py(292): parent_draws",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(395): update",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(527): step",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\cebmf.py(356): iter_once",
+      "torch\\utils\\_contextlib.py(120): decorate_context"
+    ],
+    "stack": []
+  },
+  {
+    "name": "aten::_local_scalar_dense",
+    "parents": [
+      "aten::_local_scalar_dense",
+      "aten::item",
+      "aten::fill_",
+      "cebmf_torch\\cebmf\\_conditional.py(86): quantiles",
+      "cebmf_torch\\cebmf\\_conditional.py(294): <listcomp>",
+      "cebmf_torch\\cebmf\\_conditional.py(292): parent_draws",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(395): update",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(527): step",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\cebmf.py(356): iter_once",
+      "torch\\utils\\_contextlib.py(120): decorate_context"
+    ],
+    "stack": []
+  },
+  {
+    "name": "aten::_local_scalar_dense",
+    "parents": [
+      "aten::_local_scalar_dense",
+      "aten::item",
+      "aten::fill_",
+      "cebmf_torch\\cebmf\\_conditional.py(86): quantiles",
+      "cebmf_torch\\cebmf\\_conditional.py(294): <listcomp>",
+      "cebmf_torch\\cebmf\\_conditional.py(292): parent_draws",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(395): update",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(527): step",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\cebmf.py(356): iter_once",
+      "torch\\utils\\_contextlib.py(120): decorate_context"
+    ],
+    "stack": []
+  },
+  {
+    "name": "aten::_local_scalar_dense",
+    "parents": [
+      "aten::_local_scalar_dense",
+      "aten::item",
+      "aten::fill_",
+      "cebmf_torch\\cebmf\\_conditional.py(86): quantiles",
+      "cebmf_torch\\cebmf\\_conditional.py(294): <listcomp>",
+      "cebmf_torch\\cebmf\\_conditional.py(292): parent_draws",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(461): negative_prior_entropy",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(549): objective",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(527): step",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\cebmf.py(356): iter_once",
+      "torch\\utils\\_contextlib.py(120): decorate_context"
+    ],
+    "stack": []
+  },
+  {
+    "name": "aten::_local_scalar_dense",
+    "parents": [
+      "aten::_local_scalar_dense",
+      "aten::item",
+      "aten::fill_",
+      "cebmf_torch\\cebmf\\_conditional.py(86): quantiles",
+      "cebmf_torch\\cebmf\\_conditional.py(294): <listcomp>",
+      "cebmf_torch\\cebmf\\_conditional.py(292): parent_draws",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(461): negative_prior_entropy",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(549): objective",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\_conditional.py(527): step",
+      "torch\\utils\\_contextlib.py(120): decorate_context",
+      "cebmf_torch\\cebmf\\cebmf.py(356): iter_once",
+      "torch\\utils\\_contextlib.py(120): decorate_context"
+    ],
+    "stack": []
+  }
+]

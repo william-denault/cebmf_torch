@@ -1,0 +1,155 @@
+{
+  "signature": "a1d3cbd1fa9365f1f444a3ebe6039267d2a7784753cd10e9698d74a5272e48aa",
+  "seed": 24,
+  "method": "plugin",
+  "stage": "cgb",
+  "prior": "cgb",
+  "prior_kwargs": {
+    "penalty": 1.051
+  },
+  "scalar_network_defaults": {
+    "n_epochs": 10,
+    "n_layers": 4,
+    "hidden_dim": 32,
+    "batch_size": 128,
+    "lr": 0.001,
+    "penalty": 1.051
+  },
+  "resolved_training": {
+    "n_epochs": 10,
+    "n_layers": 4,
+    "hidden_dim": 32,
+    "batch_size": 128,
+    "lr": 0.001,
+    "penalty": 1.051
+  },
+  "conditional_options": null,
+  "fixed_rank": false,
+  "initial_rank": 6,
+  "steps": 10,
+  "initialization": {
+    "sweep": 0,
+    "seconds": 0,
+    "signal_rmse": 0.263873428106308,
+    "observation_rmse": 1.2221540212631226,
+    "sigma": 1.2221540212631226,
+    "rank": 6,
+    "loading_variance": 0.0
+  },
+  "setup_seconds": 0.003964900010032579,
+  "complete": true,
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0,
+      "signal_rmse": 0.263873428106308,
+      "observation_rmse": 1.2221540212631226,
+      "sigma": 1.2221540212631226,
+      "rank": 6,
+      "loading_variance": 0.0
+    },
+    {
+      "sweep": 1,
+      "seconds": 2.692087800009176,
+      "signal_rmse": 0.18730907142162323,
+      "observation_rmse": 1.231093406677246,
+      "sigma": 1.2450720071792603,
+      "rank": 6,
+      "loading_variance": 0.974642813205719,
+      "objective": 337010.5625
+    },
+    {
+      "sweep": 2,
+      "seconds": 6.12117890000809,
+      "signal_rmse": 0.17747673392295837,
+      "observation_rmse": 1.2339078187942505,
+      "sigma": 1.2473030090332031,
+      "rank": 6,
+      "loading_variance": 0.9397262334823608,
+      "objective": 336886.1875
+    },
+    {
+      "sweep": 3,
+      "seconds": 8.761366899998393,
+      "signal_rmse": 0.17511960864067078,
+      "observation_rmse": 1.2355141639709473,
+      "sigma": 1.2482770681381226,
+      "rank": 6,
+      "loading_variance": 0.8902411460876465,
+      "objective": 336840.375
+    },
+    {
+      "sweep": 4,
+      "seconds": 11.2109806999797,
+      "signal_rmse": 0.17409147322177887,
+      "observation_rmse": 1.2365177869796753,
+      "sigma": 1.2488535642623901,
+      "rank": 6,
+      "loading_variance": 0.8527247905731201,
+      "objective": 336795.78125
+    },
+    {
+      "sweep": 5,
+      "seconds": 13.315367399976822,
+      "signal_rmse": 0.17354653775691986,
+      "observation_rmse": 1.237146258354187,
+      "sigma": 1.2491952180862427,
+      "rank": 6,
+      "loading_variance": 0.8261866569519043,
+      "objective": 336756.75
+    },
+    {
+      "sweep": 6,
+      "seconds": 16.40126759998384,
+      "signal_rmse": 0.17317768931388855,
+      "observation_rmse": 1.2374826669692993,
+      "sigma": 1.2493895292282104,
+      "rank": 6,
+      "loading_variance": 0.8121053576469421,
+      "objective": 336729.96875
+    },
+    {
+      "sweep": 7,
+      "seconds": 19.27666489998228,
+      "signal_rmse": 0.17297497391700745,
+      "observation_rmse": 1.2375926971435547,
+      "sigma": 1.2494549751281738,
+      "rank": 6,
+      "loading_variance": 0.8086304664611816,
+      "objective": 336716.34375
+    },
+    {
+      "sweep": 8,
+      "seconds": 22.08186999996542,
+      "signal_rmse": 0.17262688279151917,
+      "observation_rmse": 1.2377296686172485,
+      "sigma": 1.2495461702346802,
+      "rank": 6,
+      "loading_variance": 0.8076916337013245,
+      "objective": 336706.0625
+    },
+    {
+      "sweep": 9,
+      "seconds": 24.324736799986567,
+      "signal_rmse": 0.17231112718582153,
+      "observation_rmse": 1.2378331422805786,
+      "sigma": 1.249619722366333,
+      "rank": 6,
+      "loading_variance": 0.8100929260253906,
+      "objective": 336693.4375
+    },
+    {
+      "sweep": 10,
+      "seconds": 27.602102599979844,
+      "signal_rmse": 0.17206941545009613,
+      "observation_rmse": 1.2379167079925537,
+      "sigma": 1.249674677848816,
+      "rank": 6,
+      "loading_variance": 0.8075286149978638,
+      "objective": 336678.53125
+    }
+  ],
+  "fit_seconds": 27.602102599979844,
+  "checkpoint": "output\\plugin_vs_joint_20260917\\primary\\plugin\\seed24_cgb.model.pt",
+  "inference": "plugin"
+}

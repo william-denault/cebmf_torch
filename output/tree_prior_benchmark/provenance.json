@@ -1,0 +1,36 @@
+{
+  "python": "3.11.15 | packaged by Anaconda, Inc. | (main, Mar 11 2026, 17:12:15) [MSC v.1942 64 bit (AMD64)]",
+  "torch": "2.11.0+cpu",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "device": "cpu",
+  "torch_threads_per_fit": 1,
+  "notebook_path": "C:\\Document\\Serieux\\Travail\\python_work\\cEBNM_torch\\notebooks\\cEBMF_test\\check_tree_consistency.ipynb",
+  "notebook_sha256": "6d22f9eb633e80feacc065eacbcf4593df054dc0f8fb6947677733641cdc47e7",
+  "source_hashes": {
+    "src\\cebmf_torch\\cebmf\\cebmf.py": "0d779923c395ac46b0c8dbf46045c9c2f817057f5799df1c3ccef041f61139ae",
+    "src\\cebmf_torch\\cebmf\\_conditional.py": "e55710938ca03b17fb5c764a08112c08d02bc7288c057e3e454565460ec29cf7",
+    "src\\cebmf_torch\\priors\\conditional.py": "d98e479a5cbf5f0b7360fd092da374ca121e05276006b181689b660b36923bda",
+    "src\\cebmf_torch\\ebnm\\generalized_binary.py": "df48ae3e71d98d8f6628a4885afee24aa86c9ff635bb68336dda84fadd5a817f",
+    "examples\\benchmark_tree_priors.py": "c80e5922758b3f5b0e2863417956c4b89e5274fba6feaae81fc72ececee2986d"
+  },
+  "notebook_simulation_bitwise_reproduction_seed1": true,
+  "note": "Timings are wall times per fit while independent CPU processes run concurrently; they are not isolated hardware benchmarks.",
+  "final_benchmark_script_hashes": {
+    "examples\\benchmarks\\tree\\benchmark_tree_priors.py": "6e0cee319a4e27eb0539d7a96aa5605a4b8c56ee8704f10c59923480f58d223e",
+    "examples\\benchmarks\\tree\\check_tree_integration.py": "50929ff0253b40b86400de769b9879a3ea07f95974cceb29b4e2ec88d6bff68a",
+    "examples\\benchmarks\\tree\\continue_tree_benchmark.py": "2c822647f63ebd420737ac6fc1212379a2b60a5686174e19c71e41d344d49403",
+    "examples\\benchmarks\\tree\\summarize_tree_benchmark.py": "32061ce5711debf4fa23f9710b938a2736cf2d5e61cddfec068d2230483b9112"
+  },
+  "validation": {
+    "main_fits": 60,
+    "matched_initial_reconstruction_within_each_seed": true,
+    "source_notebook_unchanged": true,
+    "production_sources_unchanged_during_benchmark": true,
+    "rank4_fits": 9,
+    "sign_orientation_fits": 10,
+    "rank4_orientation_fits": 3,
+    "warm_start_fits": 2,
+    "extra_training_continuations": 1,
+    "fixed_state_integration_models": 2
+  }
+}

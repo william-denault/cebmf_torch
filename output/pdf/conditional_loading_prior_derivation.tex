@@ -1,0 +1,545 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=25mm,headheight=14pt]{geometry}
+\usepackage{amsmath,amssymb,mathtools,bm}
+\usepackage{booktabs,array,enumitem,microtype}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{hyperref,fancyhdr}
+\hypersetup{colorlinks=true,linkcolor=MidnightBlue,urlcolor=MidnightBlue,
+  pdftitle={Learning conditional loading priors in cEBMF},
+  pdfauthor={Methods note for the cEBMF project}}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small Conditional loading priors in cEBMF}
+\fancyhead[R]{\small Derivation}
+\fancyfoot[C]{\thepage}
+\setlength{\parindent}{0pt}\setlength{\parskip}{5pt}
+\setlist{itemsep=3pt,topsep=4pt,leftmargin=*}
+\allowdisplaybreaks[1]
+\newcommand{\E}{\mathbb E}
+\newcommand{\N}{\mathcal N}
+\newcommand{\LL}{\mathcal L}
+\newcommand{\pa}{\operatorname{pa}}
+\newcommand{\ch}{\operatorname{ch}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\sigmoid}{\operatorname{sigmoid}}
+\newcommand{\logit}{\operatorname{logit}}
+\newcommand{\Normal}[3]{\varphi(#1;#2,#3)}
+\newcommand{\note}[1]{\par\smallskip\noindent\colorbox{blue!5}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{#1}}\par\smallskip}
+\title{\textbf{Learning conditional loading priors in cEBMF}\\[7pt]
+  \Large $p_\theta(L_k\mid L_{<k})$ and a learning algorithm\\
+  that reduces to ordinary cEBMF}
+\author{Methods note for the cEBMF project}
+\date{16 September 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\note{\textbf{The modeling objective.} Learn the conditional distributions
+\(p_\theta(L_k\mid L_{<k})\), and hence the dependent joint prior
+\(p_\theta(L)=\prod_kp_\theta(L_k\mid L_{<k})\), while estimating the latent
+loadings from the observed matrix. Keep an ordinary learned ash prior on
+\(F\). The Gaussian-mixture update is implemented with numerical integration.
+This note distinguishes its exact variational derivation from its computational approximations.}
+
+\section{The model we want to learn}
+Let \(Y\in\mathbb R^{n\times p}\), \(L\in\mathbb R^{n\times K}\), and
+\(F\in\mathbb R^{p\times K}\). Here \(L_k=L_{:k}\) means the \emph{kth
+loading column}, and \(L_{<k}=L_{:,1:(k-1)}\). The observation model is
+\begin{equation}
+Y_{ij}\mid L,F,\tau\sim
+\N\!\left(\sum_{k=1}^KL_{ik}F_{jk},\tau_{ij}^{-1}\right),
+\qquad (i,j)\in\Omega.
+\label{eq:likelihood}
+\end{equation}
+The desired autoregressive loading prior is
+\begin{equation}
+\boxed{p_\theta(L\mid X)=\prod_{k=1}^Kp_{\theta_k}(L_k\mid L_{<k},X).}
+\label{eq:desired}
+\end{equation}
+As in the existing conditional-prior networks, we use the rowwise form
+\begin{equation}
+p_{\theta_k}(L_k\mid L_{<k},X)
+=\prod_{i=1}^ng_{\theta_k}(L_{ik}\mid X_i,L_{i,<k}).
+\label{eq:rows}
+\end{equation}
+The parameters \(\theta_k\) are shared across rows. If fixed covariates are
+unavailable, omit \(X_i\). Conditional independence across rows in
+\eqref{eq:rows} is a specified architecture; it is not independence across
+loading columns.
+
+For example, a CGB network learns
+\[
+g_{\theta_k}(dv\mid P)=\pi_{k0}(P)\delta_0(dv)
++[1-\pi_{k0}(P)]\N(dv;\mu_k,s_k^2),\quad P=(X_i,L_{i,<k}).
+\]
+Earlier loadings predict whether a later loading is active. An EMDN can
+also let earlier loadings predict component means and variances. Multiplying
+these normalized, acyclic conditionals defines a normalized joint prior.
+The ordering permits dependencies; it does not uniquely identify a tree.
+
+\clearpage
+\section{Prior dependence and posterior approximation}
+The earlier loadings are latent, not observed covariates. A parent loading
+therefore receives information both from the matrix likelihood and from
+later loading-prior terms. For two loading coordinates in one row,
+\[
+p(l_1,l_2)=g_1(l_1)g_2(l_2\mid l_1)
+\quad\Longrightarrow\quad
+p(l_1\mid l_2,Y,F)\propto p(Y\mid l_1,l_2,F)g_1(l_1)g_2(l_2\mid l_1).
+\]
+This posterior feedback follows from the requested joint model itself.
+It does not introduce a reverse-direction generative prior.
+
+\subsection{Mixture labels and the variational family}
+For clarity, represent a loading mixture by a label \(Z_{ik}\):
+\begin{align}
+p(Z_{ik}=0,L_{ik}\in dv\mid P_{ik})
+  &=\pi_{k0}(P_{ik})\delta_0(dv),\notag\\
+p(Z_{ik}=h,L_{ik}\in dv\mid P_{ik})
+  &=\pi_{kh}(P_{ik})\Normal{v}{\mu_{kh}(P_{ik})}{s_{kh}^2(P_{ik})}\,dv,
+  \quad h>0.
+\label{eq:mixture}
+\end{align}
+Here \(P_{ik}\) contains the fixed covariates and the selected earlier
+parents. These labels only identify existing mixture components. They
+are not an additional representation or upper latent layer.
+
+Use the variational approximation
+\begin{equation}
+q(L,Z,F)=\prod_{i,k}q_{ik}(L_{ik},Z_{ik})\prod_{j,k}q^F_{jk}(F_{jk}).
+\label{eq:q}
+\end{equation}
+Each value stays dependent on its own label. The generative prior
+\eqref{eq:desired} remains dependent even though this posterior
+approximation factorizes across loading coordinates. Thus this method
+\emph{learns the requested conditional prior}, but does not represent
+posterior covariance between distinct loading coordinates. Section~\ref{sec:structured}
+states the alternative if that covariance is also required.
+
+For overlapping Gaussian components, augmenting the labels before making
+the mean-field approximation can give a different approximation from
+marginalizing them first. Both describe the same generative marginal model.
+With fixed parents and no children, the local optimum is the usual
+normal-means posterior, so augmentation does not spoil the cEBMF limit.
+
+\subsection{A single objective}
+Let \(g^F_{\eta_k}\) be the ordinary ash prior on feature column \(k\), with
+mixture weights estimated during fitting. The unpenalized ELBO is
+\begin{align}
+\LL(q,\theta,\eta,\tau)
+={}&\E_q\log p(Y\mid L,F,\tau)+H(q)\notag\\
+ &+\sum_{i,k}\E_q\log g_{\theta_k}(L_{ik},Z_{ik}\mid P_{ik})
+ +\sum_{j,k}\E_q\log g^F_{\eta_k}(F_{jk}).
+\label{eq:elbo}
+\end{align}
+For the loading terms, densities and entropy are taken with respect to a
+label-specific reference measure: unit mass at zero for the spike and
+Lebesgue measure for continuous components. Gaussian densities are not
+added to spike probability mass at zero.
+
+\clearpage
+\section{Deriving a loading-coordinate update}
+\subsection{The original cEBMF likelihood calculation}
+Write \(w_{ij}=M_{ij}\tau_{ij}\), where \(M\) is the observation mask. Let bars
+denote first posterior moments, and define
+\begin{align}
+\bar R_{ij,-k}&=Y_{ij}-\sum_{h\ne k}\bar L_{ih}\bar F_{jh},\notag\\
+a_{ik}&=\sum_jw_{ij}\E_q[F_{jk}^2],&
+b_{ik}&=\sum_jw_{ij}\bar R_{ij,-k}\bar F_{jk}.
+\label{eq:stats}
+\end{align}
+All sums involving observed Y are over observed entries. Expanding the
+expected squared error while holding the other variational factors fixed
+gives the loading-dependent likelihood term
+\begin{equation}
+\E_{q_{-ik}}\log p(Y\mid L,F,\tau)
+=-\tfrac12a_{ik}v^2+b_{ik}v+\text{constant},\qquad v=L_{ik}.
+\label{eq:quadratic}
+\end{equation}
+The denominator uses \(\E[F_{jk}^2]\), not \((\E F_{jk})^2\), as in
+ordinary cEBMF. F need not be sampled.
+
+\subsection{The own-prior and child terms}
+Define
+\begin{equation}
+A_{ik}(v,z;\theta_k)=
+\E_{q(P_{ik})}\log g_{\theta_k}(v,z\mid P_{ik}).
+\label{eq:own}
+\end{equation}
+Only latent parents are averaged; the external covariates are fixed.
+Changing v also changes every direct child's prior. Their contribution is
+\begin{equation}
+D_{ik}(v)=\sum_{c\in\ch(k)}
+\E_{q(L_{ic},Z_{ic})q(P_{ic}\setminus L_{ik})}
+\log g_{\theta_c}(L_{ic},Z_{ic}\mid P_{ic}[v]).
+\label{eq:child}
+\end{equation}
+Under the total ordering, every later coordinate is a possible direct
+child; structurally omitted network inputs create no edge. Holding the
+other q factors and parameters fixed, the variational coordinate is
+\begin{equation}
+\boxed{q^*_{ik}(v,z)\propto
+\exp\{-a_{ik}v^2/2+b_{ik}v+A_{ik}(v,z;\theta_k)+D_{ik}(v)\}.}
+\label{eq:qstar}
+\end{equation}
+This follows by maximizing the terms of \eqref{eq:elbo} involving \(q_{ik}\):
+expected log joint plus its entropy.
+
+\note{\textbf{Two necessary corrections to plug-in conditioning.}
+Average the \emph{log prior} over uncertain parents and include the
+children's prior terms. In general,
+\(\E\log g(v\mid P)\ne\log g(v\mid\E P)\) and
+\(\E\log g(v\mid P)\ne\log\E g(v\mid P)\).
+Using fitted earlier loadings as fixed inputs does not perform these steps.}
+
+\clearpage
+\section{Learning the conditional prior and posterior together}
+Write the exponent in \eqref{eq:qstar} as
+\(\Psi_{ik}(v,z;\theta_k)\), and define its normalizer
+\begin{equation}
+\mathcal Z_{ik}(\theta_k)=\sum_z\int
+\exp\{\Psi_{ik}(v,z;\theta_k)\}\,d\nu_z(v).
+\label{eq:normalizer}
+\end{equation}
+The network parameters are distinct for different loading columns.
+Consequently \(D\) is fixed when optimizing \(\theta_k\), even though it varies
+with the candidate loading \(v\). The Gibbs variational identity gives
+\begin{equation}
+\max_{q_{ik}}\{\E_{q_{ik}}\Psi_{ik}+H(q_{ik})\}
+=\log\mathcal Z_{ik}(\theta_k).
+\label{eq:profile}
+\end{equation}
+The joint prior-and-posterior update is therefore
+\begin{equation}
+\boxed{\theta_k^{\rm new}\in\arg\max_{\theta_k}\sum_i\log\mathcal Z_{ik}(\theta_k),
+\qquad q_{ik}^{\rm new}=q^*_{ik}(\cdot;\theta_k^{\rm new}).}
+\label{eq:learning}
+\end{equation}
+The neural prior is learned from all rows using the same ELBO as the
+loading inference. An exact block optimizer cannot decrease that ELBO.
+Approximate integration and finite neural optimization require their own
+accuracy controls; they do not inherit an automatic monotonicity guarantee.
+
+\subsection{Proof of the reduction to ordinary cEBMF}
+With no latent-covariate edges, there are neither uncertain parents nor
+child messages:
+\[
+A_{ik}(v,z;\theta_k)=\log g_{\theta_k}(v,z\mid X_i),\qquad D_{ik}(v)=0.
+\]
+For \(a=a_{ik}>0\), set \(x=b_{ik}/a\) and \(s^2=1/a\). Then
+\[
+e^{-av^2/2+bv}=\sqrt{2\pi/a}\,e^{b^2/(2a)}\Normal{x}{v}{1/a}.
+\]
+After summing over the component label,
+\begin{align}
+\log\mathcal Z_{ik}(\theta_k)
+={}&\log\left\{\int\Normal{x}{v}{s^2}\,
+g_{\theta_k}(dv\mid X_i)\right\}\notag\\
+ &+\tfrac12\log(2\pi/a)+b^2/(2a).
+\label{eq:reduction}
+\end{align}
+The last two terms do not depend on \(\theta_k\). Thus \eqref{eq:learning} is
+\textbf{exactly the original cEBNM marginal-likelihood fit}, and
+\eqref{eq:qstar} gives its posterior. Feature and noise updates below also
+reduce to their ordinary cEBMF forms.
+
+In code, use this analytic limit and call the existing cEBNM solver with
+the same options, initialization and update schedule. A single
+complete-data EM M-step, even using infinitely many exact posterior draws,
+is not generally the same update as this marginal-likelihood fit.
+
+For \(a=b=0\) use \eqref{eq:qstar} directly. Also, do not renormalize \(\exp(A)\)
+as an ordinary prior and discard its normalizer: with uncertain parents
+that normalizer generally depends on \(\theta_k\).
+
+\clearpage
+\section{Gaussian mixtures and exact zero spikes}
+Suppress the row and loading indices. For each continuous component h,
+the expected log own prior is quadratic in v. Define
+\begin{align}
+\alpha_h&=a+\E_P[s_h(P)^{-2}],\notag\\
+\beta_h&=b+\E_P[\mu_h(P)s_h(P)^{-2}],\notag\\
+\gamma_h&=\E_P\log\pi_h(P)-\tfrac12\E_P\log(2\pi s_h(P)^2)
+-\tfrac12\E_P[\mu_h(P)^2s_h(P)^{-2}].
+\label{eq:abc}
+\end{align}
+Assume these expectations are finite and \(\alpha_h>0\). Put
+\(m_h=\beta_h/\alpha_h\), \(V_h=1/\alpha_h\), and
+\begin{equation}
+I_{rh}=\int v^r\Normal{v}{m_h}{V_h}e^{D(v)}dv,
+\qquad r=0,1,2.
+\label{eq:integrals}
+\end{equation}
+Completing the square gives unnormalized component masses
+\begin{align}
+W_h&=\exp\{\gamma_h+\beta_h^2/(2\alpha_h)\}
+\sqrt{2\pi/\alpha_h}\,I_{0h},\quad h>0,\notag\\
+W_0&=\exp\{\E_P\log\pi_0(P)+D(0)\}.
+\label{eq:weights}
+\end{align}
+The zero-spike likelihood factor is one in the natural-parameter form
+\(e^{-av^2/2+bv}\). There is no omitted Gaussian evidence constant in \(W_0\).
+Normalize with \(r_h=W_h/\sum_tW_t\). Then
+\begin{align}
+q(v\mid z=h)&=\frac{\Normal{v}{m_h}{V_h}e^{D(v)}}{I_{0h}},\quad h>0,
+\notag\\
+\E_qv&=\sum_{h>0}r_hI_{1h}/I_{0h},&
+\E_qv^2&=\sum_{h>0}r_hI_{2h}/I_{0h}.
+\label{eq:moments}
+\end{align}
+Omit the spike for an unspiked EMDN. Compute component masses in log
+space. With deterministic parents and \(D=0\) these are the ordinary analytic
+Gaussian-mixture normal-means formulas.
+
+\subsection{How to calculate the child message}
+For child c, let \(r_{ch}=q(Z_c=h)\),
+\(u_{ch}=\E(L_c\mid Z_c=h)\), and
+\(T_{ch}=\E(L_c^2\mid Z_c=h)\). A Gaussian component contributes
+\begin{equation}
+J_{ch}(P)=-\tfrac12\log(2\pi s_{ch}^2(P))
+-\frac{T_{ch}-2\mu_{ch}(P)u_{ch}+\mu_{ch}(P)^2}{2s_{ch}^2(P)}.
+\label{eq:childdensity}
+\end{equation}
+Consequently,
+\begin{equation}
+D(v)=\sum_{c\in\ch(k)}\sum_h r_{ch}
+\E_{P_c\setminus v}\left[\log\pi_{ch}(P_c[v])+J_{ch}(P_c[v])\right],
+\label{eq:Dmoments}
+\end{equation}
+with \(J_{c0}=0\) for the fixed zero atom. For CGB with a global slab, J is
+constant in v and drops from the v-dependent tilt. For EMDN, its means
+and variances depend on parents, so J must remain. Child labels and values
+can be integrated using their probabilities and moments rather than sampled.
+
+\clearpage
+\section{A two-loading example of the desired dependency}
+As a transparent illustration, suppose the loadings are strictly binary:
+\begin{equation}
+L_1\sim\operatorname{Bernoulli}(\rho),\qquad
+L_2\mid L_1\sim\operatorname{Bernoulli}\{s(\alpha+\beta L_1)\},
+\quad s(t)=\sigmoid(t).
+\label{eq:binarymodel}
+\end{equation}
+This directly models \(p(L_2\mid L_1)\). Under
+\(q(L_1)q(L_2)\), let \(r_1=q(L_1=1)\) and \(r_2=q(L_2=1)\).
+Since \(v^2=v\) for binary \(v\), the likelihood log-odds contribution
+is \(b_k-a_k/2\). The child update is
+\begin{equation}
+\logit(r_2^{\rm new})=b_2-a_2/2+\alpha+\beta r_1.
+\label{eq:binarychild}
+\end{equation}
+For the parent, write \(s_0=s(\alpha)\) and \(s_1=s(\alpha+\beta)\).
+Its update contains feedback from the inferred child activation:
+\begin{align}
+\logit(r_1^{\rm new})
+={}&b_1-a_1/2+\logit(\rho)\notag\\
+&+r_2\log(s_1/s_0)+(1-r_2)\log\{(1-s_1)/(1-s_0)\}.
+\label{eq:binaryparent}
+\end{align}
+If \(\beta>0\), a confidently active child tends to favor parent
+activation. If \(\beta=0\), the child correction vanishes and both equations
+reduce to ordinary independent Bernoulli-prior normal-means updates.
+
+This example distinguishes three objects: the learned conditional prior
+in \eqref{eq:binarymodel}, the posterior approximation \(r_1,r_2\), and the
+posterior feedback required by that prior. A factorized q does not remove
+the conditional relationship being learned in p.
+
+\section{Keeping the feature update as ordinary ash}
+Under the scalar-factorized approximation \eqref{eq:q}, set
+\begin{align}
+a^F_{jk}&=\sum_iw_{ij}\E_q[L_{ik}^2],\notag\\
+b^F_{jk}&=\sum_iw_{ij}
+\left(Y_{ij}-\sum_{h\ne k}\bar L_{ih}\bar F_{jh}\right)\bar L_{ik}.
+\label{eq:Fstats}
+\end{align}
+Fit the existing ash normal-means model at
+\(b^F_{jk}/a^F_{jk}\), with SE \((a^F_{jk})^{-1/2}\). Update its mixture
+weights and posterior moments at each fitting iteration. Its configured
+penalty and other options are preserved.
+
+This is the original feature-side empirical Bayes update. Merely drawing F
+from a prior fitted during initialization would not implement this learning
+algorithm. No HMM or feature-side neural model is needed for this derivation.
+
+\clearpage
+\section{Noise, entropy and regularization}
+\subsection{Observation noise}
+Under \eqref{eq:q}, the expected squared residual is
+\begin{align}
+\E_q[(Y_{ij}-L_i^TF_j)^2]
+={}&(Y_{ij}-\bar L_i^T\bar F_j)^2\notag\\
+&+\sum_k\{\E[L_{ik}^2]\E[F_{jk}^2]-\bar L_{ik}^2\bar F_{jk}^2\}.
+\label{eq:residual}
+\end{align}
+For unknown constant precision,
+\begin{equation}
+\tau^{\rm new}=\frac{|\Omega|}
+{\sum_{ij\in\Omega}\E_q[(Y_{ij}-L_i^TF_j)^2]}.
+\label{eq:noise}
+\end{equation}
+The corresponding row- or column-specific versions use the same sums
+restricted to their groups. Known noise remains fixed.
+
+\subsection{Entropy of the actual variational approximation}
+For a continuous loading component in \eqref{eq:moments},
+\begin{equation}
+H_h=\tfrac12\log(2\pi V_h)
++\frac{\E_h[(v-m_h)^2]}{2V_h}-\E_h[D(v)]+\log I_{0h}.
+\label{eq:entropy}
+\end{equation}
+The value-and-label entropy is
+\(-\sum_hr_h\log r_h+\sum_{h>0}r_hH_h\). The atom has zero
+within-component entropy. For F, use the ordinary EBNM identity to compute
+its prior KL contribution. Thus the ELBO can be evaluated for the actual
+q used by the algorithm, rather than a separate distribution fitted
+afterward to sampler marginals.
+
+When later coordinates or priors change, a previously updated q must stay
+fixed until its next explicit update. A stored tilted density cannot silently
+reevaluate itself using newly changed parent distributions or neural
+parameters. Its representation must preserve the state that defined it.
+
+\subsection{A consistent sparsity penalty}
+First validate the unpenalized case. The existing neural spike regularizer
+can then be included as
+\begin{equation}
+R(q,\theta)=\sum_{i,k}(\lambda_k-1)
+\E_q\log\pi_{k0}(P_{ik}),\qquad \lambda_k\geq1.
+\label{eq:penalty}
+\end{equation}
+The own penalty is constant in the candidate \(L_{ik}\), so it can be added outside
+the log normalizer during \(\theta_k\) optimization. A child's penalty depends
+on \(L_{ik}\) and must be included in \(D(v)\). Without latent parents these become
+the fixed-covariate parameter penalties, preserving the ordinary penalized
+cEBNM limit.
+
+This is a regularized ELBO, or a bound for an augmented observation model;
+it is not the unpenalized model's evidence. The ash global mixture-weight
+penalty has its existing, separate semantics and should be preserved.
+
+\clearpage
+\section{The learning algorithm}
+\note{\textbf{One cEBMF iteration.}
+Retain the original residual-based \(L_k/F_k\) schedule. Extend only the loading
+fit to account for uncertain parents and child feedback.}
+\begin{enumerate}
+\item Initialize \(L,F\) and their moments using the existing cEBMF scheme.
+Preserve supplied factors and their scaling. There is no universal
+statistical justification for thresholding initial loadings at 0.5.
+\item For \(k=1,\ldots,K\):
+  \begin{enumerate}[label=(\alph*)]
+  \item Calculate \(a^L,b^L\) from current variational moments using
+  \eqref{eq:stats}.
+  \item If \(k\) has no latent parents or children, call its original cEBNM
+  solver. Otherwise compute \eqref{eq:own}--\eqref{eq:child} and jointly
+  fit the conditional prior and posterior through \eqref{eq:learning}.
+  \item Store loading component probabilities, moments and the fixed
+  variational representation needed for later expectations and entropy.
+  \item Update \(F_k\) with the original ash fit using \eqref{eq:Fstats}, and
+  refresh residuals.
+  \end{enumerate}
+\item Update unknown noise using the expected residuals and evaluate the
+same variational objective.
+\item Repeat until the chosen iteration limit or convergence criterion.
+\end{enumerate}
+The target remains \(\prod_kp_\theta(L_k\mid L_{<k})\). This variational
+algorithm does not require a final full-matrix MCMC burn-in and sampling stage.
+
+\subsection{Where numerical approximation remains}
+Each integral over the target loading in \eqref{eq:integrals} is
+one-dimensional. Adaptive quadrature or Gauss--Hermite integration around
+the Gaussian base components can evaluate it. Expectations over several
+uncertain parents can require separate quadrature or Monte Carlo integration.
+Keep parent integration nodes or draws fixed during a local parameter fit,
+and check results by increasing integration accuracy.
+
+Sharp child constraints can make these calculations demanding. A practical
+implementation must assess runtime and approximation error; the derivation
+does not guarantee a fast neural optimizer or a predictive improvement.
+When there are no latent edges, however, use the analytic cEBNM route and
+avoid introducing numerical approximation unnecessarily.
+
+\subsection{Compatibility and convergence requirements}
+The no-edge route should preserve the old prior options, initialization,
+RNG behavior, \(L_k/F_k\) schedule, noise updates and pruning policy. With a
+hierarchy, deleting a factor changes child input identities and needs an
+explicit graph/network policy. Fixing rank is reasonable for an initial
+controlled comparison only when the comparator uses the same rank.
+
+The exact variational argument gives nondecrease of the ELBO for exact
+block fits. Existing approximate scalar solvers and finite neural updates
+are not all exact maximizers; behavioral compatibility must not be confused
+with an unconditional monotonicity theorem.
+
+\clearpage
+\section{If within-row posterior dependence is also required}
+\label{sec:structured}
+The same conditional-prior model can also be fitted with posterior covariance
+between loading coordinates. For this additional inference choice, consider
+\[
+q(L,F)=\prod_iq_i(L_i)\prod_{j,k}q^F_{jk}(F_{jk}).
+\]
+The optimal row coordinate is
+\begin{equation}
+q_i^*(L_i)\propto p_\theta(L_i\mid X_i)
+\exp\{-\tfrac12L_i^TH_iL_i+h_i^TL_i\},
+\label{eq:rowblock}
+\end{equation}
+where
+\[
+H_i=\sum_jw_{ij}\E[F_jF_j^T],\qquad
+h_i=\sum_jw_{ij}Y_{ij}\E[F_j].
+\]
+This retains the same conditional-prior model, but the feature numerator
+must now use cross moments:
+\begin{equation}
+b^F_{jk}=\sum_iw_{ij}\left[
+Y_{ij}\E[L_{ik}]-\sum_{h\ne k}\E[L_{ik}L_{ih}]\E[F_{jh}]\right].
+\label{eq:cross}
+\end{equation}
+Relative to \eqref{eq:Fstats}, the extra term is
+\[
+-\sum_iw_{ij}\sum_{h\ne k}\Cov(L_{ik},L_{ih})\bar F_{jh}.
+\]
+Thus one cannot sample a correlated L block and pass only marginal means
+and variances into an unchanged mean-residual feature update.
+
+Full row blocks do not automatically recover mean-field cEBMF when prior
+edges vanish: the likelihood can still correlate loading coordinates.
+For exact reduction, define blocks by connected components of the prior
+graph and split them into singleton columns in the no-edge case.
+Singleton blocks recover ordinary cEBNM; larger blocks require a
+multivariate profile objective.
+
+\section{Verification and status}
+The repository script
+\path{output/review_joint_l/verify_replacement_derivation.py} checks:
+\begin{itemize}
+\item Gaussian-mixture probabilities, moments and log normalizers in the
+no-parent/no-child limit: maximum absolute error \(2.0\times10^{-15}\).
+\item Independent and dependent binary coordinates against exhaustive
+enumeration: maximum probability error \(1.2\times10^{-16}\), with
+nonnegative exact coordinate ELBO gains.
+\item The profile objective against the directly optimized enumerated ELBO
+at four parameter settings: their difference is constant to
+\(6.7\times10^{-16}\).
+\item The structured feature numerator: a correlated binary example gives
+the correct value 0; multiplying marginal means incorrectly gives 0.25.
+\end{itemize}
+The implementation in \path{cebmf/_conditional.py} additionally has analytic
+profile-gradient, no-edge compatibility and missing-modality regression tests.
+Its integration approximations and finite training still require sensitivity
+checks and comparative empirical evaluation.
+
+\input{numerical_stability_audit.tex}
+
+\vspace{3pt}
+\textbf{Reference.} Denault et al. (2025),
+\emph{Covariate-moderated Empirical Bayes Matrix Factorization},
+Section 3.3 and its variational derivation.
+\href{https://arxiv.org/abs/2505.11639}{arXiv:2505.11639}.
+The conditional-prior extension and reduction above are derived for this project.
+\end{document}

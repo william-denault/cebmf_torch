@@ -1,0 +1,114 @@
+{
+  "torch": "2.12.0+rocm7.14.1",
+  "package": "C:\\Document\\Serieux\\Travail\\python_work\\package\\cebmf_torch\\src\\cebmf_torch\\__init__.py",
+  "device": "cuda",
+  "gpu": "AMD Radeon(TM) 8060S Graphics",
+  "configuration": {
+    "device": "cuda",
+    "preset": "original",
+    "approximation": "quadratic",
+    "seeds": 1,
+    "stage_steps": [
+      2,
+      2,
+      2
+    ],
+    "n": 1000,
+    "p": 200,
+    "rank": 6,
+    "scenario": "notebook",
+    "cold_prior": "spiked_emdn",
+    "plot": false,
+    "output": "output/tree_cuda_example/rocm_original_quadratic"
+  },
+  "results": [
+    {
+      "seed": 1,
+      "cold": {
+        "prior": "spiked_emdn",
+        "inference": "conditional_quadratic",
+        "device": "cuda:0",
+        "prior_L_kwargs": {
+          "penalty": 1.1
+        },
+        "conditional_kwargs": {
+          "quadrature_points": 24,
+          "parent_samples": 32,
+          "seed": 0,
+          "approximation": "quadratic"
+        },
+        "resolved_training": {
+          "n_epochs": 10,
+          "batch_size": 128,
+          "lr": 0.001,
+          "penalty": 1.1
+        },
+        "setup_seconds": 1.5069259999872884,
+        "sweep_seconds": [
+          8.342632700005197,
+          6.43610059999628
+        ],
+        "total_fit_seconds": 14.778733300001477,
+        "warmed_sweep_seconds": 6.43610059999628,
+        "signal_rmse": 0.12370335310697556
+      },
+      "precursor": {
+        "prior": "cgb",
+        "inference": "conditional_quadratic",
+        "device": "cuda:0",
+        "prior_L_kwargs": {
+          "penalty": 1.051
+        },
+        "conditional_kwargs": {
+          "quadrature_points": 24,
+          "parent_samples": 32,
+          "seed": 0,
+          "approximation": "quadratic"
+        },
+        "resolved_training": {
+          "n_epochs": 10,
+          "batch_size": 128,
+          "lr": 0.001,
+          "penalty": 1.051
+        },
+        "setup_seconds": 0.07943199999863282,
+        "sweep_seconds": [
+          4.664892200002214,
+          3.389212599999155
+        ],
+        "total_fit_seconds": 8.054104800001369,
+        "warmed_sweep_seconds": 3.389212599999155,
+        "signal_rmse": 0.19492745399475098
+      },
+      "warm": {
+        "prior": "cgb_sharp_2",
+        "inference": "conditional_quadratic",
+        "device": "cuda:0",
+        "prior_L_kwargs": {
+          "penalty": 1.0511,
+          "omega": 0.01
+        },
+        "conditional_kwargs": {
+          "quadrature_points": 24,
+          "parent_samples": 32,
+          "seed": 0,
+          "approximation": "quadratic"
+        },
+        "resolved_training": {
+          "n_epochs": 10,
+          "batch_size": 128,
+          "lr": 0.001,
+          "penalty": 1.0511
+        },
+        "setup_seconds": 0.045331700006499887,
+        "sweep_seconds": [
+          3.356243899994297,
+          3.349285999996937
+        ],
+        "total_fit_seconds": 6.705529899991234,
+        "warmed_sweep_seconds": 3.349285999996937,
+        "signal_rmse": 0.1628652960062027
+      }
+    }
+  ]
+}

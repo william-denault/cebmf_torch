@@ -1,0 +1,227 @@
+{
+  "seed": 4,
+  "mode": "plugin_common",
+  "complete": true,
+  "precursor": "primary/current",
+  "fixed_rank": true,
+  "initialization": {
+    "sweep": 0,
+    "seconds": 0,
+    "signal_rmse": 0.16652990877628326,
+    "observation_rmse": 1.239726185798645,
+    "sigma": 1.239726185798645,
+    "rank": 6,
+    "loading_variance": 0.0
+  },
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0,
+      "signal_rmse": 0.16652990877628326,
+      "observation_rmse": 1.239726185798645,
+      "sigma": 1.239726185798645,
+      "rank": 6,
+      "loading_variance": 0.0
+    },
+    {
+      "sweep": 1,
+      "seconds": 4.783123499975773,
+      "signal_rmse": 0.20207510888576508,
+      "observation_rmse": 1.2439721822738647,
+      "sigma": 1.268245816230774,
+      "rank": 6,
+      "loading_variance": 0.28004464507102966,
+      "objective": 357951.875
+    },
+    {
+      "sweep": 2,
+      "seconds": 8.462262699991697,
+      "signal_rmse": 0.1452811360359192,
+      "observation_rmse": 1.2443088293075562,
+      "sigma": 1.2566885948181152,
+      "rank": 6,
+      "loading_variance": 0.06906382739543915,
+      "objective": 351887.25
+    },
+    {
+      "sweep": 3,
+      "seconds": 11.272663599986117,
+      "signal_rmse": 0.1844152957201004,
+      "observation_rmse": 1.252595067024231,
+      "sigma": 1.260765790939331,
+      "rank": 6,
+      "loading_variance": 0.01952989399433136,
+      "objective": 348197.15625
+    },
+    {
+      "sweep": 4,
+      "seconds": 15.902108799986308,
+      "signal_rmse": 0.12426470965147018,
+      "observation_rmse": 1.2478262186050415,
+      "sigma": 1.2542614936828613,
+      "rank": 6,
+      "loading_variance": 0.005298731382936239,
+      "objective": 341484.25
+    },
+    {
+      "sweep": 5,
+      "seconds": 19.414787999965483,
+      "signal_rmse": 0.087491475045681,
+      "observation_rmse": 1.2468348741531372,
+      "sigma": 1.2513483762741089,
+      "rank": 6,
+      "loading_variance": 0.001163550652563572,
+      "objective": 335748.625
+    },
+    {
+      "sweep": 6,
+      "seconds": 22.93169579995447,
+      "signal_rmse": 0.07845212519168854,
+      "observation_rmse": 1.2486534118652344,
+      "sigma": 1.2512335777282715,
+      "rank": 6,
+      "loading_variance": 0.0001141015745815821,
+      "objective": 332312.28125
+    },
+    {
+      "sweep": 7,
+      "seconds": 27.833774299971992,
+      "signal_rmse": 0.07835789769887924,
+      "observation_rmse": 1.2490174770355225,
+      "sigma": 1.2513782978057861,
+      "rank": 6,
+      "loading_variance": 3.488217043923214e-05,
+      "objective": 332232.125
+    },
+    {
+      "sweep": 8,
+      "seconds": 30.98254669996095,
+      "signal_rmse": 0.07841265201568604,
+      "observation_rmse": 1.2490116357803345,
+      "sigma": 1.2513750791549683,
+      "rank": 6,
+      "loading_variance": 3.5694924008566886e-05,
+      "objective": 332233.40625
+    },
+    {
+      "sweep": 9,
+      "seconds": 34.416867899970384,
+      "signal_rmse": 0.07832814007997513,
+      "observation_rmse": 1.2490154504776,
+      "sigma": 1.2513775825500488,
+      "rank": 6,
+      "loading_variance": 3.313246998004615e-05,
+      "objective": 332225.4375
+    },
+    {
+      "sweep": 10,
+      "seconds": 37.638382899953285,
+      "signal_rmse": 0.07847929000854492,
+      "observation_rmse": 1.249018669128418,
+      "sigma": 1.2513782978057861,
+      "rank": 6,
+      "loading_variance": 3.3321430237265304e-05,
+      "objective": 332230.1875
+    },
+    {
+      "sweep": 11,
+      "seconds": 40.7820152999775,
+      "signal_rmse": 0.07830920070409775,
+      "observation_rmse": 1.2490122318267822,
+      "sigma": 1.2513762712478638,
+      "rank": 6,
+      "loading_variance": 3.6939072742825374e-05,
+      "objective": 332228.875
+    },
+    {
+      "sweep": 12,
+      "seconds": 44.80597799998941,
+      "signal_rmse": 0.0784364715218544,
+      "observation_rmse": 1.2489917278289795,
+      "sigma": 1.2513644695281982,
+      "rank": 6,
+      "loading_variance": 4.277939660823904e-05,
+      "objective": 332228.71875
+    },
+    {
+      "sweep": 13,
+      "seconds": 47.676954900001874,
+      "signal_rmse": 0.07839217036962509,
+      "observation_rmse": 1.2489813566207886,
+      "sigma": 1.2513599395751953,
+      "rank": 6,
+      "loading_variance": 4.530735168373212e-05,
+      "objective": 332227.46875
+    },
+    {
+      "sweep": 14,
+      "seconds": 51.8010779999895,
+      "signal_rmse": 0.07838178426027298,
+      "observation_rmse": 1.2490181922912598,
+      "sigma": 1.2513790130615234,
+      "rank": 6,
+      "loading_variance": 3.4568587579997256e-05,
+      "objective": 332231.46875
+    },
+    {
+      "sweep": 15,
+      "seconds": 54.98205439999583,
+      "signal_rmse": 0.07840029895305634,
+      "observation_rmse": 1.2490166425704956,
+      "sigma": 1.2513774633407593,
+      "rank": 6,
+      "loading_variance": 3.421055953367613e-05,
+      "objective": 332226.59375
+    },
+    {
+      "sweep": 16,
+      "seconds": 58.195195700012846,
+      "signal_rmse": 0.07845880836248398,
+      "observation_rmse": 1.2490154504776,
+      "sigma": 1.2513762712478638,
+      "rank": 6,
+      "loading_variance": 3.387816104805097e-05,
+      "objective": 332233.28125
+    },
+    {
+      "sweep": 17,
+      "seconds": 62.23166710001533,
+      "signal_rmse": 0.07848282903432846,
+      "observation_rmse": 1.2490142583847046,
+      "sigma": 1.2513749599456787,
+      "rank": 6,
+      "loading_variance": 3.456236299825832e-05,
+      "objective": 332232.375
+    },
+    {
+      "sweep": 18,
+      "seconds": 65.3195640000049,
+      "signal_rmse": 0.07837961614131927,
+      "observation_rmse": 1.249006748199463,
+      "sigma": 1.25137197971344,
+      "rank": 6,
+      "loading_variance": 3.9602378819836304e-05,
+      "objective": 332224.8125
+    },
+    {
+      "sweep": 19,
+      "seconds": 68.96474679998937,
+      "signal_rmse": 0.07842028886079788,
+      "observation_rmse": 1.2490237951278687,
+      "sigma": 1.2513806819915771,
+      "rank": 6,
+      "loading_variance": 3.137230669381097e-05,
+      "objective": 332230.0625
+    },
+    {
+      "sweep": 20,
+      "seconds": 71.57274619999225,
+      "signal_rmse": 0.07845722883939743,
+      "observation_rmse": 1.2490131855010986,
+      "sigma": 1.2513748407363892,
+      "rank": 6,
+      "loading_variance": 3.2361826015403494e-05,
+      "objective": 332227.90625
+    }
+  ]
+}

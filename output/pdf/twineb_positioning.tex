@@ -74,7 +74,7 @@ through within- and between-modality conditional distributions.
 This allows external covariates to modify activation probabilities,
 amplitudes or scales at particular nodes. All such conditional factors
 belong to one normalized joint model; upstream updates include the
-downstream evidence described in \eqref{eq:familyD}.
+downstream evidence described in \eqref{eq:child}.
 
 TwinEB, as formulated in the cited paper, uses population priors for a
 single matrix. A multi-view extension could concatenate loading vectors
@@ -83,32 +83,27 @@ comparator construction, but it should be identified as an extension
 and implemented with the same missing-data likelihood and evaluation
 protocol rather than attributed to the published model.
 
-The feature-factor assumptions differ as well. TwinEB's column prior is
-a mixture on an entire feature's latent vector; it can relate factor
-coordinates within that vector. The present HMM instead relates adjacent
-feature positions within each factor and is independent across factors.
-It is not a strict superset of the TwinEB column-prior model. Similarly,
-the current Gaussian observation implementation does not subsume the
-paper's Poisson formulation.
+The feature-factor assumptions differ as well. TwinEB's column prior is a
+mixture on an entire feature's latent vector. The principal implementation here
+uses independent ash priors for feature columns. Optional HMM priors instead
+connect adjacent feature positions within each factor. Neither construction
+is a strict superset of TwinEB's vector column prior. Our Gaussian observation
+implementation also does not subsume the paper's Poisson formulation.
 
 \paragraph{Inference and the proposed contribution.}
-Both approaches use learned distributions to regularize matrix
-factorization. TwinEB optimizes prior and mean-field variational
-parameters through an ELBO. The reference solver here uses analytic
-normal-means proposals with a child-likelihood Metropolis correction,
-sequence sampling for HMM factors, and optional partial Monte Carlo
-empirical-Bayes learning. Section~\ref{sec:familyvi} supplies an alternative
-augmented variational formulation; it has not been established to be
-faster or more accurate than TwinEB's inference.
+Both approaches jointly learn priors and variational posterior approximations.
+Here the loading-coordinate posterior is profiled out, giving the local
+log-normalizer objective in \eqref{eq:learning}. The no-latent-parent/no-child
+limit is the original cEBNM marginal-likelihood update. Numerical integration
+is needed for nonlinear child contributions, and a factorized posterior
+does not represent posterior covariance between loading coordinates.
 
-A defensible methodological contribution is therefore a modular
-conditional-prior factorization framework with explicit sparse or
-positive distributions, fixed side information, ordered feature priors,
-and joint uncertainty propagation across partially observed modalities.
-The distributional decomposition and the Metropolis identity are
-established mathematics. Novelty would rest on a useful model
-construction, effective inference and evidence that these structural
-choices improve a defined scientific task.
+The methodological candidate is a conditional-prior factorization framework
+with explicit activation probabilities, modality-specific programs, fixed
+side information and a cEBMF-compatible learning algorithm. Autoregressive
+decomposition and coordinate variational inference are established mathematics.
+Novelty and scientific value must rest on the model construction, useful
+inference and evidence at matched predictive and computational budgets.
 
 \paragraph{Comparisons needed to support this positioning.}
 Include TwinEB alongside independent cEBMF and the multi-omics
@@ -117,7 +112,7 @@ compare vector population mixtures and autoregressive mixtures at
 matched ranks and documented parameter and tuning budgets. For
 multi-view data, report any required extension of the competitor.
 Separately ablate the hierarchy, nonlinear means and scales, exact
-spikes, exponential slabs, fixed covariates and HMM smoothing.
+spikes, fixed covariates and optional HMM smoothing. Exponential slabs remain a separate extension.
 This distinguishes prior expressiveness, regularization, modality
 coupling and the inference algorithm.
 

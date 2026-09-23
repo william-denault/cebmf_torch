@@ -1,0 +1,49 @@
+{
+  "seed": 8,
+  "n_cells": 120,
+  "iterations": 8,
+  "seconds": 22.350488900003256,
+  "inference": "conditional_variational",
+  "objective": [
+    16265.638370824501,
+    16161.059533946544,
+    16096.823918688226,
+    16046.693820963214,
+    16002.508489386022,
+    15952.327867796075,
+    15917.899705095477,
+    15898.013743119569
+  ],
+  "scores": [
+    {
+      "modality": "ATAC",
+      "cells": "paired",
+      "signal_rmse": 0.14057265722778847
+    },
+    {
+      "modality": "ATAC",
+      "cells": "ATAC only",
+      "signal_rmse": 0.14078155604077217
+    },
+    {
+      "modality": "ATAC",
+      "cells": "RNA only",
+      "signal_rmse": 0.3328676785516223
+    },
+    {
+      "modality": "RNA",
+      "cells": "paired",
+      "signal_rmse": 0.16092481273941375
+    },
+    {
+      "modality": "RNA",
+      "cells": "ATAC only",
+      "signal_rmse": 0.37431218067181005
+    },
+    {
+      "modality": "RNA",
+      "cells": "RNA only",
+      "signal_rmse": 0.17623422439473183
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "row": 426,
+  "coordinate": 4,
+  "component": 4,
+  "expansion_anchor": 2.872622013092041,
+  "new_component_mean": -4.868836402893066,
+  "new_component_variance": 4.527486324310303,
+  "previous_component_mass": 0.0008307290845550597,
+  "new_component_mass": 0.8358643054962158,
+  "curvature": -0.14753628012728215,
+  "curvature_was_clipped": false,
+  "feedback_actual_at_new_mean": -315.3534631814985,
+  "feedback_quadratic_at_new_mean": 2.9759946230516983,
+  "child_negative_score_increase": 1190807.875,
+  "likelihood_precision": 0.0009107908117584884,
+  "feature_column_norm": 0.00024254685558844358,
+  "note": "Frozen saved parameters evaluated on CPU; coordinate/component/row indices are zero-based."
+}

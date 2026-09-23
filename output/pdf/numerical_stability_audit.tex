@@ -1,0 +1,101 @@
+\clearpage
+\section{Adversarial numerical review and device handling}
+\label{sec:numerical-audit}
+\textit{Review added 16 September 2026.} The target remains
+\(p(L_k\mid L_{<k})\). Removing latent-covariate edges gives the same
+normal-means empirical Bayes subproblem; the implementation dispatches this
+case to the ordinary cEBMF solver. This algebraic statement does not assert
+that every finite neural optimization attains the subproblem optimum.
+
+\subsection{A correct formula can be an unstable implementation}
+Completing a Gaussian square using its natural parameters subtracts terms
+of order \(\mu^2/s^2\). In float32 this failed for a prior with spike weight
+0.2 and slab \(\N(10,10^{-8})\), with likelihood statistics \(a=2,b=3\).
+The old numerical profile returned a posterior mean near 0.0125; the
+independent analytic posterior is approximately \(1.59\times10^{-29}\).
+This is cancellation error, not Monte Carlo variability.
+
+For each continuous component, compute instead
+\begin{align}
+t&=\E[s(P)^{-2}], &
+c&=\frac{\E[\mu(P)s(P)^{-2}]}{t},\\
+h&=\E\log\pi(P)-\frac12\E\!\left[
+ \log(2\pi s(P)^2)+\frac{(\mu(P)-c)^2}{s(P)^2}\right].
+\end{align}
+Then the expected log prior is exactly
+\[
+A(v)=h-\tfrac12t(v-c)^2.
+\]
+The spread in this expression is evaluated as an average of squared
+centered differences, never as a difference of large second moments.
+The height \(h\) retains the parameter-dependent normalization of
+\(\exp(\E\log g)\); dropping it would change empirical Bayes learning.
+
+Write \(\alpha=a+t\), \(r=t/\alpha\). The likelihood-completed Gaussian
+has mean \(m=rc+b/\alpha\), variance \(V=1/\alpha\), and log mass
+\begin{equation}
+B=h+r(-ac^2/2+bc)+\frac{b^2}{2\alpha}
+  +\frac12\log\frac{2\pi}{\alpha}.
+\end{equation}
+Its tilted contribution is \(\exp(B)\E_{N(m,V)}\exp D(v)\).
+For the zero atom the corresponding log mass before the child tilt is
+\(\E\log\pi_0(P)\). These are algebraic rearrangements of the earlier
+derivation, not a different statistical model.
+
+At a standard-normal quadrature node \(x_j\), evaluate the slab log density
+as \(-\tfrac12\{\log(2\pi V)+x_j^2\}\). Combining it with \(B+D(v)-\log Z\)
+gives the continuous-and-label log posterior used for entropy. This avoids
+another unstable natural-parameter polynomial. For child feedback use
+\[
+\E[(L_c-\mu(P))^2\mid Z_c=h]
+=\operatorname{Var}(L_c\mid Z_c=h)
+ +(\E[L_c\mid Z_c=h]-\mu(P))^2,
+\]
+computing the within-component variance directly from centered nodes.
+
+\subsection{What was checked, and what was not established}
+Independent checks include exhaustive binary enumeration, analytic mixture
+posteriors (including zero likelihood precision), and a dense trapezoidal
+integral for a nonlinear logistic child tilt. Evidence, moments, entropy,
+and parameter gradients agree at the stated test tolerances. Direct child
+integration also checks the sparsity penalty and missing-branch mask.
+The ordinary spike--normal posterior now uses log-domain component odds;
+normal-mixture likelihoods are no longer silently clipped in the tails.
+
+These tests do not prove convergence of finite quadrature for every neural
+prior. Multiple-parent expectations use a finite fixed Sobol approximation;
+the stored quadrature representation also approximates each continuous
+coordinate. Local profile checkpoint selection is not a proof of global
+ELBO ascent under those approximations. The posterior is still factorized
+across loading coordinates. Better prior flexibility can lose predictive
+accuracy through optimization, approximation, or overfitting.
+
+The saved tree benchmark predates these numerical fixes. Inspecting its
+checkpoints confirms float32 observations and loadings; the earlier claim
+of float64 fitting was incorrect. The narrow-slab bug could affect those
+fits, but attributing the performance gap to it requires matched reruns.
+Original source hashes and measurements are retained and have not been
+relabeled as results of the revised implementation.
+
+\subsection{CUDA contract and its validation limit}
+Loading moments, networks, quadrature states, optimizer state, residuals,
+and objective histories are kept on the selected device. Conditional
+checkpoint selection and mixture-EM convergence use device tensors.
+Observation indices and prediction tables are cached. Sobol tables are
+constructed once on CPU and transferred at graph setup. Ordinary CUDA
+neural solvers batch with device indices.
+
+ASH's automatically sized scale grid needs one host scalar for its length;
+its amplitudes stay on device. Supplying a fixed \texttt{scales} tensor to
+the ash prior removes that dynamic-size decision and still refits weights
+on every sweep. Fixed-grid choice is a modeling choice, not an automatically
+equivalent replacement for an adaptive grid. Rank pruning, boundary input
+validation, plotting, and explicit reporting may also synchronize.
+
+The development environment has PyTorch 2.11.0+cpu and no CUDA runtime.
+CUDA-only tests cover complete warmed sweeps, partially paired modalities,
+optimizer-state residency, CPU/GPU numerical agreement, profiler transfers,
+and retained memory. They are skipped here, not reported as GPU passes.
+Hardware validation remains required before making a measured GPU speed or
+memory claim. The deprecated experimental sampler and optional L-BFGS route
+are outside the synchronization-free conditional/ash-EM contract.

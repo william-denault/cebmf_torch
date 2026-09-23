@@ -1,0 +1,133 @@
+\subsection{An explicit ELBO approximation and compatible sparsity control}
+\label{sec:implementedelbo}
+The automatic single-matrix interface now reports an explicit variational
+diagnostic alongside its Monte Carlo EM loss. It also honors the learned
+prior settings \path{penalty}, \path{n_epochs} and \path{batch_size}.
+These additions do not replace the joint sampling kernel by a variational
+E-step. The coupled \texttt{JointATACRNA} API retains its separate settings
+and log-joint output.
+
+\paragraph{A common regularized target.}
+Write \(U\) for all augmented latent variables, including mixture labels
+and HMM paths. For node \(u\) with spike probability
+\(\pi_{0u}(P_{iu};\theta_u)\) and \(\lambda_u\geq1\), define
+\begin{equation}
+R_\lambda(U,\theta)=\sum_{i,u}(\lambda_u-1)
+\log\pi_{0u}(P_{iu};\theta_u).
+\label{eq:jointregularizer}
+\end{equation}
+Factor-axis priors contribute the analogous sum over feature rows. This is
+the local learned-prior log-spike regularizer, evaluated at latent parents.
+Since \(R_\lambda\leq0\), it has an auxiliary-observation interpretation:
+conditionally independent events \(O_{iu}\) satisfy
+\[
+\Pr(O_{iu}=1\mid U,\theta)
+=\pi_{0u}(P_{iu};\theta_u)^{\lambda_u-1},
+\qquad O_{iu}=1\text{ is observed}.
+\]
+Consequently the regularized joint density is
+\begin{equation}
+p_\theta(Y,U,O=1)=p_\theta(Y,U)\exp\{R_\lambda(U,\theta)\}.
+\label{eq:auxiliarytarget}
+\end{equation}
+It is a slice of a normalized augmented probability model, not a silently
+renormalized conditional mixture. Conditional on \(Y,O=1\), its normalizing
+constant is the corresponding evidence. Parameter learning by complete-data
+EM therefore does not omit an additional parameter-dependent normalizer.
+All original conditional mixture weights still sum to one. These events
+express the chosen regularizer; they are not additional measured molecular
+data. \(\lambda=1\) recovers the original model. Unspiked EMDN requires
+\(\lambda=1\); spiked EMDN supports this regularization.
+
+For a candidate parent \(v\), the correction in
+\eqref{eq:algorithmcorrection} must replace \(D_u(v)\) by
+\begin{equation}
+D_u^\lambda(v)=\sum_{c\in\ch(u)}\left[
+\log g_{\theta c}(V_c,Z_c\mid P_c[v])
++(\lambda_c-1)\log\pi_{0c}(P_c[v];\theta_c)\right].
+\label{eq:regularizedchild}
+\end{equation}
+The node's own regularizer is constant in its value because its parents are
+fixed during that move. A child's regularizer is generally not constant in
+the candidate parent. The implementation includes both the full child
+density and its regularizer; omitting the latter would decouple the
+sampling and learning objectives.
+
+The fixed-draw parameter loss becomes
+\begin{equation}
+J^\lambda_{u,t}(\theta_u)=-\frac{1}{SN}\sum_{s,i}
+\left[\log g_{\theta u}(V_{iu}^{(s)},Z_{iu}^{(s)}\mid P_{iu}^{(s)})
++(\lambda_u-1)\log\pi_{0u}(P_{iu}^{(s)};\theta_u)\right].
+\end{equation}
+Mini-batches contain intact parent/value/label pairs and average both terms
+on the same scale. One epoch visits the entire saved dataset. After each
+epoch, the full-dataset loss is evaluated and the best finite state is
+retained, including the initial state. Thus batch size changes optimization
+noise and the number of gradient steps, not regularization strength.
+For an intercept-only gate with a saved spike fraction \(r_0\), minimizing
+this loss gives
+\(\widehat\pi_0=(r_0+\lambda-1)/\lambda\), explicitly exhibiting its
+shrinkage toward the spike. This is also an independent numerical test.
+
+\paragraph{A normalized posterior approximation.}
+For scalar nodes outside an HMM, fit a labelled mixture to saved states:
+\[
+q_{iu}(dv,z)=\widehat r_{iuz}\,
+\begin{cases}
+\delta_{a_z}(dv),&z\text{ is an atomic component},\\
+\N(dv;\widehat m_{iuz},\widehat v_{iuz}),&z\text{ is continuous}.
+\end{cases}
+\]
+The label probabilities are empirical frequencies. Continuous means and
+variances are fitted within labels, with a positive variance floor; fewer
+than two visits use a reference normal-means posterior variance. Unvisited
+labels have zero \(q\)-mass. Fixed atoms retain their exact locations.
+The product approximation factorizes across axes and factor columns, and
+across rows for scalar priors. This is a diagnostic projection of the
+joint sample, not the joint posterior used to reconstruct the signal.
+
+An HMM column instead uses the normalized full-path distribution
+\[
+q_k(dv,h,z)\propto p_{H,k}(dv,h,z)
+\exp\left\{\sum_j(-a_jv_j^2/2+b_jv_j)\right\},
+\]
+where the reference statistics are fixed using the saved mean factor
+matrices. Its normalizer is obtained by the forward recursion, and draws
+use whole-path FFBS followed by component/value draws. Forbidden transitions,
+nonzero atoms and one-sided supports remain intact. The density is available
+on the same augmented reference measure as the model.
+
+\paragraph{The reported bounds and numerical estimates.}
+For this explicit normalized \(q\), define
+\begin{align}
+\LL(q,\theta)&=\E_q[\log p_\theta(Y,U)-\log q(U)]
+\leq\log p_\theta(Y),\\
+\LL_\lambda(q,\theta)&=\LL(q,\theta)+\E_qR_\lambda(U,\theta)
+\leq\log p_\theta(Y,O=1).
+\label{eq:diagnosticelbo}
+\end{align}
+New independent draws \(\widetilde U^{(d)}\sim q\), using a separate random
+generator, estimate the expectations by averages of \(\log p-\log q\),
+with the regularizer added for \(\LL_\lambda\). The categorical and
+continuous entropy contributions are both included. A discrete empirical
+entropy of continuous MCMC draws would not give this bound.
+
+The sample standard deviation of each log-ratio divided by the square root
+of the evaluation sample size estimates its Monte Carlo standard error.
+It is conditional on fitted \(q,\theta\), and does not quantify mixing,
+hyperparameter uncertainty or the variational gap. Although the expectations
+in \eqref{eq:diagnosticelbo} are lower bounds, a finite Monte Carlo estimate
+can exceed the evidence. No monotonicity is claimed: Monte Carlo EM trains
+on joint states, whereas this explicit marginal approximation is used for
+diagnosis. Refitting \(q\) between rounds also changes the evaluated bound.
+
+In the automatic interface, \path{history_obj} stores
+\(-\widehat\LL_\lambda\), so lower is better. Each \path{history_elbo}
+record contains the ordinary and regularized estimates, their standard
+errors, and the evaluation phase. The final estimate is
+\path{result.elbo_estimate}; \path{elbo_draws} controls evaluation effort.
+The sampled augmented log joint is retained separately in
+\path{result.joint_posterior.log_joint}. Numerical checks compare this
+construction with exact finite-state ELBOs, analytic Gaussian moments,
+mixed-distribution entropy, and HMM normalization by quadrature and path
+enumeration.

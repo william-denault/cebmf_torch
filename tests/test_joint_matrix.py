@@ -125,7 +125,8 @@ def test_fixed_side_information_cannot_silently_change_target():
 
 
 def test_joint_refuses_unsupported_prior_and_does_not_fall_back():
-    m = cEBMF(torch.ones(6, 5), K=1, prior_L="exp", self_row_cov=True, device="cpu")
+    m = cEBMF(torch.ones(6, 5), K=1, prior_L="exp", self_row_cov=True, device="cpu",
+              joint_kwargs={"draws": 4})
     m.initialise_factors()
     with pytest.raises(ValueError, match="does not yet support"):
         m.fit(1)

@@ -19,7 +19,7 @@ You can also open up the notebook [directly in Google Colab](https://colab.resea
 
 ## Overview
 
-**cebmf_torch** is a pure-PyTorch implementation of Empirical Bayes Matrix Factorization (EBMF) and Empirical Bayes Normal Means (EBNM) methods. It is designed for scalable, GPU-accelerated analysis of large datasets, with a focus on genomics and other high-dimensional applications. The package provides flexible prior families, efficient mini-batch EM, and full support for GPU computation.
+**cebmf_torch** is a pure-PyTorch implementation of Empirical Bayes Matrix Factorization (EBMF) and Empirical Bayes Normal Means (EBNM) methods. It is designed for analysis of large datasets, with a focus on genomics and other high-dimensional applications. The package provides flexible prior families, mini-batch EM, and tensor computation on CPU or CUDA.
  
 - **GPU-accelerated**: All core computations are performed in PyTorch.
 - **Flexible priors**: Easily extendable to new prior families.
@@ -30,7 +30,7 @@ You can also open up the notebook [directly in Google Colab](https://colab.resea
 
 - Empirical Bayes Matrix Factorization (EBMF) with flexible priors
 - Empirical Bayes Normal Means (EBNM) solvers (normal, exponential, Laplace, point-mass, etc.)
-- GPU support for all operations
+- CUDA tensor computation; see the [device contract](docs/source/device_contract.rst) for setup, reporting, and solver-specific synchronization.
 - Mini-batch EM and Adam optimizers for mixture weights
 - Analytical truncated normal moments for exponential prior
 - Easy-to-use API for both beginners and advanced users
@@ -132,31 +132,72 @@ in the covariate matrix and use `emdn` or `spiked_emdn`.
 See the [HMM prior guide](docs/source/hmm_priors.rst) for the fSuSiE model,
 controls, direct EBNM calls, and numerical validation.
 
-## Notes & Tips
+## Conditional loading priors
 
-With `self_row_cov=True` or `self_col_cov=True`, `cEBMF.fit()` now uses the
-joint sampler with child-prior feedback. Configure burn-in and retained
-draws using `joint_kwargs={"burnin": 100, "draws": 150, "thin": 2}`;
-`fit(maxit)` then runs `maxit` prior-learning rounds before sampling.
-Use `result.reconstruction` to preserve dependence between sampled L and F.
-This route currently runs on CPU and supports the eight learned scalar
-families, `norm`, and HMM priors. With neither effective self-covariate flag,
-the existing variational fit remains unchanged.
+`self_row_cov=True` learns `p(L_k | L_<k)` with uncertain earlier loadings
+and feedback from later loadings. It uses variational updates, refits the
+feature priors, and updates unknown noise during each sweep.
 
-Start with [the simple tree notebook](examples/tree_joint_simple.ipynb),
-[the automatic ATAC/RNA interface](examples/ATAC_RNA_self_cov_joint.ipynb), or
-[full coupled ATAC/RNA inference](examples/ATAC_RNA_hmm_joint.ipynb).
-The simple notebook has one settings cell and runs from top to bottom on CPU.
-For the objective derivation and additional diagnostics, use
-[the detailed tree walkthrough](examples/tree_joint_walkthrough.ipynb).
-See the [joint inference guide](docs/source/joint_inference.rst) for the
-sampling semantics and the distinction between fixed covariates and
-uncertain cross-modality parents.
+```python
+model = cEBMF(Y, K=4, prior_L="cgb", prior_F="norm", self_row_cov=True)
+result = model.fit(maxit=20)
+```
 
-- Variational computations support CPU or GPU; the joint reference sampler uses CPU.
-- Mini-batch EM for `pi` is implemented via Adam on logits (recommended) or online EM.
-- Truncated normal moments are computed analytically in torch (no SciPy required).
-- The codebase is modular and easy to extend for new prior families or custom models.
+By default, `verbose=True` prints a short message after each completed sweep,
+such as `cEBMF sweep 1 completed.` Set `verbose=False` in the constructor to
+silence sweep progress. Numbering continues across `fit()` and `iter_once()`
+calls and resets when factors are reinitialized. Progress uses a Python counter
+without copying GPU tensors to the CPU; approximation warnings remain enabled.
+
+`prior_F="norm"` is an ash Gaussian-scale-mixture prior. Neural training options
+stay in `prior_L_kwargs` (for example `n_epochs`, `hidden_dim`, `lr`, `penalty`).
+Numerical controls, when needed, are
+`conditional_kwargs={"quadrature_points": 24, "parent_samples": 32, "seed": 0}`.
+
+Conditional fitting defaults to `approximation="quadratic"` for faster
+processing and warns once when the fitting graph is created. This caches quadratic
+child feedback and updates Gaussian-component probabilities and moments
+analytically, while still averaging over uncertain parents. Positive feedback
+curvature is clipped for stability; approximation accuracy can differ from
+quadrature. To select the quadrature method instead, set
+`conditional_kwargs={"approximation": "quadrature"}`. With no latent edges the
+original cEBMF update is preserved and no approximation warning is emitted.
+See the [derivation and limitations](docs/source/quadratic_feedback.rst) and
+[matched comparison script](examples/benchmarks/tree/compare_quadratic_feedback.py).
+These control integration, not an MCMC chain. The conditional graph keeps its
+starting rank and ordering. With no effective latent-covariate edges, the
+original cEBMF path is used directly.
+
+### Two observation models, one ATAC-RNA fit
+
+```python
+from cebmf_torch import align_modalities, cEBMF, fit_joint
+
+# Match actual cell IDs; missing modalities become NaN observation rows.
+data = align_modalities(Y_atac, Y_rna, atac_ids, rna_ids)
+settings = dict(prior_L="cgb", prior_F="norm", self_row_cov=True)
+atac = cEBMF(data.atac, K=2, **settings)
+rna = cEBMF(data.rna, K=4, **settings)
+atac_fit, rna_fit = fit_joint(atac, rna, maxit=20)
+```
+
+This learns `p(L_ATAC) p(L_RNA | L_ATAC)` and supports paired, ATAC-only and
+RNA-only cells. ATAC-only cells' unobserved RNA branches are integrated out
+while fitting, then predicted afterward. Passing `atac.L` as fixed RNA
+covariates instead is a plug-in analysis, not this joint fit.
+
+Start with the [ATAC-RNA notebook](examples/ATAC_RNA_joint.ipynb), or the
+[single-matrix tree example](examples/tree_joint_simple.ipynb).
+The [example index](examples/README.md) explains which files to use;
+previous exploratory notebooks are preserved in an explicitly labeled archive.
+The [conditional inference guide](docs/source/joint_inference.rst) covers the
+objective, approximation limits, supported priors and migration.
+
+The default is a dependent prior with a factorized posterior approximation.
+Quadrature and parent integration require sensitivity checks; neither a
+monotone objective nor predictive improvement is guaranteed by finite fitting.
+The old CPU sampler remains available only through explicit, deprecated
+`joint_kwargs` for reproducibility. It is not selected by the flag alone.
 
 ## Contributing & Support
 

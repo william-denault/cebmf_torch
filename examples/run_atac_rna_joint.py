@@ -1,164 +1,173 @@
-"""Run the reproducible joint-inference example from a terminal or notebook.
+# %% [markdown]
+# # Joint ATAC-RNA factorization with partially paired cells
+#
+# We fit two observation models and learn
+# `p(L_ATAC, L_RNA) = p(L_ATAC) p(L_RNA | L_ATAC)`.
+# Each modality has its own factors and ordinary ash feature priors.
+# **The interface is two cEBMF objects and one `fit_joint` call.**
+# Passing `atac.L` as fixed `X_l` to an independent RNA fit would lose ATAC
+# uncertainty and RNA-to-ATAC posterior feedback.
+#
+# This is a small Gaussian toy, not a raw-count analysis or a benchmark of
+# superiority. Run all cells in order. The script also accepts `--quick`.
 
-From the repository root: python examples/run_atac_rna_joint.py --quick
-Without --quick, use the original N=2000, P=1000 simulation. Results are
-diagnostics for an experimental finite-chain fit, not a comparative benchmark.
-"""
-
-import argparse
+# %%
 import json
+import sys
 import time
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import torch
 
-from cebmf_torch.experimental.conditional import SCALAR_PRIORS
-from cebmf_torch.experimental.data import align_modalities, simulate_atac_rna
-from cebmf_torch.experimental.joint import JointATACRNA
+from cebmf_torch import align_modalities, cEBMF, fit_joint
 
+torch.set_num_threads(1)
+torch.manual_seed(8)
+quick = "--quick" in sys.argv
+n_cells = 80 if quick else 120
+noise_sd = 0.7
+iterations = 5 if quick else 8
 
-def run_example(
-    *,
-    n=2000,
-    p=1000,
-    seed=1,
-    prior_atac="cgb",
-    prior_rna="cgb",
-    unpaired_fraction=0.2,
-    use_side_info=False,
-    rounds=8,
-    burnin=100,
-    draws=100,
-    thin=2,
-    holdout_fraction=0.02,
-):
-    """Return data, sampler and posterior; simulated truth is used only to score.
+# %% [markdown]
+# ## 1. Make two related measurements
+# Two binary ATAC programs give four possible regulatory states. Each state
+# activates one RNA program: a nonlinear conditional relationship.
+# True loadings are used only for simulation and evaluation.
 
-    unpaired_fraction is the fraction of all samples exclusive to *each*
-    modality. At 0.2, 60% are paired, 20% ATAC-only and 20% RNA-only.
-    RNA rows are deliberately reordered to exercise explicit ID alignment.
-    """
-    if not 0 <= unpaired_fraction < 0.5 or not 0 <= holdout_fraction < 0.5:
-        raise ValueError("Fractions must lie in [0, 0.5).")
-    torch.set_num_threads(1)
-    sim = simulate_atac_rna(n, p, seed=seed, informative_side_info=use_side_info)
-    exclusive = int(n * unpaired_fraction)
-    ai, ri = torch.arange(n - exclusive), torch.arange(n - 1, exclusive - 1, -1)
-    observed_a, observed_r = sim["atac"][ai].clone(), sim["rna"][ri].clone()
-    generator = torch.Generator().manual_seed(seed + 2048)
-    for value in (observed_a, observed_r):
-        value[torch.rand(value.shape, generator=generator) < holdout_fraction] = torch.nan
-    side = {"side_info": sim["side_info"], "side_ids": range(n)} if use_side_info else {}
-    data = align_modalities(observed_a, observed_r, ai, ri, **side)
-    started = time.perf_counter()
-    print(f"Initializing {n} union rows, {p} features/view; priors {prior_atac}, {prior_rna}...", flush=True)
-    solver = JointATACRNA(
-        data,
-        prior_atac=prior_atac,
-        prior_rna=prior_rna,
-        initial_hmm_kwargs={"half_grid": 8, "maxiter": 20},
-        seed=seed + 100,
-    )
-    print(f"Retained ranks: ATAC {solver.ka}, RNA {solver.kr}. Learning loading priors...", flush=True)
-    for i in range(rounds):
-        solver.fit_prior_parameters(rounds=1, sweeps_per_round=10, steps=30)
-        print(f"Prior-learning round {i + 1}/{rounds}", flush=True)
-    learning_seconds = time.perf_counter() - started
-    result = solver.sample(burnin=burnin, draws=draws, thin=thin, progress_every=25)
-    row_ids = torch.tensor(data.ids, dtype=torch.long)
-    metrics = []
-    paired = data.atac_observed & data.rna_observed
-    for m, (label, posterior) in enumerate((("atac", result.atac), ("rna", result.rna))):
-        truth = sim[f"signal_{label}"][row_ids].double()
-        observed_rows = data.atac_observed if m == 0 else data.rna_observed
-        baseline = torch.full_like(truth, torch.nan)
-        initial = solver.initial_models[m]
-        baseline[observed_rows] = initial.L @ initial.F.T
-        for group, mask in (
-            ("paired", paired),
-            ("observed_unpaired", observed_rows & ~paired),
-            ("missing_modality", ~observed_rows),
-        ):
-            if mask.any():
-                metrics.append(
-                    {
-                        "modality": label,
-                        "rows": group,
-                        "n": int(mask.sum()),
-                        "joint_signal_mse": float((posterior.reconstruction[mask] - truth[mask]).square().mean()),
-                        "independent_signal_mse": float((baseline[mask] - truth[mask]).square().mean())
-                        if group != "missing_modality"
-                        else None,
-                    }
-                )
-        observed = data.atac if m == 0 else data.rna
-        held_out = torch.isnan(observed) & observed_rows[:, None]
-        if held_out.any():
-            noisy = sim[label][row_ids].double()
-            metrics.append(
-                {
-                    "modality": label,
-                    "rows": "held_out_entries",
-                    "n": int(held_out.sum()),
-                    "joint_noisy_mse": float((posterior.reconstruction[held_out] - noisy[held_out]).square().mean()),
-                    "independent_noisy_mse": float((baseline[held_out] - noisy[held_out]).square().mean()),
-                }
-            )
-    report = {
-        "config": {
-            "n": n,
-            "p": p,
-            "seed": seed,
-            "prior_atac": prior_atac,
-            "prior_rna": prior_rna,
-            "unpaired_fraction_per_view": unpaired_fraction,
-            "use_side_info": use_side_info,
-            "rounds": rounds,
-            "burnin": burnin,
-            "draws": draws,
-            "thin": thin,
-            "holdout_fraction": holdout_fraction,
-        },
-        "ranks": [solver.ka, solver.kr],
-        "learning_seconds": learning_seconds,
-        "total_seconds": time.perf_counter() - started,
-        "metrics": metrics,
-        "acceptance": result.acceptance.tolist(),
-        "log_joint": result.log_joint,
-        "interpretation": (
-            "Finite-chain diagnostic for one fitted conditional-EB target; not a convergence certificate or benchmark."
-        ),
-    }
-    return sim, data, solver, result, report
+# %%
+true_atac_loadings = torch.bernoulli(torch.full((n_cells, 2), 0.5))
+cell_state = (2 * true_atac_loadings[:, 0] + true_atac_loadings[:, 1]).long()
+true_rna_loadings = torch.nn.functional.one_hot(cell_state, 4).float()
+true_atac_factors = torch.zeros(60, 2)
+true_atac_factors[5:25, 0] = 1
+true_atac_factors[35:55, 1] = 1
+true_rna_factors = torch.zeros(80, 4)
+for k in range(4):
+    true_rna_factors[20 * k:20 * (k + 1), k] = 1
+atac_signal = true_atac_loadings @ true_atac_factors.T
+rna_signal = true_rna_loadings @ true_rna_factors.T
+atac_measurements = atac_signal + noise_sd * torch.randn_like(atac_signal)
+rna_measurements = rna_signal + noise_sd * torch.randn_like(rna_signal)
 
+# %% [markdown]
+# ## 2. Keep paired cells and cells measured in only one modality
+# Cell IDs determine the alignment. The inputs need not have the same row
+# count or order. `align_modalities` constructs their union and marks absent
+# measurements with NaN. Missing rows are never zero-valued observations.
+# Held-out measurements remain available only for evaluation.
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--quick", action="store_true", help="Use 400 rows, 200 features and shorter learning/sampling."
-    )
-    parser.add_argument("--prior-atac", choices=SCALAR_PRIORS, default="cgb")
-    parser.add_argument("--prior-rna", choices=SCALAR_PRIORS, default="cgb")
-    parser.add_argument("--paired", action="store_true", help="Keep all samples paired.")
-    parser.add_argument(
-        "--side-info", action="store_true", help="Generate informative fixed covariates before the latent variables."
-    )
-    parser.add_argument("--output", default="output/joint_atac_rna_diagnostic.json")
-    args = parser.parse_args()
-    quick = {"n": 400, "p": 200, "rounds": 3, "burnin": 40, "draws": 40, "thin": 1} if args.quick else {}
-    *_, report = run_example(
-        prior_atac=args.prior_atac,
-        prior_rna=args.prior_rna,
-        unpaired_fraction=0 if args.paired else 0.2,
-        use_side_info=args.side_info,
-        **quick,
-    )
-    path = Path(args.output)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(json.dumps({k: v for k, v in report.items() if k != "log_joint"}, indent=2))
-    print(f"Saved {path.resolve()}")
+# %%
+order = torch.randperm(n_cells)
+unpaired_per_modality = n_cells // 6
+atac_ids = order[:-unpaired_per_modality]
+rna_ids = order[unpaired_per_modality:]
+data = align_modalities(atac_measurements[atac_ids], rna_measurements[rna_ids],
+                        atac_ids=atac_ids, rna_ids=rna_ids)
+paired = data.atac_observed & data.rna_observed
+atac_only = data.atac_observed & ~data.rna_observed
+rna_only = data.rna_observed & ~data.atac_observed
+print(f"{int(paired.sum())} paired, {int(atac_only.sum())} ATAC-only, {int(rna_only.sum())} RNA-only cells")
 
+# %% [markdown]
+# ## 3. Construct two cEBMF models and fit them jointly
+# `self_row_cov=True` learns dependence on earlier loadings within each model.
+# `fit_joint(atac, rna)` additionally connects ATAC loadings to RNA priors.
+# Argument order specifies the generative direction; posterior information
+# can flow both ways. `prior_F="norm"` is ash and is refitted during learning.
+#
+# Small networks and neutral penalties keep the demonstration manageable.
+# Rank stays fixed while fitting a conditional graph. Quadrature and fixed
+# parent-integration points approximate expectations; there is no MCMC chain.
 
-if __name__ == "__main__":
-    main()
+# %%
+settings = dict(
+    prior_L="cgb", prior_F="norm", self_row_cov=True, S=noise_sd, device="cpu",
+    prior_L_kwargs={"hidden_dim": 12, "n_layers": 1, "n_epochs": 3 if quick else 5,
+                    "lr": 0.01, "penalty": 1},
+    prior_F_kwargs={"penalty": 1},
+    conditional_kwargs={"quadrature_points": 12 if quick else 16, "parent_samples": 16},
+)
+atac = cEBMF(data.atac, K=2, **settings)
+rna = cEBMF(data.rna, K=4, **settings)
+
+started = time.perf_counter()
+atac_fit, rna_fit = fit_joint(atac, rna, maxit=iterations)
+elapsed = time.perf_counter() - started
+print(f"Joint fit finished in {elapsed:.1f} seconds ({iterations} variational sweeps).")
+
+# %% [markdown]
+# ## 4. Evaluate each group separately
+# Paired cells assess denoising. RNA predictions for ATAC-only cells and ATAC
+# predictions for RNA-only cells assess an entirely unobserved modality.
+# The score uses noiseless simulation truth; lower RMSE is better. It is not
+# directly comparable to an RMSE against noisy measurements.
+
+# %%
+union_ids = torch.tensor(data.ids)
+truth = {"ATAC": atac_signal[union_ids], "RNA": rna_signal[union_ids]}
+fits = {"ATAC": atac_fit, "RNA": rna_fit}
+groups = {"paired": paired, "ATAC only": atac_only, "RNA only": rna_only}
+scores = []
+for modality, result in fits.items():
+    for group, rows in groups.items():
+        rmse = (result.reconstruction[rows] - truth[modality][rows]).square().mean().sqrt().item()
+        scores.append({"modality": modality, "cells": group, "signal_rmse": rmse})
+        print(f"{modality:5s} | {group:9s} | signal RMSE {rmse:.3f}")
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), constrained_layout=True)
+objective_history = torch.stack(atac_fit.history_obj).cpu().tolist()  # reporting boundary
+axes[0].plot(range(1, iterations + 1), objective_history, marker="o", color="#247c8c")
+axes[0].set(xlabel="Variational sweep", ylabel="Negative regularized ELBO",
+            title="One objective for both models; lower is better")
+for offset, modality, color in [(-0.18, "ATAC", "#247c8c"), (0.18, "RNA", "#b56a35")]:
+    values = [row["signal_rmse"] for row in scores if row["modality"] == modality]
+    axes[1].bar(torch.arange(3) + offset, values, width=0.36, label=modality, color=color)
+axes[1].set(xticks=[0, 1, 2], xticklabels=list(groups), ylabel="Signal RMSE",
+            title="Denoising and missing-modality prediction")
+axes[1].legend()
+plt.show()
+
+# %% [markdown]
+# ## 5. Inspect predictions where a whole modality was missing
+# Cells are sorted by their simulated state only for this display. Fitting
+# never saw these labels. These are posterior-mean predictions, not observed
+# measurements or demonstrations that the latent programs were recovered.
+
+# %%
+fig_missing, axes = plt.subplots(2, 2, figsize=(11, 6), constrained_layout=True)
+for column, (modality, rows) in enumerate([("ATAC", rna_only), ("RNA", atac_only)]):
+    selected = rows.nonzero().flatten()
+    selected = selected[torch.argsort(cell_state[union_ids[selected]])]
+    for row, (label, matrix) in enumerate([
+        ("True signal", truth[modality]), ("Predicted signal", fits[modality].reconstruction),
+    ]):
+        im = axes[row, column].imshow(matrix[selected], aspect="auto", vmin=0, vmax=1, cmap="viridis")
+        axes[row, column].set(title=f"{label}: unobserved {modality}", xlabel="Feature", ylabel="Held-out cell")
+fig_missing.colorbar(im, ax=axes, label="Signal", shrink=0.75)
+plt.show()
+
+# %% [markdown]
+# ## What to check on your own data
+# - Align real cell IDs, retain representative paired cells, and use the
+#   Gaussian model only on suitably processed observations.
+# - Increase `quadrature_points` and `parent_samples` to check sensitivity.
+#   Finite optimization and integration do not guarantee a monotone objective
+#   or better prediction in every run.
+# - Compare independent fits and fixed-loading covariates at matched ranks,
+#   feature priors, initialization and held-out cells.
+# - Continue with `fit_joint(atac, rna, maxit=5)`. This fits a dependent prior
+#   with a factorized posterior approximation; it does not report posterior
+#   covariance between loading coordinates.
+
+# %%
+project_root = Path.cwd() if (Path.cwd() / "pyproject.toml").exists() else Path.cwd().parent
+output = project_root / "output" / "atac_rna_joint"
+output.mkdir(parents=True, exist_ok=True)
+fig.savefig(output / "learning_and_errors.png", dpi=150)
+fig_missing.savefig(output / "missing_modality_predictions.png", dpi=150)
+(output / "summary.json").write_text(json.dumps({
+    "seed": 8, "n_cells": n_cells, "iterations": iterations, "seconds": elapsed,
+    "inference": atac_fit.inference, "objective": objective_history, "scores": scores,
+}, indent=2), encoding="utf-8")
+print(f"Saved figures and scores to {output}")

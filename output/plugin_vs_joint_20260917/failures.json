@@ -1,0 +1,30 @@
+[
+  {
+    "group": "ablations",
+    "method": "mean_feedback",
+    "stage": "cold",
+    "seed": 3,
+    "failed_sweep": 13,
+    "last_saved_sweep": 12,
+    "error": "FloatingPointError: Nonfinite metric; objective was NaN",
+    "signal_rmse_at_failure": 0.8641440272331238,
+    "observation_rmse_at_failure": 1.5161526203155518,
+    "sigma_at_failure": 3.1402628421783447,
+    "loading_variance_at_failure": 1300050.125,
+    "note": "Failed stage is retained and is not rerun until success. Its sweep-13 value is not a 30-sweep endpoint. Independent remaining stages are run separately."
+  },
+  {
+    "group": "ablations",
+    "method": "mean_feedback",
+    "stage": "cold",
+    "seed": 4,
+    "failed_sweep": 12,
+    "last_saved_sweep": 11,
+    "error": "FloatingPointError: Nonfinite metric; objective was NaN",
+    "signal_rmse_at_failure": 1.0429003238677979,
+    "observation_rmse_at_failure": 1.6266403198242188,
+    "sigma_at_failure": 55.61031723022461,
+    "loading_variance_at_failure": 5509977.5,
+    "note": "Failed stage is retained and is not rerun until success. Its sweep-12 value is not a 30-sweep endpoint. Independent remaining stages are run separately."
+  }
+]

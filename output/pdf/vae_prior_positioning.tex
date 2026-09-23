@@ -42,8 +42,8 @@ That extra continuous latent layer is not required by the basic VampPrior.
 In contrast, the present hierarchy specifies dependencies among the
 existing factorization loadings. Its mixture indicators are auxiliary
 labels for the specified component distributions, rather than a new
-continuous representation above the programs. The HMM states serve the
-separate feature-sequence prior.
+continuous representation above the programs. Optional HMM states belong to a separate feature-sequence prior;
+the principal implementation here uses ash on the features.
 
 \paragraph{Autoregressive-flow priors.}
 The Variational Lossy Autoencoder of Chen et al.~\cite{vlae} parameterizes
@@ -84,8 +84,7 @@ additional assumptions on the decoder and variation of the conditional
 parameters, supports their identifiability results. It does not assert
 marginal independence after averaging over \(x\).
 Their use of \emph{exponential family} refers to the general statistical
-class, not specifically to the exponential slabs in
-Section~\ref{sec:mixturefamilies}.
+class, not specifically to an exponential slab distribution.
 
 The present model allows direct dependence on latent parents even after
 conditioning on \(x\). It therefore addresses a different modeling
@@ -122,11 +121,12 @@ The parent set consists of the prescribed preceding nodes. Unrestricted
 regressions of every loading on all the other loadings are not
 automatically compatible with a single joint distribution.
 
-The current experimental CGB implementation uses ReLU neural gates.
+The current conditional CGB implementation uses ReLU neural gates.
 Equation~\eqref{eq:interpretablegate} is a restricted model specification,
 not a coefficient interpretation of those fitted neural networks.
-Section~\ref{sec:linearlogistic} describes its simpler, log-concave slab
-update under the stated assumptions. Neural gates and EMDN can subsequently
+Under fixed Gaussian slab parameters, the linear-logistic
+restriction also makes the continuous coordinate log-concave: a Gaussian
+log density plus Bernoulli log-likelihoods of affine predictors is concave. Neural gates and EMDN can subsequently
 be compared with this restriction when nonlinear activation, amplitude or
 variance relationships are scientifically required.
 
@@ -177,8 +177,8 @@ These identities follow by completing the multivariate Gaussian square.
 They establish tractability of a row conditional at fixed factors and
 parameters, not an analytic posterior for the entire factorization.
 Missing entries or modalities are omitted from the observation vector
-and design. HMM factor updates remain available conditional on the
-loading draws.
+and design. Feature updates must use moments consistent with the chosen posterior
+family; the block covariance correction is given in \eqref{eq:cross}.
 
 Both this mixture model and the direct hierarchy propagate information
 between modalities. The computational simplification is Gaussian
@@ -193,9 +193,10 @@ Gaussian block formulas above. Neither alternative is uniformly cheaper
 at comparable modeling accuracy.
 
 \paragraph{Positioning and empirical consequences.}
-For an interpretation-oriented study, the proposed main model is a
-direct conditional loading hierarchy, with linear-logistic activation
-heads as a transparent restriction. Its contribution must be assessed
+For an interpretation-oriented study, the main model is a direct
+conditional loading hierarchy. Linear-logistic activation heads are a useful
+transparent comparator; the implemented neural gates do not have that
+coefficient interpretation. Its contribution must be assessed
 through interpretable conditional associations, useful predictions and
 joint uncertainty propagation, rather than through a claim that previous
 VAE priors cannot encode dependence.

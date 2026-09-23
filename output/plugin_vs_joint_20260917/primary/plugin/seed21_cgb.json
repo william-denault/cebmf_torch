@@ -1,0 +1,155 @@
+{
+  "signature": "a1d3cbd1fa9365f1f444a3ebe6039267d2a7784753cd10e9698d74a5272e48aa",
+  "seed": 21,
+  "method": "plugin",
+  "stage": "cgb",
+  "prior": "cgb",
+  "prior_kwargs": {
+    "penalty": 1.051
+  },
+  "scalar_network_defaults": {
+    "n_epochs": 10,
+    "n_layers": 4,
+    "hidden_dim": 32,
+    "batch_size": 128,
+    "lr": 0.001,
+    "penalty": 1.051
+  },
+  "resolved_training": {
+    "n_epochs": 10,
+    "n_layers": 4,
+    "hidden_dim": 32,
+    "batch_size": 128,
+    "lr": 0.001,
+    "penalty": 1.051
+  },
+  "conditional_options": null,
+  "fixed_rank": false,
+  "initial_rank": 6,
+  "steps": 10,
+  "initialization": {
+    "sweep": 0,
+    "seconds": 0,
+    "signal_rmse": 0.2635412812232971,
+    "observation_rmse": 1.2236088514328003,
+    "sigma": 1.2236088514328003,
+    "rank": 6,
+    "loading_variance": 0.0
+  },
+  "setup_seconds": 0.009717500011902303,
+  "complete": true,
+  "history": [
+    {
+      "sweep": 0,
+      "seconds": 0,
+      "signal_rmse": 0.2635412812232971,
+      "observation_rmse": 1.2236088514328003,
+      "sigma": 1.2236088514328003,
+      "rank": 6,
+      "loading_variance": 0.0
+    },
+    {
+      "sweep": 1,
+      "seconds": 3.005534900003113,
+      "signal_rmse": 0.18773512542247772,
+      "observation_rmse": 1.2325910329818726,
+      "sigma": 1.2467657327651978,
+      "rank": 6,
+      "loading_variance": 0.9920175671577454,
+      "objective": 337345.375
+    },
+    {
+      "sweep": 2,
+      "seconds": 5.314981300005456,
+      "signal_rmse": 0.17607460916042328,
+      "observation_rmse": 1.2354031801223755,
+      "sigma": 1.248946189880371,
+      "rank": 6,
+      "loading_variance": 0.9577111005783081,
+      "objective": 337202.6875
+    },
+    {
+      "sweep": 3,
+      "seconds": 7.799551100004464,
+      "signal_rmse": 0.17348964512348175,
+      "observation_rmse": 1.237197756767273,
+      "sigma": 1.2500509023666382,
+      "rank": 6,
+      "loading_variance": 0.9065706133842468,
+      "objective": 337148.21875
+    },
+    {
+      "sweep": 4,
+      "seconds": 12.46920270001283,
+      "signal_rmse": 0.1720161736011505,
+      "observation_rmse": 1.2387020587921143,
+      "sigma": 1.2509026527404785,
+      "rank": 6,
+      "loading_variance": 0.8452115058898926,
+      "objective": 337090.0
+    },
+    {
+      "sweep": 5,
+      "seconds": 15.136277000012342,
+      "signal_rmse": 0.17140309512615204,
+      "observation_rmse": 1.2393640279769897,
+      "sigma": 1.2512757778167725,
+      "rank": 6,
+      "loading_variance": 0.8168361783027649,
+      "objective": 337041.90625
+    },
+    {
+      "sweep": 6,
+      "seconds": 17.920445700001437,
+      "signal_rmse": 0.1713157445192337,
+      "observation_rmse": 1.239629864692688,
+      "sigma": 1.2514115571975708,
+      "rank": 6,
+      "loading_variance": 0.7854067087173462,
+      "objective": 337001.9375
+    },
+    {
+      "sweep": 7,
+      "seconds": 20.821155000012368,
+      "signal_rmse": 0.17149493098258972,
+      "observation_rmse": 1.2396340370178223,
+      "sigma": 1.2513971328735352,
+      "rank": 5,
+      "loading_variance": 0.9391800761222839,
+      "objective": 336985.03125
+    },
+    {
+      "sweep": 8,
+      "seconds": 24.5518410000077,
+      "signal_rmse": 0.17016363143920898,
+      "observation_rmse": 1.2399463653564453,
+      "sigma": 1.2516566514968872,
+      "rank": 5,
+      "loading_variance": 0.9340872764587402,
+      "objective": 337030.15625
+    },
+    {
+      "sweep": 9,
+      "seconds": 26.80924520001281,
+      "signal_rmse": 0.16997608542442322,
+      "observation_rmse": 1.2400881052017212,
+      "sigma": 1.2517157793045044,
+      "rank": 4,
+      "loading_variance": 1.1581192016601562,
+      "objective": 337009.78125
+    },
+    {
+      "sweep": 10,
+      "seconds": 28.875698799995007,
+      "signal_rmse": 0.1699787676334381,
+      "observation_rmse": 1.2400157451629639,
+      "sigma": 1.2516825199127197,
+      "rank": 4,
+      "loading_variance": 1.1637521982192993,
+      "objective": 337006.40625
+    }
+  ],
+  "fit_seconds": 28.875698799995007,
+  "checkpoint": "output\\plugin_vs_joint_20260917\\primary\\plugin\\seed21_cgb.model.pt",
+  "inference": "plugin"
+}

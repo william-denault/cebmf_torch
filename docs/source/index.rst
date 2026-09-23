@@ -16,6 +16,8 @@ Welcome to the cebmf_torch documentation!
    hmm_priors
    ordered_loading_priors
    joint_inference
+   quadratic_feedback
+   device_contract
    api
 
 .. include:: ../../README.md

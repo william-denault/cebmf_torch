@@ -1,0 +1,173 @@
+[
+  {
+    "checkpoint": "output\\tree_prior_benchmark\\main\\notebook_spiked_self_seed1_svd_8e39d238e8.model.pt",
+    "evaluated_rows": [
+      9,
+      11,
+      14,
+      20,
+      39,
+      40,
+      51,
+      54,
+      57,
+      90,
+      95,
+      115,
+      116,
+      168,
+      203,
+      216,
+      246,
+      250,
+      251,
+      262,
+      328,
+      329,
+      330,
+      339,
+      345,
+      349,
+      379,
+      388,
+      397,
+      440,
+      447,
+      461,
+      462,
+      493,
+      495,
+      500,
+      517,
+      606,
+      624,
+      643,
+      646,
+      648,
+      655,
+      681,
+      688,
+      719,
+      750,
+      786,
+      816,
+      822,
+      828,
+      833,
+      837,
+      838,
+      844,
+      869,
+      872,
+      893,
+      897,
+      899,
+      909,
+      911,
+      912,
+      936,
+      977,
+      998,
+      999
+    ],
+    "reference": "48 quadrature points, 256 parent points, seed 0",
+    "results": [
+      {
+        "quadrature": 8,
+        "parents": 8,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          0.00015531368262600154,
+          4.345629713498056e-05,
+          0.00012965503265149891,
+          0.00021799240494146943,
+          0.006819241680204868,
+          3.6241371614330205e-21
+        ],
+        "relative_mean_rms": 0.002786646829918027,
+        "mean_abs_logz_difference": 0.00482983747497201,
+        "reconstruction_rms_change": 0.00025836375425569713
+      },
+      {
+        "quadrature": 16,
+        "parents": 32,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          6.187619874253869e-05,
+          2.4127022697939537e-05,
+          5.555772440857254e-05,
+          0.00013137150381226093,
+          0.0008448774460703135,
+          7.1321199693135005e-22
+        ],
+        "relative_mean_rms": 0.0003508498484734446,
+        "mean_abs_logz_difference": 0.0010207627201452851,
+        "reconstruction_rms_change": 7.936963083921e-05
+      },
+      {
+        "quadrature": 32,
+        "parents": 128,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          2.741038588283118e-05,
+          6.460405984398676e-06,
+          2.2994548999122344e-05,
+          9.995003347285092e-05,
+          0.0005356069304980338,
+          3.2418727362729993e-22
+        ],
+        "relative_mean_rms": 0.00022292995708994567,
+        "mean_abs_logz_difference": 0.0005063527496531606,
+        "reconstruction_rms_change": 4.460794662008993e-05
+      },
+      {
+        "quadrature": 48,
+        "parents": 256,
+        "integration_seed": 0,
+        "relative_mean_rms_by_column": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "relative_mean_rms": 0.0,
+        "mean_abs_logz_difference": 0.0,
+        "reconstruction_rms_change": 0.0
+      },
+      {
+        "quadrature": 32,
+        "parents": 128,
+        "integration_seed": 1,
+        "relative_mean_rms_by_column": [
+          2.8800832296838053e-05,
+          6.5763183556555305e-06,
+          3.415118408156559e-05,
+          9.233671880792826e-05,
+          0.0011859727092087269,
+          3.1319466730700066e-22
+        ],
+        "relative_mean_rms": 0.0004859863256569952,
+        "mean_abs_logz_difference": 0.0005353521555662155,
+        "reconstruction_rms_change": 5.405734191299416e-05
+      },
+      {
+        "quadrature": 8,
+        "parents": 8,
+        "integration_seed": 1,
+        "relative_mean_rms_by_column": [
+          0.00013373143156059086,
+          3.7454869016073644e-05,
+          0.00021280899818520993,
+          0.0002452904300298542,
+          0.00509375287219882,
+          1.1796140795663863e-21
+        ],
+        "relative_mean_rms": 0.002084509003907442,
+        "mean_abs_logz_difference": 0.0037970810662955046,
+        "reconstruction_rms_change": 0.0002212556719314307
+      }
+    ]
+  }
+]

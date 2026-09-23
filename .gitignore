@@ -149,3 +149,6 @@ Thumbs.db
 
 docs/source/notebooks
 tests/doc_examples_test.py
+
+# Local audit scratch files, renderings and pre-cleanup backups.
+/tmp/

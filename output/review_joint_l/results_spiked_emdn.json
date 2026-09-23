@@ -1,0 +1,350 @@
+{
+  "setup": {
+    "threshold_probe": {
+      "nonzero_L_before": 60,
+      "nonzero_L_after_constructor": 0
+    },
+    "ash_kwargs_have_no_effect_nonzero_loadings": true,
+    "legacy_cgb_heteroscedastic_variance_counterexample": {
+      "x": [
+        2.0,
+        0.0
+      ],
+      "se": [
+        0.10000000149011612,
+        10.0
+      ],
+      "old_variance": 4.0,
+      "new_variance": 9.999999974752427e-07,
+      "loglik_before": -5.353221416473389,
+      "loglik_after": -201.81790161132812
+    }
+  },
+  "metastability": {
+    "exact_parent_probability_one": 0.5,
+    "empirical_probability_one": 0.0,
+    "parent_acceptance": 0.4991825000000005,
+    "parent_actual_move_fraction": 0.0,
+    "child_acceptance": 1.0,
+    "epsilon": 1e-06,
+    "parallel_chains": 400,
+    "sweeps": 1000
+  },
+  "benchmarks": [
+    {
+      "seed": 1,
+      "prior_L": "spiked_emdn",
+      "n": 240,
+      "p": 80,
+      "rank": 4,
+      "known_noise_sd": 1.25,
+      "all_penalties": 1.0,
+      "rounds": 8,
+      "ash_parameters_unchanged_during_learning": true,
+      "reference_signal_rmse": {
+        "independent_ash": 0.25587198969192676,
+        "legacy_plugin": 0.18091099869209962
+      },
+      "reference_heldout_rmse": {
+        "independent_ash": 1.273829605951673,
+        "legacy_plugin": 1.2625396989503783
+      },
+      "chains": [
+        {
+          "seed": 1001,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18607704936507363,
+          "heldout_rmse": 1.264496466253087,
+          "rmse_product_of_marginal_means": 0.18601245073663583,
+          "L_acceptance": [
+            0.7973125,
+            0.9133194444444445,
+            0.9824652777777779,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.018458333333333334,
+            0.2578333333333333,
+            0.2679097222222222,
+            0.2748055555555555
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.1871188537621089,
+            "200": 0.1866188219957346,
+            "600": 0.18607704936507363
+          },
+          "first_last_half_signal_difference_rmse": 0.022263017902001747
+        },
+        {
+          "seed": 1002,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18616662944546844,
+          "heldout_rmse": 1.2645951787032148,
+          "rmse_product_of_marginal_means": 0.18612752312151007,
+          "L_acceptance": [
+            0.7967638888888888,
+            0.9137222222222222,
+            0.9820902777777777,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.019895833333333335,
+            0.2585625,
+            0.26714583333333325,
+            0.27494444444444444
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.1900289375476041,
+            "200": 0.18591133466977944,
+            "600": 0.18616662944546844
+          },
+          "first_last_half_signal_difference_rmse": 0.022521337673767385
+        },
+        {
+          "seed": 1003,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18602815389155114,
+          "heldout_rmse": 1.264738476607244,
+          "rmse_product_of_marginal_means": 0.18599093587557677,
+          "L_acceptance": [
+            0.7973611111111112,
+            0.9150555555555555,
+            0.981388888888889,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.018159722222222223,
+            0.2602291666666666,
+            0.27000694444444445,
+            0.2771666666666666
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.18908723180509568,
+            "200": 0.1856451624752202,
+            "600": 0.18602815389155114
+          },
+          "first_last_half_signal_difference_rmse": 0.020096005750594635
+        }
+      ],
+      "scope": "Matched warm factors, rank, noise, architecture, explicit penalty. Legacy and joint still differ in optimizer objective, scales, initialization and F learning.",
+      "pooled_signal_rmse": 0.18588782342966925,
+      "pooled_heldout_rmse": 1.2645789428272802,
+      "chain_mean_disagreement_rmse": 0.00868538161774068,
+      "selected_signal_split_rhat_max": 1.0066969509448473,
+      "elapsed_seconds": 64.55263189999823
+    },
+    {
+      "seed": 2,
+      "prior_L": "spiked_emdn",
+      "n": 240,
+      "p": 80,
+      "rank": 4,
+      "known_noise_sd": 1.25,
+      "all_penalties": 1.0,
+      "rounds": 8,
+      "ash_parameters_unchanged_during_learning": true,
+      "reference_signal_rmse": {
+        "independent_ash": 0.26314825227750915,
+        "legacy_plugin": 0.1895538527506904
+      },
+      "reference_heldout_rmse": {
+        "independent_ash": 1.2247608920773143,
+        "legacy_plugin": 1.2013300807480507
+      },
+      "chains": [
+        {
+          "seed": 1002,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18497682068114407,
+          "heldout_rmse": 1.2045096516200409,
+          "rmse_product_of_marginal_means": 0.1849233416169941,
+          "L_acceptance": [
+            0.7877013888888889,
+            0.8822569444444444,
+            0.9907708333333335,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.058541666666666665,
+            0.20133333333333334,
+            0.14827083333333335,
+            0.2866388888888889
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.18816424097541476,
+            "200": 0.1858211851920959,
+            "600": 0.18497682068114407
+          },
+          "first_last_half_signal_difference_rmse": 0.01925843369504864
+        },
+        {
+          "seed": 1003,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18540098931699206,
+          "heldout_rmse": 1.2036563142090788,
+          "rmse_product_of_marginal_means": 0.18535741750989992,
+          "L_acceptance": [
+            0.7886041666666667,
+            0.8819305555555556,
+            0.9906111111111113,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.05625,
+            0.20254166666666665,
+            0.14841666666666667,
+            0.2866666666666667
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.18880657968916395,
+            "200": 0.1858212445270974,
+            "600": 0.18540098931699206
+          },
+          "first_last_half_signal_difference_rmse": 0.020366617479089962
+        },
+        {
+          "seed": 1004,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18564431139600712,
+          "heldout_rmse": 1.2041932025796422,
+          "rmse_product_of_marginal_means": 0.18559195767344766,
+          "L_acceptance": [
+            0.7887361111111111,
+            0.8832847222222222,
+            0.990826388888889,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.057944444444444444,
+            0.2025486111111111,
+            0.1503611111111111,
+            0.2856944444444444
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.18657293144201284,
+            "200": 0.18610448057114054,
+            "600": 0.18564431139600712
+          },
+          "first_last_half_signal_difference_rmse": 0.020070551693775487
+        }
+      ],
+      "scope": "Matched warm factors, rank, noise, architecture, explicit penalty. Legacy and joint still differ in optimizer objective, scales, initialization and F learning.",
+      "pooled_signal_rmse": 0.18514892034786123,
+      "pooled_heldout_rmse": 1.2040897166176092,
+      "chain_mean_disagreement_rmse": 0.008433924843258934,
+      "selected_signal_split_rhat_max": 1.0015828635330066,
+      "elapsed_seconds": 69.80339749999985
+    },
+    {
+      "seed": 3,
+      "prior_L": "spiked_emdn",
+      "n": 240,
+      "p": 80,
+      "rank": 4,
+      "known_noise_sd": 1.25,
+      "all_penalties": 1.0,
+      "rounds": 8,
+      "ash_parameters_unchanged_during_learning": true,
+      "reference_signal_rmse": {
+        "independent_ash": 0.26321163553496535,
+        "legacy_plugin": 0.1946837077238009
+      },
+      "reference_heldout_rmse": {
+        "independent_ash": 1.2236107094291815,
+        "legacy_plugin": 1.2148886286441338
+      },
+      "chains": [
+        {
+          "seed": 1003,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18145159647297093,
+          "heldout_rmse": 1.2119117702643631,
+          "rmse_product_of_marginal_means": 0.18140651901756485,
+          "L_acceptance": [
+            0.8403194444444444,
+            0.9214652777777776,
+            0.9726388888888892,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.03911111111111111,
+            0.287375,
+            0.30017361111111107,
+            0.29738194444444443
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.1826171699363241,
+            "200": 0.18186824568517646,
+            "600": 0.18145159647297093
+          },
+          "first_last_half_signal_difference_rmse": 0.023177251642321917
+        },
+        {
+          "seed": 1004,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18420980171207882,
+          "heldout_rmse": 1.211288447672721,
+          "rmse_product_of_marginal_means": 0.18417133275553568,
+          "L_acceptance": [
+            0.8406527777777778,
+            0.9215763888888889,
+            0.9738749999999999,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.03743055555555555,
+            0.28596527777777775,
+            0.29618055555555556,
+            0.29368750000000005
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.19044143442986433,
+            "200": 0.1857646149605127,
+            "600": 0.18420980171207882
+          },
+          "first_last_half_signal_difference_rmse": 0.020850658336373465
+        },
+        {
+          "seed": 1005,
+          "burnin": 200,
+          "draws": 600,
+          "signal_rmse": 0.18349358544371094,
+          "heldout_rmse": 1.2113173911194008,
+          "rmse_product_of_marginal_means": 0.18344848529404423,
+          "L_acceptance": [
+            0.8393541666666667,
+            0.9224097222222222,
+            0.9732708333333333,
+            1.0
+          ],
+          "L_component_switch_fraction": [
+            0.036354166666666674,
+            0.2892430555555555,
+            0.2974513888888889,
+            0.29823611111111104
+          ],
+          "prefix_signal_rmse": {
+            "50": 0.18517373790178238,
+            "200": 0.18341365791191694,
+            "600": 0.18349358544371094
+          },
+          "first_last_half_signal_difference_rmse": 0.020697249816283177
+        }
+      ],
+      "scope": "Matched warm factors, rank, noise, architecture, explicit penalty. Legacy and joint still differ in optimizer objective, scales, initialization and F learning.",
+      "pooled_signal_rmse": 0.18270670959227095,
+      "pooled_heldout_rmse": 1.211446752338642,
+      "chain_mean_disagreement_rmse": 0.011293119118567512,
+      "selected_signal_split_rhat_max": 1.005217769954419,
+      "elapsed_seconds": 70.48996959999931
+    }
+  ]
+}

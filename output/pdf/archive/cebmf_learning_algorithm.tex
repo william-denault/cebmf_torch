@@ -1,0 +1,175 @@
+\subsection{Learning algorithm in cEBMF form}
+\label{sec:learningalgorithm}
+The implementation retains cEBMF's residual-based reduction to normal means,
+but separates latent-state transitions from estimation of the conditional
+prior parameters. We describe a single matrix \(Y\in\R^{N\times P}\), as in
+the tree example. The coupled-modality version uses the same steps with all
+loading nodes in the specified directed graph.
+The equations below give the unpenalized case. The regularized target and
+the explicit ELBO diagnostic are defined in Section~\ref{sec:implementedelbo}.
+
+\paragraph{The ordinary cEBMF iteration.}
+With fixed covariates and a factorized variational distribution, let
+\(\bar L_{ik}=\E_q L_{ik}\), \(\bar F_{tk}=\E_q F_{tk}\), and
+\(\overline{F^2}_{tk}=\E_q F_{tk}^2\). Write
+\(w_{it}=M_{it}\tau_{it}\), where \(M_{it}\) indicates observation, and form
+\begin{align}
+\bar E_{it,-k}&=Y_{it}-\sum_{h\ne k}\bar L_{ih}\bar F_{th},\\
+a^{\rm VI}_{ik}&=\sum_t w_{it}\overline{F^2}_{tk},&
+b^{\rm VI}_{ik}&=\sum_t w_{it}\bar E_{it,-k}\bar F_{tk}.
+\label{eq:algorithmvi}
+\end{align}
+All sums involving \(Y\) are over observed entries. For positive \(a\),
+the resulting normal-means observation is \(\widehat l_{ik}=b_{ik}/a_{ik}\)
+with standard error \(s_{ik}=a_{ik}^{-1/2}\). A conditional EBNM fit estimates
+the loading prior and returns first and second posterior moments. The factor
+update exchanges \(L\) and \(F\) and uses the updated loading moments.
+Thus the ordinary loop is: residualize, fit the loading normal-means model,
+fit the factor normal-means model, and repeat over factors. Its criterion is
+the variational objective when local fitting steps optimize that criterion.
+
+\paragraph{The corresponding joint latent update.}
+The sampling state contains realized \(L,F\), mixture labels, and any HMM
+paths. Its residual and likelihood statistics use current values:
+\begin{align}
+E_{it,-k}&=Y_{it}-\sum_{h\ne k}L_{ih}F_{th},\\
+a^L_{ik}&=\sum_t w_{it}F_{tk}^2,&
+b^L_{ik}&=\sum_t w_{it}E_{it,-k}F_{tk},
+\label{eq:algorithmloadingstats}\\
+a^F_{tk}&=\sum_i w_{it}L_{ik}^2,&
+b^F_{tk}&=\sum_i w_{it}E_{it,-k}L_{ik}.
+\label{eq:algorithmsamplingstats}
+\end{align}
+The residual is refreshed after each column update. These are conditional
+likelihood statistics: posterior second moments must not be substituted
+for the squared realized values. The natural-parameter form
+\(\exp(-av^2/2+bv)\) also handles \(a=b=0\) without dividing by zero.
+
+For a scalar node \(u\), let \(P_{iu}\) contain its current latent parents
+and any fixed covariates. At fixed prior parameters, draw a value and label
+from the normal-means posterior
+\begin{equation}
+q_{0,iu}(dv,z)\ \propto\
+\exp\{-a_{iu}v^2/2+b_{iu}v\}\,
+g_{\theta u}(dv,z\mid P_{iu}).
+\label{eq:algorithmproposal}
+\end{equation}
+This uses the posterior-calculation part of EBNM; it does \emph{not} refit
+the prior for each proposal. The full conditional additionally contains
+the direct children's augmented prior terms \(D_{iu}(v)\) from
+\eqref{eq:implementedmessage}. Accept the proposed \((v',z')\) with
+\begin{equation}
+\alpha=\min\{1,\exp[D_{iu}(v')-D_{iu}(v)]\}.
+\label{eq:algorithmcorrection}
+\end{equation}
+All other values and labels remain fixed during this move. The parent
+proposal density cancels because the full conditional is proportional to
+\(q_{0,iu}(dv,z)e^{D_{iu}(v)}\). Without children, the acceptance probability
+is one. Fixed side information enters both own and child priors, but is
+never updated or assigned an additional likelihood. Independent row moves
+are vectorized within a column; columns are updated sequentially.
+
+\paragraph{The empirical-Bayes parameter update.}
+After \(S\) complete sweeps at fixed parameters, retain the full states
+\(\{L^{(s)},F^{(s)},Z^{(s)},\ldots\}_{s=1}^S\). For each learned loading
+prior, reduce
+\begin{equation}
+J^L_{k,t}(\theta_k)=-\frac{1}{SN}\sum_{s=1}^S\sum_{i=1}^N
+\log g_{\theta k}\!\left(L_{ik}^{(s)},Z_{ik}^{(s)}
+\mid X_{l,i},L_{i,<k}^{(s)}\right).
+\label{eq:algorithmlearningloss}
+\end{equation}
+Omit \(L_{i,<k}^{(s)}\) on an axis without self-covariates. The factor-axis
+objective exchanges \(N,L,X_l\) with \(P,F,X_f\). Parents, responses and
+labels come from the \emph{same} draw. No measurement-error deconvolution is
+applied to these latent values. With distinct parameter blocks for different
+priors, the complete-data parameter objective separates into these node
+objectives; likelihood and fixed-prior terms do not depend on the parameters
+being fitted. If both axes are learned, the total negative Monte Carlo
+\(Q\), averaged over draws, is
+\(N\sum_kJ^L_{k,t}+P\sum_kJ^F_{k,t}\), up to a constant.
+The per-axis normalizations do not change separate node optima.
+
+\textbf{Relationship to the package interface.}
+\par\smallskip
+An effective \texttt{self\_row\_cov=True} or
+\texttt{self\_col\_cov=True} selects this algorithm.
+\texttt{fit(T)} performs the learning rounds and retained sampling.
+The loop controls are supplied through \texttt{joint\_kwargs}.
+Its keys are \path{sweeps_per_round}, \path{steps}, \path{burnin},
+\path{draws} and \path{thin}.
+For learned priors, \path{n_epochs} overrides \path{steps} on its axis,
+and \path{batch_size} specifies the training mini-batches.
+\texttt{iter\_once()} performs one fixed-parameter sweep, rather than the
+entire E/M round. The implemented scan updates all loading columns before
+all factor columns; the ordinary variational route alternates loading and
+factor updates within each rank-one component. In the coupled ATAC--RNA
+solver, step 2(a)(i) visits the combined loading DAG, including RNA child
+terms in ATAC moves; step 2(a)(ii) updates each modality's feature factors.
+
+\paragraph{What a decreasing curve establishes.}
+For the tree notebook, \(J_t=\sum_kJ^L_{k,t}\) is the plotted prior-learning
+loss. The retained parameter state satisfies
+\(J_{k,t}(\theta_{k,t+1})\leq J_{k,t}(\theta_{k,t})\) on the same saved
+draws. Intermediate Adam steps need not decrease it. Draws change between
+rounds, so the before/after comparison is justified within a round, not as
+an exact trajectory of marginal likelihood across rounds. Fixed-parameter
+Markov kernels preserve the posterior; finite chains do not provide exact
+E-steps or a guarantee of marginal-likelihood ascent. The implementation
+runs a requested number of rounds, not an evidence-based stopping rule.
+Afterward, the sampled log joint fluctuates and is not an ELBO. A separate
+ELBO diagnostic, including entropy, is now evaluated as described in
+Section~\ref{sec:implementedelbo}. Held-out
+prediction error is a separate evaluation metric. These distinctions
+preserve the familiar cEBMF computational structure without attributing
+variational coordinate-ascent guarantees to the joint sampler.
+
+\clearpage
+\noindent\textbf{Algorithm 1: residual-based joint cEBMF with partial Monte Carlo EM}
+\par\smallskip\hrule\smallskip
+\textbf{Input.} Observed matrix, mask and any known noise variances; fixed
+row/column covariates; prior
+families and factor order; learning rounds \(T\), sweeps per round \(S\),
+training epochs \(B\), optional batch size, burn-in \(b_0\), retained draws
+\(D\), and thinning \(h\).
+\begin{enumerate}[leftmargin=*,label=\textbf{\arabic*.},itemsep=5pt]
+\item \textbf{Initialize.} Obtain \(L,F\) from a preliminary independent
+fit, or use supplied initial factors. Fix the resulting rank, order,
+observation precisions, preprocessing and non-neural prior parameters.
+Initialize and pretrain the conditional-prior networks and establish valid
+component labels and HMM paths. Pretraining on initial estimates is an
+initialization device, not additional data in the joint likelihood.
+\item \textbf{For learning rounds \(t=1,\ldots,T\):}
+  \begin{enumerate}[label=(\alph*),leftmargin=*,itemsep=3pt]
+  \item \textbf{Approximate E-step.} Hold all parameters fixed. Repeat \(S\)
+  times, continuing from the current chain state:
+    \begin{enumerate}[label=(\roman*),leftmargin=*,itemsep=2pt]
+    \item For \(k=1,\ldots,K\), residualize and update \(L_{:k}\) using
+    \eqref{eq:algorithmloadingstats} and the appropriate prior kernel.
+    Neural scalar priors use \eqref{eq:algorithmproposal}--\eqref{eq:algorithmcorrection}.
+    \item For \(k=1,\ldots,K\), update \(F_{:k}\) analogously using the
+    new loading state. A fixed Gaussian-mixture prior uses direct conditional
+    draws. An HMM prior uses a whole-path forward-filtering/backward-sampling
+    update and conditional value draws. Use the same kernel choices on
+    either axis; an HMM ignores covariates on its own axis.
+    \item Save the full joint state after the complete sweep.
+    \end{enumerate}
+  \item \textbf{Generalized M-step.} Hold these \(S\) states fixed.
+  For each neural prior on each axis, run up to \(B\) epochs of Adam on
+  \eqref{eq:algorithmlearningloss} using full or mini-batches. After each
+  epoch evaluate the full saved-draw loss; retain the best finite parameter
+  state, including the starting state. Record the loss before and after.
+  Continue the chain from its last realized state for the next round.
+  \end{enumerate}
+\item \textbf{Posterior sampling.} Freeze all fitted parameters. Discard
+\(b_0\) additional sweeps, then retain \(D\) full states, one every \(h\)
+sweeps. No prior learning, noise update or factor pruning occurs here.
+\item \textbf{Return.} Report marginal moments and the signal estimate
+\[
+\widehat X=\frac1D\sum_{d=1}^D L^{(d)}(F^{(d)})^\top,
+\]
+together with the prior-learning losses and sampling diagnostics.
+\end{enumerate}
+\smallskip\hrule\medskip
+
+\clearpage

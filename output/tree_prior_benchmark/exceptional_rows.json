@@ -1,0 +1,182 @@
+[
+  {
+    "method": "gbinary",
+    "seed": 1,
+    "common_rmse": 0.10085866996112272,
+    "exceptional_rmse": 0.5425352161643333
+  },
+  {
+    "method": "gbinary",
+    "seed": 2,
+    "common_rmse": 0.0961900209150856,
+    "exceptional_rmse": 0.6108440226725802
+  },
+  {
+    "method": "gbinary",
+    "seed": 3,
+    "common_rmse": 0.0989430888948142,
+    "exceptional_rmse": 0.5378964773489976
+  },
+  {
+    "method": "gbinary",
+    "seed": 4,
+    "common_rmse": 0.10670013623328899,
+    "exceptional_rmse": 0.6267773652107996
+  },
+  {
+    "method": "gbinary",
+    "seed": 5,
+    "common_rmse": 0.12643435309183934,
+    "exceptional_rmse": 0.48630115457051304
+  },
+  {
+    "method": "cgb",
+    "seed": 1,
+    "common_rmse": 0.1833232732521723,
+    "exceptional_rmse": 0.4606112183935299
+  },
+  {
+    "method": "cgb",
+    "seed": 2,
+    "common_rmse": 0.1751963934572001,
+    "exceptional_rmse": 0.4707237695378542
+  },
+  {
+    "method": "cgb",
+    "seed": 3,
+    "common_rmse": 0.17482321317825783,
+    "exceptional_rmse": 0.4277122801915353
+  },
+  {
+    "method": "cgb",
+    "seed": 4,
+    "common_rmse": 0.18036037224449689,
+    "exceptional_rmse": 0.49908647431326386
+  },
+  {
+    "method": "cgb",
+    "seed": 5,
+    "common_rmse": 0.18956784676468202,
+    "exceptional_rmse": 0.446491815397417
+  },
+  {
+    "method": "cgb_plugin",
+    "seed": 1,
+    "common_rmse": 0.17479803536403168,
+    "exceptional_rmse": 0.4599610581412676
+  },
+  {
+    "method": "cgb_plugin",
+    "seed": 2,
+    "common_rmse": 0.165660052652505,
+    "exceptional_rmse": 0.4690125812934308
+  },
+  {
+    "method": "cgb_plugin",
+    "seed": 3,
+    "common_rmse": 0.168146152629146,
+    "exceptional_rmse": 0.4277476226956795
+  },
+  {
+    "method": "cgb_plugin",
+    "seed": 4,
+    "common_rmse": 0.17156831150200202,
+    "exceptional_rmse": 0.49805824047328673
+  },
+  {
+    "method": "cgb_plugin",
+    "seed": 5,
+    "common_rmse": 0.16803733452430572,
+    "exceptional_rmse": 0.44585035246687904
+  },
+  {
+    "method": "cgb_self",
+    "seed": 1,
+    "common_rmse": 0.1497835749873311,
+    "exceptional_rmse": 0.46697915765990256
+  },
+  {
+    "method": "cgb_self",
+    "seed": 2,
+    "common_rmse": 0.14248948778406162,
+    "exceptional_rmse": 0.4653160268434139
+  },
+  {
+    "method": "cgb_self",
+    "seed": 3,
+    "common_rmse": 0.14288531883119746,
+    "exceptional_rmse": 0.44131588995568666
+  },
+  {
+    "method": "cgb_self",
+    "seed": 4,
+    "common_rmse": 0.1456671942123082,
+    "exceptional_rmse": 0.4844913032692624
+  },
+  {
+    "method": "cgb_self",
+    "seed": 5,
+    "common_rmse": 0.1432835101792896,
+    "exceptional_rmse": 0.4899574760089927
+  },
+  {
+    "method": "spiked",
+    "seed": 1,
+    "common_rmse": 0.08485695958677075,
+    "exceptional_rmse": 0.48811632691168083
+  },
+  {
+    "method": "spiked",
+    "seed": 2,
+    "common_rmse": 0.07807798784405204,
+    "exceptional_rmse": 0.5697281481487829
+  },
+  {
+    "method": "spiked",
+    "seed": 3,
+    "common_rmse": 0.0752503087995369,
+    "exceptional_rmse": 0.6037726129740377
+  },
+  {
+    "method": "spiked",
+    "seed": 4,
+    "common_rmse": 0.10335647017380661,
+    "exceptional_rmse": 0.5654125838777769
+  },
+  {
+    "method": "spiked",
+    "seed": 5,
+    "common_rmse": 0.0827691341488405,
+    "exceptional_rmse": 0.515493432132022
+  },
+  {
+    "method": "spiked_self",
+    "seed": 1,
+    "common_rmse": 0.08550335787867809,
+    "exceptional_rmse": 0.4803865855370762
+  },
+  {
+    "method": "spiked_self",
+    "seed": 2,
+    "common_rmse": 0.0793593735354128,
+    "exceptional_rmse": 0.5488881097237637
+  },
+  {
+    "method": "spiked_self",
+    "seed": 3,
+    "common_rmse": 0.07326010302864663,
+    "exceptional_rmse": 0.48551518331042115
+  },
+  {
+    "method": "spiked_self",
+    "seed": 4,
+    "common_rmse": 0.08149425394597855,
+    "exceptional_rmse": 0.5163489024452913
+  },
+  {
+    "method": "spiked_self",
+    "seed": 5,
+    "common_rmse": 0.09010864701591968,
+    "exceptional_rmse": 0.5201553046700035
+  }
+]

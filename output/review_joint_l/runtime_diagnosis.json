@@ -1,0 +1,206 @@
+{
+  "purpose": "Small warmed-sweep runtime diagnosis; inclusive profiler times overlap.",
+  "n": 128,
+  "p": 40,
+  "rank": 6,
+  "epochs": 2,
+  "dtype": "torch.float32",
+  "device": "cpu",
+  "threads": 1,
+  "torch": "2.11.0+cpu",
+  "rows_include_repeated_quadrature_and_validation_evaluations": true,
+  "results": [
+    {
+      "method": "plugin",
+      "seconds": 0.07541569999011699,
+      "network_calls": 36,
+      "network_input_rows": 4608,
+      "functions": [
+        {
+          "function": "_update_F_factor",
+          "file": "cebmf.py",
+          "calls": 6,
+          "own_seconds": 0.000337,
+          "cumulative_seconds": 0.039344300000000006
+        },
+        {
+          "function": "optimize_pi_logL",
+          "file": "mixture.py",
+          "calls": 6,
+          "own_seconds": 0.0155761,
+          "cumulative_seconds": 0.0349663
+        },
+        {
+          "function": "backward",
+          "file": "_tensor.py",
+          "calls": 12,
+          "own_seconds": 2.5500000000000003e-05,
+          "cumulative_seconds": 0.0029826
+        },
+        {
+          "function": "backward",
+          "file": "__init__.py",
+          "calls": 12,
+          "own_seconds": 0.00013340000000000002,
+          "cumulative_seconds": 0.0029556
+        }
+      ]
+    },
+    {
+      "method": "joint_8_8",
+      "seconds": 0.629654299991671,
+      "network_calls": 132,
+      "network_input_rows": 1629056,
+      "functions": [
+        {
+          "function": "profile",
+          "file": "_conditional.py",
+          "calls": 36,
+          "own_seconds": 0.0018075,
+          "cumulative_seconds": 0.4854932
+        },
+        {
+          "function": "child_term",
+          "file": "_conditional.py",
+          "calls": 36,
+          "own_seconds": 0.12776410000000002,
+          "cumulative_seconds": 0.4376005
+        },
+        {
+          "function": "objective",
+          "file": "_conditional.py",
+          "calls": 18,
+          "own_seconds": 5.0600000000000003e-05,
+          "cumulative_seconds": 0.24204950000000003
+        },
+        {
+          "function": "_update_F_factor",
+          "file": "cebmf.py",
+          "calls": 6,
+          "own_seconds": 0.0006103,
+          "cumulative_seconds": 0.0642147
+        },
+        {
+          "function": "optimize_pi_logL",
+          "file": "mixture.py",
+          "calls": 6,
+          "own_seconds": 0.0253093,
+          "cumulative_seconds": 0.0567333
+        },
+        {
+          "function": "backward",
+          "file": "_tensor.py",
+          "calls": 12,
+          "own_seconds": 4.99e-05,
+          "cumulative_seconds": 0.047049900000000006
+        },
+        {
+          "function": "backward",
+          "file": "__init__.py",
+          "calls": 12,
+          "own_seconds": 0.0002902,
+          "cumulative_seconds": 0.0469969
+        },
+        {
+          "function": "coefficients",
+          "file": "_conditional.py",
+          "calls": 42,
+          "own_seconds": 0.0058509,
+          "cumulative_seconds": 0.0319568
+        },
+        {
+          "function": "objective",
+          "file": "_conditional.py",
+          "calls": 1,
+          "own_seconds": 3.47e-05,
+          "cumulative_seconds": 0.0059148000000000004
+        },
+        {
+          "function": "negative_prior_entropy",
+          "file": "_conditional.py",
+          "calls": 1,
+          "own_seconds": 0.0003754,
+          "cumulative_seconds": 0.005728400000000001
+        }
+      ]
+    },
+    {
+      "method": "joint_24_32",
+      "seconds": 4.843576300001587,
+      "network_calls": 132,
+      "network_input_rows": 17890176,
+      "functions": [
+        {
+          "function": "profile",
+          "file": "_conditional.py",
+          "calls": 36,
+          "own_seconds": 0.0020427,
+          "cumulative_seconds": 4.358136200000001
+        },
+        {
+          "function": "child_term",
+          "file": "_conditional.py",
+          "calls": 36,
+          "own_seconds": 1.2229480000000001,
+          "cumulative_seconds": 4.282872800000001
+        },
+        {
+          "function": "objective",
+          "file": "_conditional.py",
+          "calls": 18,
+          "own_seconds": 8.64e-05,
+          "cumulative_seconds": 2.1830942
+        },
+        {
+          "function": "backward",
+          "file": "_tensor.py",
+          "calls": 12,
+          "own_seconds": 0.00010240000000000001,
+          "cumulative_seconds": 0.37678110000000004
+        },
+        {
+          "function": "backward",
+          "file": "__init__.py",
+          "calls": 12,
+          "own_seconds": 0.00046120000000000004,
+          "cumulative_seconds": 0.37667480000000003
+        },
+        {
+          "function": "_update_F_factor",
+          "file": "cebmf.py",
+          "calls": 6,
+          "own_seconds": 0.000611,
+          "cumulative_seconds": 0.06217930000000001
+        },
+        {
+          "function": "coefficients",
+          "file": "_conditional.py",
+          "calls": 42,
+          "own_seconds": 0.009778700000000001,
+          "cumulative_seconds": 0.0550715
+        },
+        {
+          "function": "optimize_pi_logL",
+          "file": "mixture.py",
+          "calls": 6,
+          "own_seconds": 0.0246024,
+          "cumulative_seconds": 0.0549006
+        },
+        {
+          "function": "objective",
+          "file": "_conditional.py",
+          "calls": 1,
+          "own_seconds": 3.5300000000000004e-05,
+          "cumulative_seconds": 0.009753300000000001
+        },
+        {
+          "function": "negative_prior_entropy",
+          "file": "_conditional.py",
+          "calls": 1,
+          "own_seconds": 0.0003618,
+          "cumulative_seconds": 0.0095822
+        }
+      ]
+    }
+  ]
+}

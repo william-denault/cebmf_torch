@@ -1,0 +1,264 @@
+{
+  "python": "C:\\Users\\willi\\miniconda3\\envs\\cebmf\\python.exe",
+  "torch": "2.11.0+cpu",
+  "hip": null,
+  "device": "cpu",
+  "gpu": null,
+  "package": "C:\\Document\\Serieux\\Travail\\python_work\\package\\cebmf_torch\\src\\cebmf_torch\\__init__.py",
+  "source_sha256": {
+    "src\\cebmf_torch\\__init__.py": "594ea20c2290769d10361eb75c3b4bd78c4741d98a3d4ff2cb5414fcf5c5d58a",
+    "src\\cebmf_torch\\cebmf\\cebmf.py": "08a17dc62b3b3cc526684e13d72483757dfa75936203448833b9e2ee80274bad",
+    "src\\cebmf_torch\\cebmf\\multiview.py": "2f7c67aaf0bd177b18391a8677853082bfa94e8e4a828857e90e870beea0842c",
+    "src\\cebmf_torch\\cebmf\\_conditional.py": "76d0e451325772e9eb7da2de8eb5670f776e800632857e13be872295e7c11705",
+    "src\\cebmf_torch\\cebmf\\_initialisation.py": "1961f8a057a60870312dfc2552942436961255b74fd8a8c00042f1af71f159c9",
+    "src\\cebmf_torch\\cebmf\\_quadratic.py": "a27af0fd5f91de5bd8e2f60e50dca74c16fd3911932cf903280fecd96903fc23",
+    "src\\cebmf_torch\\cebmf\\__init__.py": "ef4a1f6143eba2ee067867da458fa28779fbbb0da0beb0082647c88527f20161",
+    "src\\cebmf_torch\\cebnm\\cash_solver.py": "f7e2613ae60516f0264b4bb9a3373e51560bf45df755fdcf37dad19f2f91364c",
+    "src\\cebmf_torch\\cebnm\\cov_gb_prior.py": "9e598d0d3da0b09b3ad92751ede28af21015ad057e9bd555941bde2fc1478d72",
+    "src\\cebmf_torch\\cebnm\\cov_sharp_2gb_prior.py": "db831f626cb6c79ae4af91a90df6f7b9825bf20d3e8f49de828fa4801beb896e",
+    "src\\cebmf_torch\\cebnm\\cov_sharp_gb_prior.py": "e85e56ed919bc3d86c1bf8e957a5cde3a0ad0a94ef4bb3bbf6f6eab4f1fe4768",
+    "src\\cebmf_torch\\cebnm\\emdn.py": "29533032555985db568326e10f6f330e2c66aece6e768847d2920b984fc80d19",
+    "src\\cebmf_torch\\cebnm\\hmm.py": "7376bca93876b96322339d0a4ac167f4e8635b18eae3cdfccd7af61b628f5579",
+    "src\\cebmf_torch\\cebnm\\lcash.py": "279f61513b2027351cdbc0c62f6f2c49293a25d10024c27076947e2a3ee0b359",
+    "src\\cebmf_torch\\cebnm\\spiked_emdn.py": "3a673df8afebc571a92e1a8748646002206303d4e3c637f98daa718ed328bb49",
+    "src\\cebmf_torch\\cebnm\\__init__.py": "8b1ec2311dc242a9bda7ee18e6bc8834824f6fff658e742b24fd6885fd579402",
+    "src\\cebmf_torch\\ebnm\\ash.py": "36d1a6da1c5d57d2124fb4efbdc7cc1bba64d6a2a723e851963a66aba2543069",
+    "src\\cebmf_torch\\ebnm\\generalized_binary.py": "df48ae3e71d98d8f6628a4885afee24aa86c9ff635bb68336dda84fadd5a817f",
+    "src\\cebmf_torch\\ebnm\\point_exp.py": "3ab3c041108c05d98af9db1f758b44c36e7884f05f98aa43f6768f315ba76df6",
+    "src\\cebmf_torch\\ebnm\\point_laplace.py": "a57f2faee89fa5ff446bb82787a7a57c323c54d09422aebad646f415d182b1c5",
+    "src\\cebmf_torch\\ebnm\\__init__.py": "b1d4cd5ca385410c078c415ba530bd1cfa4301d506b3d9900b483f9be78fd1fa",
+    "src\\cebmf_torch\\experimental\\compat.py": "5aa0313c5f7869cc9f1a87dac9325bdb14551ba508b0dd312cc8f305168e52d7",
+    "src\\cebmf_torch\\experimental\\conditional.py": "6c7538d1b5546f197d8fd9ac6a1398dbf34cc370c91815b914e37eec3cbfc43d",
+    "src\\cebmf_torch\\experimental\\data.py": "d780f13721352b695ec3b7e16a8010af7b5d30ca55416628cd4ad99b55e0daea",
+    "src\\cebmf_torch\\experimental\\elbo.py": "3bc179d006fe562892bf1dc2ab11337b3aa7cb038b9292e79b7ec18a6a2b056d",
+    "src\\cebmf_torch\\experimental\\joint.py": "090311dce19dbc0b2e441598e33aef88202c8d1d9821347103a73a41cf4ad595",
+    "src\\cebmf_torch\\experimental\\learning.py": "df0aca28da72e8fb93d75794d65fb43e76b3506085faac0601caf48ffa46c0f8",
+    "src\\cebmf_torch\\experimental\\loading.py": "6f2cf5fa8bfb68e68be2ef6526d2b146a121ebbcb6133a0c0011e76220a1c578",
+    "src\\cebmf_torch\\experimental\\matrix.py": "e8797ee1dfc1810cfc1819c94af541535233bd29a3f9cea631b114b854740bc2",
+    "src\\cebmf_torch\\experimental\\__init__.py": "2f43a998aa63e7462b4a98ab2dc0ed8fcd396e577a226a3032651df07fe103f0",
+    "src\\cebmf_torch\\priors\\base.py": "89a5a35e7c27f1b4a5c3cce4b37c3287d27a3e4f8cd7fcce0800516453da4ae1",
+    "src\\cebmf_torch\\priors\\conditional.py": "21928019afbe52301269a0b446609ec788393e81a83e63730b0e81b75c961607",
+    "src\\cebmf_torch\\priors\\learned.py": "5fed7038677b08c8db2ebbe6c80b2618a53fd1bf035fc437bd357009a50fa460",
+    "src\\cebmf_torch\\priors\\mixture.py": "b003a86aed17c0eff5830e4343de14ff8a3d175e005eded6e369892769e3f10d",
+    "src\\cebmf_torch\\priors\\point.py": "570f9a967c64d880cf1649d1eb271ad39ec71bd7f36aa3353882d91beede6803",
+    "src\\cebmf_torch\\priors\\registry.py": "890400b49aa241417f28ff521b14cd2bd19f7d17e7877ba76e0067ff35d4101e",
+    "src\\cebmf_torch\\priors\\__init__.py": "d9a8b87a7f8c74264b9ab1869cb722c0b1a723d104f6bdfa05023dd913bd0add",
+    "src\\cebmf_torch\\utils\\batching.py": "48df9b0078ef6e412378e92db03aec24faace895839b9b31d77084db5fbfde74",
+    "src\\cebmf_torch\\utils\\device.py": "27d63c1b273b1f656edeb0d3ce7b4a801bb376c3f13a5ae1a2884225011fcdd7",
+    "src\\cebmf_torch\\utils\\distribution_operation.py": "f1006874dce3e456e7752acfe64c813ea5950f1e538b2e615e2220eb5f8a87bc",
+    "src\\cebmf_torch\\utils\\maths.py": "3b6f2fe405949d4b5c3e55ca7f01c1d3945c0fa9c49590b6a5bd2ae70a476617",
+    "src\\cebmf_torch\\utils\\mixture.py": "3061cb3810f76ddacf201e5677972fba64b6fdaacd992d4a64fcbf089afb203d",
+    "src\\cebmf_torch\\utils\\modalities.py": "b94f7c0efce0a0968e850eb68807349d3beab6c7082581e0f15e90df5bcad244",
+    "src\\cebmf_torch\\utils\\posterior.py": "6b0e001c499f9338f115a2941f096b1992ba20f0be7c420c3554854a53452969",
+    "src\\cebmf_torch\\utils\\standard_scaler.py": "4fdfef00614d9f0b963f9d1b1a55f1c7541b81713474615218250f89bd6350bc",
+    "src\\cebmf_torch\\utils\\__init__.py": "dd19b8580e5c8dd0948a9a4f23cc10b3608108537dbdf9ce9585815860a1d7a4"
+  },
+  "configuration": {
+    "device": "cpu",
+    "preset": "compact",
+    "families": [
+      "cgb",
+      "spiked_emdn"
+    ],
+    "methods": [
+      "fixed",
+      "fixed_profile",
+      "quadratic",
+      "quadrature"
+    ],
+    "coordinates": [
+      3
+    ],
+    "repeats": 1,
+    "seed": 1,
+    "n": 64,
+    "p": 24,
+    "rank": 6,
+    "output": "output/tree_covariate_update/cpu_smoke"
+  },
+  "resolved_settings": {
+    "cgb": {
+      "row": {
+        "penalty": 1.0511,
+        "hidden_dim": 16,
+        "n_layers": 0,
+        "n_epochs": 2,
+        "batch_size": 64,
+        "lr": 0.01
+      },
+      "integration": {
+        "approximation": "quadratic",
+        "quadrature_points": 8,
+        "parent_samples": 8
+      }
+    },
+    "spiked_emdn": {
+      "row": {
+        "penalty": 1.1,
+        "hidden_dim": 16,
+        "n_layers": 0,
+        "n_epochs": 2,
+        "batch_size": 64,
+        "lr": 0.01,
+        "n_gaussians": 5
+      },
+      "integration": {
+        "approximation": "quadratic",
+        "quadrature_points": 8,
+        "parent_samples": 8
+      }
+    }
+  },
+  "results": [
+    {
+      "family": "cgb",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 0,
+      "method": "fixed",
+      "seconds": [
+        0.007559899997431785
+      ],
+      "median_seconds": 0.007559899997431785,
+      "peak_extra_allocated_mib": [],
+      "network_work": null
+    },
+    {
+      "family": "cgb",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 0,
+      "method": "fixed_profile",
+      "seconds": [
+        0.011711500003002584
+      ],
+      "median_seconds": 0.011711500003002584,
+      "peak_extra_allocated_mib": [],
+      "network_work": {
+        "own_torch.float32": {
+          "calls": 6,
+          "input_rows": 384
+        }
+      }
+    },
+    {
+      "family": "cgb",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 2,
+      "method": "quadratic",
+      "seconds": [
+        0.023705200001131743
+      ],
+      "median_seconds": 0.023705200001131743,
+      "peak_extra_allocated_mib": [],
+      "network_work": {
+        "child_torch.float64": {
+          "calls": 2,
+          "input_rows": 2048
+        },
+        "own_torch.float32": {
+          "calls": 6,
+          "input_rows": 3072
+        }
+      }
+    },
+    {
+      "family": "cgb",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 2,
+      "method": "quadrature",
+      "seconds": [
+        0.06557269999757409
+      ],
+      "median_seconds": 0.06557269999757409,
+      "peak_extra_allocated_mib": [],
+      "network_work": {
+        "own_torch.float32": {
+          "calls": 6,
+          "input_rows": 3072
+        },
+        "child_torch.float32": {
+          "calls": 12,
+          "input_rows": 98304
+        }
+      }
+    },
+    {
+      "family": "spiked_emdn",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 0,
+      "method": "fixed",
+      "seconds": [
+        0.007953799999086186
+      ],
+      "median_seconds": 0.007953799999086186,
+      "peak_extra_allocated_mib": [],
+      "network_work": null
+    },
+    {
+      "family": "spiked_emdn",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 0,
+      "method": "fixed_profile",
+      "seconds": [
+        0.016646800009766594
+      ],
+      "median_seconds": 0.016646800009766594,
+      "peak_extra_allocated_mib": [],
+      "network_work": {
+        "own_torch.float32": {
+          "calls": 6,
+          "input_rows": 384
+        }
+      }
+    },
+    {
+      "family": "spiked_emdn",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 2,
+      "method": "quadratic",
+      "seconds": [
+        0.03934820000722539
+      ],
+      "median_seconds": 0.03934820000722539,
+      "peak_extra_allocated_mib": [],
+      "network_work": {
+        "child_torch.float64": {
+          "calls": 2,
+          "input_rows": 5120
+        },
+        "own_torch.float32": {
+          "calls": 6,
+          "input_rows": 3072
+        }
+      }
+    },
+    {
+      "family": "spiked_emdn",
+      "coordinate_zero_based": 3,
+      "covariate_dimension": 3,
+      "children": 2,
+      "method": "quadrature",
+      "seconds": [
+        0.17148720000113826
+      ],
+      "median_seconds": 0.17148720000113826,
+      "peak_extra_allocated_mib": [],
+      "network_work": {
+        "own_torch.float32": {
+          "calls": 6,
+          "input_rows": 3072
+        },
+        "child_torch.float32": {
+          "calls": 12,
+          "input_rows": 245760
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+\clearpage
+\section{Partially paired ATAC--RNA factorization}
+\label{sec:multiview}
+Construct the union of cell identifiers. Each modality has its own features,
+rank, noise and observation mask:
+\[
+Y^A=L^A(F^A)^\top+E^A,\qquad
+Y^R=L^R(F^R)^\top+E^R.
+\]
+The joint loading prior is
+\begin{align}
+p(L_i^A,L_i^R\mid X_i)
+={}&\prod_{k=1}^{K_A}g^A_k(L^A_{ik}\mid X_i,L^A_{i,<k})\notag\\
+&\times\prod_{k=1}^{K_R}
+g^R_k(L^R_{ik}\mid X_i,L_i^A,L^R_{i,<k}).
+\label{eq:multiviewprior}
+\end{align}
+This is the same autoregressive construction with all ATAC nodes ordered
+before RNA nodes. It permits different ranks and does not require a common
+loading matrix. An ash prior is learned separately for each feature column.
+The directed prior describes a conditional association, not an identified
+causal direction.
+
+\subsection{Observed likelihood and the three cell groups}
+Let \(m_i^A,m_i^R\in\{0,1\}\) indicate whether a modality has any observed
+entries in cell \(i\). Writing each modality likelihood using only its
+observed features, the row likelihood at fixed feature factors is
+\begin{equation}
+\int p(L_i^A\mid X_i)p(L_i^R\mid L_i^A,X_i)
+\,p(Y_i^{A,\mathrm{obs}}\mid L_i^A)^{m_i^A}
+\,p(Y_i^{R,\mathrm{obs}}\mid L_i^R)^{m_i^R}
+\,dL_i^A\,dL_i^R.
+\label{eq:observedmultiview}
+\end{equation}
+This conditions on the missingness pattern and assumes it is ignorable for
+the model parameters. A mechanism depending on unobserved biology may need
+an additional missingness model.
+
+\begin{description}[leftmargin=0pt]
+\item[Paired cell.] Both likelihoods contribute. An ATAC update includes
+RNA-child feedback; an RNA update averages over uncertain ATAC parents.
+\item[RNA-only cell.] Direct ATAC likelihood statistics satisfy
+\(a^A=b^A=0\). ATAC loadings remain latent parents of the observed RNA.
+Their updates use the prior and child terms in \eqref{eq:qstar}; there is
+no division by a zero precision and no substitution of a zero loading.
+\item[ATAC-only cell.] The entire unobserved RNA branch integrates out:
+\[
+\int p_\theta(L_i^R\mid L_i^A,X_i)\,dL_i^R=1.
+\]
+The cell informs the ATAC model but provides no direct evidence for the
+separately parameterized RNA conditional. RNA predictions are generated
+after fitting by averaging that conditional over inferred ATAC uncertainty.
+\end{description}
+
+\clearpage
+\subsection{Why an unobserved child should be collapsed}
+Retaining a factorized \(q(L_i^A)q(L_i^R)\) for an ATAC-only cell adds
+\begin{equation}
+\E_q\log p_\theta(L_i^R\mid L_i^A,X_i)+H(q(L_i^R))
+=-\E_{q(L_i^A)}\operatorname{KL}
+\{q(L_i^R)\Vert p_\theta(L_i^R\mid L_i^A,X_i)\}.
+\label{eq:missinggap}
+\end{equation}
+This may penalize dependence solely because the variational family cannot
+represent it. It is a valid lower-bound gap, but there is no observed RNA
+evidence that warrants it. Integrating out the branch removes this avoidable
+gap. Equivalently, an unrestricted conditional variational factor could set
+\(q(L_i^R\mid L_i^A)=p_\theta(L_i^R\mid L_i^A,X_i)\).
+
+For each row, retain nodes with observed descendants and eliminate the
+remaining terminal branches in reverse generative order. In the implemented
+ATAC-to-RNA graph, RNA-only cells retain their ATAC parents; ATAC-only cells
+omit all RNA nodes from the fitting objective. Regularization for an omitted
+node is omitted for that row as well. Posterior prediction of eliminated
+nodes follows the generative ordering after the fit.
+
+\subsection{The same learning equations, two observation models}
+For node \(L^m_{ik}\), compute \(a_{ik},b_{ik}\) from modality \(m\)'s mask,
+precision, residual and feature moments. Then apply \eqref{eq:learning}
+with its active within- and between-modality children. Update \(F^m_k\)
+through the original ash normal-means solver using that modality's observed
+entries. Missing-modality predictions are never inserted as observations
+in a later feature or noise fit.
+
+Removing cross-modality edges gives separate conditional-loading models.
+Removing \emph{all} latent-covariate edges also gives the original scalar
+cEBMF normal-means updates. Preserving the original code path when no graph
+is required retains its initialization, options and finite optimizer behavior.
+
+\subsection{Identification and evaluation}
+Paired cells anchor the relationship between modalities. With no pairing,
+an unrestricted conditional distribution is generally not identified by the
+two marginal distributions; additional assumptions or anchors are needed.
+The paired subset should cover the states in which predictions will be used.
+Its mere existence is a software precondition, not a statistical sufficiency
+guarantee.
+
+Evaluate denoising on paired cells separately from prediction of an entire
+missing modality. Hold out complete cell-modality rows to assess the latter.
+Fit preprocessing and choose hyperparameters without those held-out values.
+The Gaussian derivation applies to the toy observations and appropriately
+processed real measurements; a raw-count likelihood requires a separate
+extension of the normal-means calculation.
