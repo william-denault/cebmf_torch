@@ -670,6 +670,22 @@ class cEBMF:
         if not idxs:
             return
         keep = [i for i in range(self.model.K) if i not in idxs]
+        first_dropped = min(idxs)
+        # LC-ASH fitted state must retain its covariate meaning, even when
+        # removing a factor would replace a single input with an intercept.
+        for side, self_cov, prior, states in (
+            ("L", self.covariate.self_row_cov, self.prior_L_fn, self.model_state_L),
+            ("F", self.covariate.self_col_cov, self.prior_F_fn, self.model_state_F),
+        ):
+            if (
+                self_cov
+                and prior.name in {"lcash", "po_lcash"}
+                and any(i > first_dropped and states[i] is not None for i in keep)
+            ):
+                raise ValueError(
+                    f"Pruning would change covariate columns for fitted {prior.name} on {side}; "
+                    "saved state cannot be reused. Use allow_backfitting=False to keep the current factor design."
+                )
         self.L = self.L[:, keep]
         self.L2 = self.L2[:, keep]
         self.F = self.F[:, keep]
@@ -679,7 +695,6 @@ class cEBMF:
         # A surviving factor loses self-covariates only when an earlier factor
         # is removed. Its cached prior then belongs to a different input design
         # and must be refitted, even if the new intercept has the same width.
-        first_dropped = min(idxs)
         self.model_state_L = [
             None if self.covariate.self_row_cov and i > first_dropped else self.model_state_L[i] for i in keep
         ]
