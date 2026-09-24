@@ -280,6 +280,39 @@ def test_refitting_does_not_reuse_pruned_grid_and_maxiter_overrides_epochs():
     torch.testing.assert_close(result.post_mean, again.post_mean)
 
 
+@pytest.mark.parametrize("solver", [hmm_pos_posterior_means, hmm_neg_posterior_means])
+def test_one_sided_adapter_does_not_create_a_spike_on_a_null_sequence(solver):
+    y = torch.zeros(100, dtype=torch.float64)
+    result = solver(None, y, torch.ones_like(y), n_epochs=10)
+    assert result.post_mean.abs().max() < 1e-4
+    # The first coordinate must not prevent pruning an unsupported factor.
+    assert result.pi0_null.min() > 0.999
+    assert (result.objective_history.diff() >= -1e-9).all()
+
+
+@pytest.mark.parametrize("start,stop", [(0, 1), (0, 20), (40, 60), (99, 100)])
+def test_learning_initial_probabilities_preserves_real_boundary_and_interior_signal(start, stop):
+    y = torch.zeros(100, dtype=torch.float64)
+    y[start:stop] = 5
+    result = hmm_pos_posterior_means(None, y, torch.full_like(y, 0.25), n_epochs=10)
+    assert result.post_mean[start:stop].min() > 4.5
+    assert result.post_mean[y == 0].max() < 0.01
+    assert result.pi0_null[start:stop].max() < 0.01
+
+
+def test_hmm_adapter_can_keep_explicit_initial_probabilities_fixed():
+    y, se = torch.zeros(100, dtype=torch.float64), tensor(1)
+    options = dict(
+        mu=[0, 1], prior_sd=[0], init_prob=[0.1, 0.9], estimate_init=False,
+        maxiter=5, learn_state_means=False, prune_states=False,
+    )
+    result = hmm_pos_posterior_means(None, y, se, **options)
+    reference = fit_ash_hmm(y, se, nonnegative_state_means=True, **options)
+    torch.testing.assert_close(result.model_param["init_prob"], tensor([0.1, 0.9]))
+    torch.testing.assert_close(result.post_mean, reference.post_mean)
+    torch.testing.assert_close(result.loss, reference.loss)
+
+
 def test_penalty_favors_transitions_to_zero():
     y, se = tensor([0.1, -0.3, 1.8, 1.3, -1.7, -1.1, 0.2, 0.4]), tensor(0.5)
     kwargs = {

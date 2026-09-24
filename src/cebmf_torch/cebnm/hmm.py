@@ -642,8 +642,11 @@ def hmm_posterior_means(
     irreversible state pruning and factor rescaling make stale grids unsafe.
     ``maxiter`` overrides ``n_epochs`` (cEBMF's ``internal_epoch``); otherwise
     the standalone default is 20. Remaining options go to :func:`fit_ash_hmm`.
+    Initial state probabilities are learned by default to avoid unsupported
+    boundary spikes; pass ``estimate_init=False`` to keep them fixed.
     The result includes ``lfsr``, one local false sign rate per observation.
     """
+    kwargs.setdefault("estimate_init", True)
     return fit_ash_hmm(
         betahat,
         sebetahat,

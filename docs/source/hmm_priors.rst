@@ -61,6 +61,13 @@ scale-invariant measure of each component's contribution is::
 
    component_rms = (res.L.square().mean(0) * res.F.square().mean(0)).sqrt()
 
+The cEBMF HMM adapters learn initial state probabilities by default
+(``estimate_init=True``). Holding them fixed while learning transitions can
+leave an unsupported spike at the first feature, even on an all-zero input.
+Set ``prior_F_kwargs={"estimate_init": False}`` to request fixed initial
+probabilities. The low-level ``fit_ash_hmm`` retains its fSuSiE-compatible
+default of ``estimate_init=False``.
+
 The ``gbinary`` solver compares its fitted mixture with the all-zero boundary
 prior. If the boundary fits at least as well, it returns zero moments and
 zero slab weight, allowing cEBMF to prune that unused factor. This check
@@ -175,7 +182,8 @@ HMM, preserving the cEBMF KL calculation. ``history`` records log likelihood;
 ``objective`` and ``objective_history`` report the penalized log likelihood.
 State pruning retains fSuSiE's check on the full marginal likelihood.
 
-The following defaults match the referenced fSuSiE exact solver:
+The following low-level ``fit_ash_hmm`` defaults match the referenced fSuSiE
+exact solver. The cEBMF adapters override ``estimate_init`` to ``True``:
 
 .. list-table:: Main fitting controls
    :header-rows: 1
