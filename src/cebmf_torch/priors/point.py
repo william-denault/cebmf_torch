@@ -11,6 +11,11 @@ from cebmf_torch.ebnm.point_laplace import ebnm_point_laplace
 
 from .base import Prior, PriorBuilder
 
+# Slab-weight clamp used when converting pi_slab back to logit(pi_slab)
+# for warm-start. Matches the range used inside the L-BFGS closures.
+_WARMSTART_EPS = 1e-8
+_WARMSTART_LOG_A_FLOOR = 1e-12
+
 
 class PointPriorType(StrEnum):
     """
@@ -34,6 +39,36 @@ builder_functions: dict[PointPriorType, Callable] = {
     PointPriorType.EXP: ebnm_point_exp,
     PointPriorType.GBINARY: ebnm_gb,
 }
+
+
+def _warmstart_par_init_from_result(prior_type: PointPriorType, obj: Any) -> tuple[float, float, float] | None:
+    """Extract ``(logit(pi_slab), log(a), mu)`` from an EBNM result for the
+    next iteration's warm-start. Returns ``None`` for prior types whose
+    underlying solver does not accept this ``par_init`` tuple.
+
+    The L-BFGS solvers in ``ebnm_point_laplace`` / ``ebnm_point_exp`` are
+    non-convex; without a warm-start they restart from a fixed init each
+    cEBMF iteration and can converge to a different local optimum, breaking
+    ELBO monotonicity. Threading the previous solution through ``par_init``
+    fixes that.
+    """
+    if prior_type == PointPriorType.LAPLACE:
+        a_val = obj.a
+        mu_val = obj.mu
+    elif prior_type == PointPriorType.EXP:
+        a_val = obj.scale  # named ``scale`` for API compatibility but is the rate
+        mu_val = obj.mode
+    else:
+        # GBINARY uses a different init API (par_init_mu / par_init_pi) and is
+        # not handled here. EM there is convex in (mu, pi) for the inner step
+        # so the monotonicity story is less acute; can be added separately.
+        return None
+
+    pi_slab = obj.pi_slab.detach().clamp(_WARMSTART_EPS, 1.0 - _WARMSTART_EPS)
+    logit_pi = (torch.log(pi_slab) - torch.log1p(-pi_slab)).item()
+    log_a = torch.log(torch.as_tensor(a_val).clamp_min(_WARMSTART_LOG_A_FLOOR)).item()
+    mu_f = float(mu_val)
+    return (logit_pi, log_a, mu_f)
 
 
 class PointBuilder(PriorBuilder):
@@ -117,7 +152,23 @@ class PointBuilder(PriorBuilder):
             Fitted prior object with posterior means and related quantities.
         """
         del device  # point priors run on the input tensors' device directly
-        obj = builder_functions[self.type](betahat, sebetahat, **self.kwargs)
+
+        # Warm-start: if cEBMF gave us a previous solution for this factor,
+        # feed it back as ``par_init`` so L-BFGS doesn't restart from the
+        # default each iteration. The previous-iteration ``par_init`` is the
+        # only thing we actually need from ``model_param``; user-supplied
+        # kwargs take precedence (so explicit ``par_init`` in ``self.kwargs``
+        # is not overridden by warm-start).
+        fit_kwargs = dict(self.kwargs)
+        if (
+            isinstance(model_param, dict)
+            and "par_init" in model_param
+            and "par_init" not in fit_kwargs
+            and self.type in (PointPriorType.LAPLACE, PointPriorType.EXP)
+        ):
+            fit_kwargs["par_init"] = model_param["par_init"]
+
+        obj = builder_functions[self.type](betahat, sebetahat, **fit_kwargs)
         # `obj.pi_slab` is the slab (non-null) weight by the convention of
         # EBNMPointExp / EBNMLaplaceResult / EBNMGBResult. The Prior.pi0_null
         # field expected by `cebmf._should_prune_factor` (cebmf.py:482) is
@@ -126,11 +177,21 @@ class PointBuilder(PriorBuilder):
         # avoids the per-fit-call host sync that the previous `float(...)`
         # casts forced.
         pi_slab_t = obj.pi_slab
+
+        # Build the model_param payload for the next iteration's warm-start.
+        # For LAPLACE / EXP we encode the converged ``par_init`` tuple; for
+        # other priors we pass through whatever the caller had.
+        next_par_init = _warmstart_par_init_from_result(self.type, obj)
+        if next_par_init is not None:
+            next_model_param: Any = {"par_init": next_par_init}
+        else:
+            next_model_param = model_param
+
         return Prior(
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,
             loss=-obj.log_lik,
-            model_param=model_param,
+            model_param=next_model_param,
             pi0_null=1.0 - pi_slab_t,
             pi_slab=pi_slab_t,
         )

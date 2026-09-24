@@ -263,8 +263,12 @@ epochs per call. ``po_lcash_posterior_means`` supports the same calling pattern.
     torch.testing.assert_close(updated.scale, first.scale)
 
 Within cEBMF, fitted state is passed between successive factor updates.
-If factor pruning changes the number of covariate columns, the next update
-raises ``ValueError`` because the saved state requires the original column count.
+Each factor's self-covariates contain only earlier factors. Pruning that
+changes the inputs of a fitted LC-ASH or PO-LC-ASH prior raises ``ValueError``
+before removing factors or discarding saved state. This also applies when
+a single earlier-factor input would be replaced by an intercept of the same
+width. Removing only later factors leaves the inputs unchanged and is allowed.
+Use ``allow_backfitting=False`` to retain the current factor design.
 
 Custom Initialization
 ~~~~~~~~~~~~~~~~~~~~~

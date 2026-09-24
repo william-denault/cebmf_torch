@@ -200,7 +200,20 @@ def ebnm_point_exp(
 
         loss = -(llik_sum - penalty)  # maximize llik_sum -> minimize negative
 
-        # Strict: don't mask NaNs on the value; let failures surface. Gradients only from autograd.
+        # NaN safeguard for the line search. When LBFGS probes an extreme
+        # (s*a)^2 region in float32, `lg` can underflow / overflow inside
+        # `_loglik_exp_convolved` and the loss comes back non-finite; the
+        # strong-Wolfe line search then has no way to make a sensible step.
+        # Feeding it a large finite penalty instead lets the optimizer back
+        # off without aborting, matching the long-standing behaviour in
+        # `point_laplace.py` and `generalized_binary.py`. Gradients still
+        # flow from the un-clipped expression above via autograd.
+        loss = torch.nan_to_num(
+            loss,
+            nan=_const_like(loss, 1e30),
+            posinf=_const_like(loss, 1e30),
+            neginf=_const_like(loss, 1e30),
+        )
         loss.backward()
         return loss
 
@@ -246,16 +259,38 @@ def ebnm_point_exp(
         # pure observed marginal log-likelihood (no penalty)
         llik = torch.logaddexp(torch.log1p(-pi_slab) + lf, torch.log(pi_slab.clamp_min(eps_t)) + lg).sum()
 
-        # Optional spike-only shortcut — branchless to avoid a per-call host sync.
-        tresh_pi0_t = _const_like(x, tresh_pi0)
-        spike_only = pi_slab < tresh_pi0_t  # 0-d bool tensor
+        # Spike-only fallback values. Matches Stephens-lab `ebnm` exactly: the
+        # posterior under pi_slab = 0 is a point mass at mu, so E[θ] = mu and
+        # E[θ²] = mu² (no +1e-4 fudge — that was an unprincipled offset that
+        # biased `tau` in cEBMF).
         post_mean_so = torch.zeros_like(x) + mu
-        post_mean2_so = torch.zeros_like(x) + mu * mu + _const_like(x, 1e-4)
+        post_mean2_so = torch.zeros_like(x) + mu * mu
         llik_so = lf.sum()
-        post_mean = torch.where(spike_only, post_mean_so, post_mean)
-        post_mean2 = torch.where(spike_only, post_mean2_so, post_mean2)
+
+        # Boundary check, ported from R's `pe_postcomp`: if the all-spike model
+        # (pi_slab = 0) has a strictly higher marginal log-likelihood than the
+        # LBFGS solution, prefer the all-spike solution. This is the principled
+        # replacement for the old `pi_slab < tresh_pi0` magic-threshold
+        # shortcut. The comparison is a no-op on healthy fits (LBFGS finds the
+        # global optimum, llik > llik_so) and triggers exactly when the LBFGS
+        # solution is provably suboptimal — including the cases where the slab
+        # branch went non-finite (the `~isfinite(llik)` term handles that, since
+        # NaN > x is False).
+        prefer_spike = (~torch.isfinite(llik)) | (llik_so > llik)
+        post_mean = torch.where(prefer_spike, post_mean_so, post_mean)
+        post_mean2 = torch.where(prefer_spike, post_mean2_so, post_mean2)
+        llik = torch.where(prefer_spike, llik_so, llik)
+        # Force pi_slab toward 0 when we picked the spike branch so downstream
+        # cEBMF factor pruning / pi0_null reporting sees the right thing.
+        pi_slab = torch.where(prefer_spike, eps_t, pi_slab)
+
+        # Per-element NaN guard: belt-and-braces in case a few individual
+        # observations had non-finite truncated-normal moments even though the
+        # aggregate llik came back finite. Route those entries to the spike
+        # values that the boundary check already validated.
+        post_mean = torch.where(torch.isfinite(post_mean), post_mean, post_mean_so)
+        post_mean2 = torch.where(torch.isfinite(post_mean2), post_mean2, post_mean2_so)
         post_sd = (post_mean2 - post_mean**2).clamp_min(_const_like(x, 0.0)).sqrt()
-        llik = torch.where(spike_only, llik_so, llik)
 
     # Keep scalar fields on-device as 0-d tensors — `cebmf.py` consumes them
     # via `priors/point.py` which now stays in tensor space.

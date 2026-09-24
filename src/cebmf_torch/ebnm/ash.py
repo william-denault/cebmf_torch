@@ -139,12 +139,9 @@ class ASHResult:
         scale, log_pi0, L, pm_obj = ash_optimisers[prior](x, s, config)
         pi0 = torch.exp(log_pi0)
 
-        # clamp threshold as device/dtype-aware tensor
-        threshold = torch.tensor(config.threshold_loglikelihood, dtype=L.dtype, device=L.device)
-        Lc = torch.maximum(L, threshold)
-
+        # Use unclipped L to match the posterior calculation for the EBNM identity.
         # Python-literal floor avoids a host sync from `eps.item()`.
-        log_lik_rows = torch.logsumexp(Lc + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
+        log_lik_rows = torch.logsumexp(L + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
         log_lik = log_lik_rows.sum()  # 0-d tensor on-device
         return cls(
             post_mean=pm_obj.post_mean,

@@ -103,6 +103,44 @@ print(fit.L.shape, fit.F.shape, fit.tau.item())
 
 
 
+## HMM priors for ordered factors
+
+Use `prior_F="hmm"` to model each factor along the existing column order, or
+`prior_L="hmm"` along the row order. `hmm_pos` constrains effects to be
+nonnegative; `hmm_neg` constrains them to be nonpositive. All three include
+an exact zero state by default and assume equally spaced adjacent entries.
+
+```python
+import torch
+from cebmf_torch import cEBMF
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+K = 2
+X_obs_RNA = torch.randn(40, 80, device=device)  # Replace with your ordered data.
+
+model = cEBMF(
+    data=X_obs_RNA,
+    prior_L="gbinary",
+    prior_F="hmm",  # also "hmm_pos" or "hmm_neg"
+    prior_F_kwargs={"penalty": 1.5, "maxiter": 20},
+    K=K,
+    device=device,
+)
+model.initialise_factors()
+fit = model.fit(maxit=30)
+```
+
+For all three HMM priors, `penalty=1` is unpenalized (the default), and values
+above 1 favor zero effects.
+
+The HMM ignores `X_f` (or `X_l` for an HMM on L) and self-covariates on that
+side. Supplying them produces one warning per affected side at construction.
+For actual locations together with other side information, include location
+in the covariate matrix and use `emdn` or `spiked_emdn`.
+
+See the [HMM prior guide](docs/source/hmm_priors.rst) for the fSuSiE model,
+controls, direct EBNM calls, and numerical validation.
+
 ## Notes & Tips
 
 - All computations run on the device of your input tensors (CPU or GPU).

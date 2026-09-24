@@ -38,6 +38,9 @@ examples = [
     "transformers>=4.56.1",
     "uni>=0.1",
 ]
+[tool.setuptools]
+license-files = ["LICENCE.md", "THIRD_PARTY_NOTICES.md"]
+
 [tool.ruff]
 line-length = 119
 target-version = "py311"

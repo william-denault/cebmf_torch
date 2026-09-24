@@ -87,16 +87,47 @@ def test_cebmf_repeated_updates_retain_each_factor_grid(prior, monkeypatch):
 
 @pytest.mark.parametrize("prior", PRIOR_TYPES)
 @pytest.mark.parametrize("side", ("row", "col"))
-def test_cebmf_pruning_rejects_changed_self_covariate_count(prior, side):
+def test_cebmf_pruning_preserves_first_factor_self_covariate_state(prior, side):
     # A zero pruning threshold deterministically retains only the first factor.
     model = make_model(prior, prune_thresh=0.0, **{f"self_{side}_cov": True})
     model.fit(maxit=1)
     assert model.model.K == 1
     saved = model.model_state_L[0] if side == "row" else model.model_state_F[0]
     external = model.covariate.X_l if side == "row" else model.covariate.X_f
-    assert saved["feature_mean"].numel() == external.shape[1] + 1
+    assert saved["feature_mean"].numel() == external.shape[1]
 
-    # Pruning removed the other-factor covariate. Its old fitted coefficients
-    # cannot be reinterpreted as coefficients for the remaining columns.
-    with pytest.raises(ValueError, match="covariate columns"):
-        model.fit(maxit=1)
+    # The first factor has no earlier-factor covariates. Removing later
+    # factors leaves its input design and fitted coordinates unchanged.
+    result = model.fit(maxit=1)
+    assert torch.isfinite(result.L).all()
+    assert torch.isfinite(result.F).all()
+    resumed = model.model_state_L[0] if side == "row" else model.model_state_F[0]
+    for field in ("scale", "feature_mean", "feature_sd"):
+        torch.testing.assert_close(resumed[field], saved[field], rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("prior", PRIOR_TYPES)
+@pytest.mark.parametrize("side", ("row", "col"))
+@pytest.mark.parametrize("external", (False, True))
+def test_cebmf_pruning_rejects_changed_lcash_covariates(prior, side, external):
+    model = make_model(prior, allow_backfitting=False, **{f"self_{side}_cov": True})
+    if not external:
+        setattr(model.covariate, "X_l" if side == "row" else "X_f", None)
+    model.fit(maxit=1)
+    saved_l, saved_f = model.model_state_L.copy(), model.model_state_F.copy()
+    factors_l, factors_f = model.L.clone(), model.F.clone()
+
+    # Removing factor 0 changes the surviving factor's inputs. Without
+    # external covariates, the width stays one but its meaning changes
+    # from factor 0 to an intercept, which must also be rejected.
+    model.pi0_L = [1.0, 0.0]
+    model.pi0_F = [0.0, 0.0]
+    model.model.allow_backfitting = True
+    with pytest.raises(ValueError, match="Pruning would change covariate columns"):
+        model._backfit()
+
+    assert model.model.K == 2
+    torch.testing.assert_close(model.L, factors_l, rtol=0, atol=0)
+    torch.testing.assert_close(model.F, factors_f, rtol=0, atol=0)
+    assert all(a is b for a, b in zip(model.model_state_L, saved_l, strict=True))
+    assert all(a is b for a, b in zip(model.model_state_F, saved_f, strict=True))

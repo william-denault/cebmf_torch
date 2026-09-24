@@ -2,7 +2,9 @@
 
 Asserts that ``result.loss == -log p(y | fitted prior)`` (i.e. the negative
 full-data marginal log-likelihood, no penalty), as required by the cebmf
-consumer at ``cebmf/cebmf.py:299``: ``self.kl_l[k] = (-resL.loss) - nm_ll_L``.
+consumer in ``cebmf/cebmf.py``: ``self.kl_l[k] = nm_ll_L + resL.loss``,
+which evaluates to the non-negative KL(q(L_k) || p(L_k)) only when ``loss``
+is the negative marginal log-likelihood under the fitted prior.
 
 Before the fix the returned ``loss`` was ``final_epoch_loss`` from training
 (a sum of per-batch ``pen_loglik_loss`` values on the last epoch), which is
