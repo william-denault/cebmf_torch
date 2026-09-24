@@ -158,9 +158,7 @@ def test_lfsr_counts_zero_atom_in_both_sign_tails():
 
 def test_gaussian_lfsr_retains_small_tail_probabilities():
     y = tensor([0, 10 * math.sqrt(2), -10 * math.sqrt(2)])
-    result = fit_ash_hmm(
-        y, tensor(1), mu=[0], prior_sd=[0, 1], init_rho=[[0, 1]], null_state="adaptive", maxiter=0
-    )
+    result = fit_ash_hmm(y, tensor(1), mu=[0], prior_sd=[0, 1], init_rho=[[0, 1]], null_state="adaptive", maxiter=0)
     # The posterior is N(y/2, 1/2); use erfc as an independent normal-tail oracle.
     tail = 0.5 * math.erfc(10 / math.sqrt(2))
     torch.testing.assert_close(result.lfsr, tensor([0.5, tail, tail]), atol=0, rtol=1e-12)
@@ -302,10 +300,15 @@ def test_learning_initial_probabilities_preserves_real_boundary_and_interior_sig
 
 def test_hmm_adapter_can_keep_explicit_initial_probabilities_fixed():
     y, se = torch.zeros(100, dtype=torch.float64), tensor(1)
-    options = dict(
-        mu=[0, 1], prior_sd=[0], init_prob=[0.1, 0.9], estimate_init=False,
-        maxiter=5, learn_state_means=False, prune_states=False,
-    )
+    options = {
+        "mu": [0, 1],
+        "prior_sd": [0],
+        "init_prob": [0.1, 0.9],
+        "estimate_init": False,
+        "maxiter": 5,
+        "learn_state_means": False,
+        "prune_states": False,
+    }
     result = hmm_pos_posterior_means(None, y, se, **options)
     reference = fit_ash_hmm(y, se, nonnegative_state_means=True, **options)
     torch.testing.assert_close(result.model_param["init_prob"], tensor([0.1, 0.9]))
@@ -333,8 +336,16 @@ def test_penalty_favors_transitions_to_zero():
 def test_single_adaptive_state_has_the_ash_spike_penalty():
     y, se, sd, initial = tensor([0.1, 0.2, 1.5, -0.8]), tensor(0.5), tensor([0, 1]), tensor([0.4, 0.6])
     result = fit_ash_hmm(
-        y, se, mu=[0], prior_sd=sd, init_rho=initial[None], null_state="adaptive",
-        penalty=1.5, maxiter=1, learn_state_means=False, prune_states=False,
+        y,
+        se,
+        mu=[0],
+        prior_sd=sd,
+        init_rho=initial[None],
+        null_state="adaptive",
+        penalty=1.5,
+        maxiter=1,
+        learn_state_means=False,
+        prune_states=False,
     )
     component_log = torch.distributions.Normal(0, (se.square() + sd.square()).sqrt()).log_prob(y[:, None])
     counts = (component_log + initial.log()).softmax(1).sum(0) + tensor([0.5, 0])
@@ -349,8 +360,16 @@ def test_single_adaptive_state_has_the_ash_spike_penalty():
 def test_penalty_objective_and_unpenalized_loss(penalty):
     y, se = tensor([0.1, -0.3, 1.8, 1.3, -1.7, -1.1, 0.2, 0.4]), tensor([0.5] * 8)
     result = fit_ash_hmm(
-        y, se, mu=[0, 1.4, -1.2], prior_sd=[0, 0.3, 1], null_state="adaptive",
-        estimate_init=True, penalty=penalty, maxiter=12, learn_state_means=False, prune_states=False,
+        y,
+        se,
+        mu=[0, 1.4, -1.2],
+        prior_sd=[0, 0.3, 1],
+        null_state="adaptive",
+        estimate_init=True,
+        penalty=penalty,
+        maxiter=12,
+        learn_state_means=False,
+        prune_states=False,
     )
     params = result.model_param
     emission = torch.logsumexp(
@@ -369,8 +388,15 @@ def test_penalty_objective_and_unpenalized_loss(penalty):
 
 def test_penalty_objective_is_recomputed_after_pruning():
     result = fit_ash_hmm(
-        tensor([0.1, -0.1, 0]), tensor(0.1), mu=[0, 10, -10], prior_sd=[0],
-        penalty=1.5, maxiter=1, prune_start=1, prune_every=1, prune_max_fraction=0.9,
+        tensor([0.1, -0.1, 0]),
+        tensor(0.1),
+        mu=[0, 10, -10],
+        prior_sd=[0],
+        penalty=1.5,
+        maxiter=1,
+        prune_start=1,
+        prune_every=1,
+        prune_max_fraction=0.9,
     )
     assert result.state_counts == [3, 1]
     torch.testing.assert_close(result.objective, result.log_likelihood)

@@ -6,13 +6,20 @@ import torch
 from cebmf_torch import cEBMF
 
 
-@pytest.mark.parametrize("prior", ["spiked_emdn", "emdn", "cash", "cgb", "cgb_sharp", "cgb_sharp_2"])
+@pytest.mark.parametrize(
+    "prior", ["spiked_emdn", "emdn", "cash", "cgb", "cgb_sharp", "cgb_sharp_2", "lcash", "po_lcash"]
+)
 @pytest.mark.parametrize("side", ["L", "F"])
 @pytest.mark.parametrize("external", [False, True])
 def test_learned_self_covariate_prior_can_refit_after_pruning(prior, side, external):
     torch.manual_seed(12)
     data = torch.randn(16, 12)
     n = data.shape[0 if side == "L" else 1]
+    prior_kwargs = {"n_epochs": 1}
+    if prior in {"lcash", "po_lcash"}:
+        prior_kwargs["ash_init"] = False
+    else:
+        prior_kwargs.update(hidden_dim=8, n_layers=1)
     model = cEBMF(
         data,
         K=4,
@@ -20,7 +27,7 @@ def test_learned_self_covariate_prior_can_refit_after_pruning(prior, side, exter
         device="cpu",
         **{
             f"prior_{side}": prior,
-            f"prior_{side}_kwargs": {"n_epochs": 1, "hidden_dim": 8, "n_layers": 1},
+            f"prior_{side}_kwargs": prior_kwargs,
             "self_row_cov" if side == "L" else "self_col_cov": True,
             f"X_{side.lower()}": torch.randn(n, 2) if external else None,
         },
@@ -51,9 +58,7 @@ def test_learned_self_covariate_prior_can_refit_after_pruning(prior, side, exter
 @pytest.mark.parametrize("self_row_cov,self_col_cov", [(True, False), (False, True), (True, True), (False, False)])
 @pytest.mark.parametrize("dropped", [0, 1, 2])
 def test_pruning_preserves_cached_priors_only_for_unchanged_covariates(self_row_cov, self_col_cov, dropped):
-    model = cEBMF(
-        torch.randn(6, 5), K=3, self_row_cov=self_row_cov, self_col_cov=self_col_cov, device="cpu"
-    )
+    model = cEBMF(torch.randn(6, 5), K=3, self_row_cov=self_row_cov, self_col_cov=self_col_cov, device="cpu")
     model.initialise_factors()
     states_l = [{"factor": k} for k in range(3)]
     states_f = [{"factor": k} for k in range(3)]

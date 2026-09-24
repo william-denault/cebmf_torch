@@ -404,9 +404,7 @@ def sharp_2cgb_posterior_means(
                 )
                 sigma1_sq = m_step_sigma(gamma1, mu_pos, xhat, se) * omega
                 sigma2_sq = m_step_sigma(gamma2, mu_neg, xhat, se) * omega
-            loss = cgb2_loss(
-                pi0, pi1, pi2, mu_pos, mu_neg, sigma1_sq, sigma2_sq, xhat, se, penalty=penalty
-            )
+            loss = cgb2_loss(pi0, pi1, pi2, mu_pos, mu_neg, sigma1_sq, sigma2_sq, xhat, se, penalty=penalty)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -426,7 +424,6 @@ def sharp_2cgb_posterior_means(
     with torch.no_grad():
         pi0, pi1, pi2, mu_pos, mu_neg = model(dataset.X)
         J = dataset.betahat.shape[0]
-        K = 3
         dt = dataset.betahat.dtype
         dev = dataset.betahat.device
 
@@ -443,12 +440,8 @@ def sharp_2cgb_posterior_means(
 
         # Per-observation scales (spike = 0, slabs = sigma_1, sigma_2)
         zeros = torch.zeros(J, dtype=dt, device=dev)
-        scale = torch.stack(
-            [zeros, sigma1.expand(J), sigma2.expand(J)], dim=-1
-        )  # (J, K)
-        location = torch.stack(
-            [zeros, mu_pos.expand(J), mu_neg.expand(J)], dim=-1
-        )  # (J, K)
+        scale = torch.stack([zeros, sigma1.expand(J), sigma2.expand(J)], dim=-1)  # (J, K)
+        location = torch.stack([zeros, mu_pos.expand(J), mu_neg.expand(J)], dim=-1)  # (J, K)
 
         # Component-wise marginal log-likelihoods log p(x | k)
         s2 = dataset.sebetahat**2

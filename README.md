@@ -12,6 +12,8 @@ You can also open up the notebook [directly in Google Colab](https://colab.resea
 
 - Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
 
+- LC-ASH and PO-LC-ASH: See [component selection and fitted-state reuse](https://cebmf-torch.readthedocs.io/en/latest/examples.html#linear-covariate-adaptive-shrinkage).
+
 - Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
 
 - To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
@@ -109,6 +111,13 @@ nonnegative; `hmm_neg` constrains them to be nonpositive. All three include
 an exact zero state by default and assume equally spaced adjacent entries.
 
 ```python
+import torch
+from cebmf_torch import cEBMF
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+K = 2
+X_obs_RNA = torch.randn(40, 80, device=device)  # Replace with your ordered data.
+
 model = cEBMF(
     data=X_obs_RNA,
     prior_L="gbinary",
@@ -143,5 +152,19 @@ controls, direct EBNM calls, and numerical validation.
 
 Contributions, bug reports, and feature requests are welcome! Please open an issue or pull request on GitHub.
 
-For questions or help, open an issue or contact the maintainer.
+Each Python code block in `README.md` and `docs/source/examples.rst` must run
+independently, including its own imports and input setup. The
+[Examples Test workflow](.github/workflows/examples.yml) wraps each block in a
+separate pytest function, so a block cannot use variables defined in an earlier
+block. After changing these examples, generate and run their tests from the
+repository root:
 
+```bash
+uv run python tests/generate_doc_examples_test.py
+uv run pytest tests/doc_examples_test.py
+```
+
+Edit the source documentation, not `tests/doc_examples_test.py`, which is
+generated and ignored by Git. A normal pytest run does not generate these tests.
+
+For questions or help, open an issue or contact the maintainer.

@@ -55,7 +55,10 @@ def stress(prior_name, n_runs=20, N=50, P=40, noise_std=0.51, K=5, maxit=20):
         Y = true + noise_std * torch.randn(N, P, device=device)
 
         model = cEBMF(
-            data=Y, K=K, prior_F=prior_name, prior_L=prior_name,
+            data=Y,
+            K=K,
+            prior_F=prior_name,
+            prior_L=prior_name,
             allow_backfitting=False,
         )
         model.initialise_factors()

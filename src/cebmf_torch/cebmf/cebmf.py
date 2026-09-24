@@ -1,4 +1,5 @@
 import math
+from copy import copy
 from dataclasses import dataclass
 from enum import StrEnum, auto
 from warnings import warn
@@ -118,7 +119,9 @@ class cEBMF:
         internal_epoch : int, optional
             Number of inner epochs for the prior fitting routine.
         prior_L_kwargs, prior_F_kwargs : dict or None, optional
-            Extra keyword arguments forwarded to the prior builders.
+            Independent keyword arguments for the L and F prior builders,
+            including when both sides use the same prior name. Omitted
+            dictionaries add no per-side overrides.
         allow_backfitting : bool, optional
             If True, allow factor pruning between iterations.
         prune_thresh : float, optional
@@ -172,9 +175,7 @@ class cEBMF:
         # Handle HMM covariates once, before moving or combining them. In
         # particular, a 1-D position vector must never reach hstack below.
         hmm_priors = {"hmm", "hmm_pos", "hmm_neg"}
-        for side, prior, external, self_cov in (
-            ("L", prior_L, X_l, self_row_cov), ("F", prior_F, X_f, self_col_cov)
-        ):
+        for side, prior, external, self_cov in (("L", prior_L, X_l, self_row_cov), ("F", prior_F, X_f, self_col_cov)):
             if prior in hmm_priors and (external is not None or self_cov):
                 warn(
                     f"HMM specified for {side} (prior_{side}={prior!r}); additional side information "
@@ -204,7 +205,9 @@ class cEBMF:
         # Stash raw S input; normalised to an (N, P) tensor inside _initialise_tensors
         self._S_input = S
         self._validate_inputs()
-        _d = self.data.to(self.device); self.Y = _d if _d.dtype.is_floating_point else _d.float()  # keep float64 if user supplied it; ELBO bookkeeping needs the precision
+        # Keep float64 if supplied; ELBO bookkeeping needs the precision.
+        _d = self.data.to(self.device)
+        self.Y = _d if _d.dtype.is_floating_point else _d.float()
         self.N, self.P = self.Y.shape
         self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
@@ -517,9 +520,10 @@ class cEBMF:
 
     @torch.no_grad()
     def _initialise_priors(self, prior_L_kwargs: dict, prior_F_kwargs: dict) -> None:
-        self.prior_L_fn = PRIOR_REGISTRY.get_builder(self.model.prior_L)
+        # Own each side's configuration; set_kwargs replaces the copied kwargs.
+        self.prior_L_fn = copy(PRIOR_REGISTRY.get_builder(self.model.prior_L))
         self.prior_L_fn.set_kwargs(**prior_L_kwargs)
-        self.prior_F_fn = PRIOR_REGISTRY.get_builder(self.model.prior_F)
+        self.prior_F_fn = copy(PRIOR_REGISTRY.get_builder(self.model.prior_F))
         self.prior_F_fn.set_kwargs(**prior_F_kwargs)
         self.model_state_L = [None] * self.model.K
         self.model_state_F = [None] * self.model.K
