@@ -12,6 +12,8 @@ You can also open up the notebook [directly in Google Colab](https://colab.resea
 
 - Full documentation: See the [cebmf-torch documentation](https://cebmf-torch.readthedocs.io/en/latest/)
 
+- LC-ASH and PO-LC-ASH: See [component selection and fitted-state reuse](https://cebmf-torch.readthedocs.io/en/latest/examples.html#linear-covariate-adaptive-shrinkage).
+
 - Example notebooks: See the `examples/` directory for Jupyter notebooks demonstrating typical workflows.
 
 - To run the example notebooks, first add some additional dependencies with `uv sync --group examples` 
@@ -128,4 +130,3 @@ Edit the source documentation, not `tests/doc_examples_test.py`, which is
 generated and ignored by Git. A normal pytest run does not generate these tests.
 
 For questions or help, open an issue or contact the maintainer.
-
