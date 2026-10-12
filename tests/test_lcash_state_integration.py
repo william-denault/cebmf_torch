@@ -13,9 +13,10 @@ PRIOR_TYPES = (LearnedPriorType.LCASH, LearnedPriorType.PO_LCASH)
 
 
 def make_model(prior, **kwargs):
+    torch.manual_seed(17)
     generator = torch.Generator().manual_seed(123)
     data = torch.randn(24, 18, generator=generator)
-    prior_kwargs = {"n_epochs": 2, "ash_init": False, "verbose": False, "seed": 17}
+    prior_kwargs = {"ash_init": False, "verbose": False}
     model = cEBMF(
         data,
         K=2,
@@ -25,6 +26,7 @@ def make_model(prior, **kwargs):
         X_f=torch.randn(18, 3, generator=generator),
         prior_L_kwargs=prior_kwargs,
         prior_F_kwargs=prior_kwargs,
+        internal_epoch=2,
         S=1.0,
         device=torch.device("cpu"),
         **kwargs,

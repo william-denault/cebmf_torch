@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from enum import StrEnum, auto
+from inspect import signature
 from typing import Any
 
 import torch
@@ -79,7 +80,7 @@ class LearnedBuilder(PriorBuilder):
             Additional keyword arguments specific to the prior type.
         """
         self.type = type
-        self.kwargs = kwargs
+        self.set_kwargs(**kwargs)
 
     def set_kwargs(self, **new_kwargs: Any) -> None:
         """
@@ -90,6 +91,13 @@ class LearnedBuilder(PriorBuilder):
         **new_kwargs : Any
             New keyword arguments to set, replacing the old ones.
         """
+        if self.type in (LearnedPriorType.LCASH, LearnedPriorType.PO_LCASH):
+            try:
+                signature(builder_functions[self.type]).bind_partial(None, None, None, model_param=None, **new_kwargs)
+            except TypeError as error:
+                raise TypeError(
+                    f"Invalid {self.type} options: {error}. Use max_iter to set the L-BFGS iteration budget."
+                ) from error
         self.kwargs = new_kwargs
 
     @property
@@ -127,7 +135,11 @@ class LearnedBuilder(PriorBuilder):
         model_param : Any, optional
             Additional model parameters (default: None).
         internal_epoch : int, optional
-            Number of training epochs for the underlying neural network.
+            Training epochs when ``n_epochs`` is omitted. ``lcash_posterior_means``
+            and ``po_lcash_posterior_means`` use twice this value as their
+            L-BFGS iteration budget when
+            ``max_iter`` is omitted or None. Explicit numeric solver budgets,
+            including zero, take precedence.
         device : torch.device, optional
             Target device. Forwarded to the underlying cebnm builder so that
             the neural network and its tensors live on the same device as the
@@ -144,15 +156,11 @@ class LearnedBuilder(PriorBuilder):
         ValueError
             If the prior type is unknown or unsupported.
         """
-        # Merge cEBMF-controlled ``internal_epoch`` with user-supplied kwargs.
-        # If the user explicitly set ``n_epochs`` in ``prior_*_kwargs`` (very
-        # common in tests/notebooks), keep that — otherwise fall back to the
-        # cEBMF-level ``internal_epoch``. Done this way to avoid the
-        # ``TypeError: got multiple values for keyword argument 'n_epochs'``
-        # collision that the previous ``n_epochs=internal_epoch, **self.kwargs``
-        # produced whenever the user passed ``n_epochs`` themselves.
         call_kwargs = dict(self.kwargs)
-        if "n_epochs" not in call_kwargs and internal_epoch is not None:
+        if self.type in (LearnedPriorType.LCASH, LearnedPriorType.PO_LCASH):
+            if call_kwargs.get("max_iter") is None and internal_epoch is not None:
+                call_kwargs["max_iter"] = 2 * internal_epoch
+        elif "n_epochs" not in call_kwargs and internal_epoch is not None:
             call_kwargs["n_epochs"] = internal_epoch
         # device is internal plumbing; user-passed values would be overridden anyway.
         call_kwargs.pop("device", None)

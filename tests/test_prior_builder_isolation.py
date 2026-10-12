@@ -104,5 +104,65 @@ def test_solver_options_survive_another_model(monkeypatch, prior_name):
     )
     first.fit(maxit=1)
 
-    expected = [(6, {**L_kwargs, "n_epochs": 2}), (4, {**F_kwargs, "n_epochs": 2})]
+    budget = {"n_epochs": 2} if prior_name == "cgb" else {"max_iter": 4}
+    expected = [(6, {**L_kwargs, **budget}), (4, {**F_kwargs, **budget})]
     assert calls == expected * 2
+
+
+@pytest.mark.parametrize("prior_type", list(learned.LearnedPriorType))
+@pytest.mark.parametrize("internal_epoch", [None, 0, 10])
+@pytest.mark.parametrize("explicit_budget", ["omitted", None, 0, 7])
+def test_iteration_budget_precedence_is_scoped_to_conditional_solvers(
+    monkeypatch, prior_type, internal_epoch, explicit_budget
+):
+    calls = []
+
+    def record_solver(X, betahat, sebetahat, *, model_param, device, **kwargs):
+        calls.append(kwargs)
+        pi = torch.full_like(betahat, 0.5)
+        return SimpleNamespace(
+            post_mean=betahat,
+            post_mean2=betahat.square() + sebetahat.square(),
+            loss=betahat.new_zeros(()),
+            model_param=model_param,
+            pi=pi,
+            pi0_null=pi,
+            pi_np=torch.stack((pi, pi), dim=1),
+        )
+
+    conditional_types = (learned.LearnedPriorType.LCASH, learned.LearnedPriorType.PO_LCASH)
+    conditional = prior_type in conditional_types
+    key = "max_iter" if conditional else "n_epochs"
+    options = {} if explicit_budget == "omitted" else {key: explicit_budget}
+    monkeypatch.setitem(learned.builder_functions, prior_type, record_solver)
+    builder = learned.LearnedBuilder(prior_type, **options)
+    builder.fit(torch.zeros(2, 1), torch.zeros(2), torch.ones(2), internal_epoch=internal_epoch)
+
+    expected = dict(options)
+    inherits = explicit_budget == "omitted" or (conditional and explicit_budget is None)
+    if inherits and internal_epoch is not None:
+        expected[key] = (2 if conditional else 1) * internal_epoch
+    assert calls == [expected]
+    assert builder.kwargs == options
+
+
+@pytest.mark.parametrize("prior_name", ["lcash", "po_lcash"])
+@pytest.mark.parametrize(
+    "option",
+    ["n_epochs", "batch_size", "lr", "weight_decay", "seed", "X", "betahat", "sebetahat", "model_param"],
+)
+def test_invalid_conditional_options_fail_at_configuration(prior_name, option):
+    removed = option in {"n_epochs", "batch_size", "lr", "weight_decay", "seed"}
+    expected = rf"{option}.*max_iter" if removed else option
+    with pytest.raises(TypeError, match=expected):
+        cEBMF(
+            torch.ones(6, 4),
+            K=1,
+            prior_L=prior_name,
+            prior_L_kwargs={option: 1},
+            device="cpu",
+        )
+    builder = learned.LearnedBuilder(learned.LearnedPriorType(prior_name), penalty=10)
+    with pytest.raises(TypeError, match=expected):
+        builder.set_kwargs(**{option: 1})
+    assert builder.kwargs == {"penalty": 10}

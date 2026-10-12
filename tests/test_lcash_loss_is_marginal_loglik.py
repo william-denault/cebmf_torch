@@ -1,18 +1,12 @@
-"""Regression test for cebmf_torch.cebnm.lcash and cebnm.cash_solver:
+"""The returned loss is the summed, unpenalized negative marginal log likelihood.
 
-Asserts that ``result.loss == -log p(y | fitted prior)`` (i.e. the negative
-full-data marginal log-likelihood, no penalty), as required by the cebmf
-consumer at ``cebmf/cebmf.py:299``: ``self.kl_l[k] = (-resL.loss) - nm_ll_L``.
-
-Before the fix the returned ``loss`` was ``final_epoch_loss`` from training
-(a sum of per-batch ``pen_loglik_loss`` values on the last epoch), which is
-not on the marginal-log-lik scale once ``penalty > 1`` and clamps the inner
-density at ``1e-10``. After the fix it is computed via a single full-batch
-``logsumexp`` over the saved per-observation pi values.
+cEBMF uses this value to compute its KL term. The training penalty must not
+be included in the reported value.
 """
 
 import math
 
+import pytest
 import torch
 
 from cebmf_torch.cebnm.cash_solver import cash_posterior_means
@@ -49,76 +43,13 @@ def _make_data(n=2000, seed=2026):
     return X, x, s
 
 
-def test_lcash_loss_equals_negative_marginal_loglik_penalty1():
-    """With penalty=1.0 (no Dirichlet penalty) the returned loss must be
-    the proper negative marginal log-lik, not the training-loss surrogate."""
+@pytest.mark.parametrize("solver", [lcash_posterior_means, po_lcash_posterior_means])
+@pytest.mark.parametrize("penalty", [1.0, 10.0])
+def test_conditional_loss_is_unpenalized_marginal_loglik(solver, penalty):
     X, x, s = _make_data()
-    res = lcash_posterior_means(
-        X=X,
-        betahat=x,
-        sebetahat=s,
-        n_epochs=50,
-        batch_size=512,
-        lr=1e-3,
-        weight_decay=1e-3,
-        penalty=1.0,
-        ash_init=True,
-        verbose=False,
-        device=torch.device("cpu"),
-        seed=42,
-    )
-    proper_ll = _proper_marginal_loglik(x, s, res.scale, res.pi_np)
-    expected_loss = -proper_ll
-    # Tight tolerance: the post-fix loss is computed from exactly the same
-    # tensor that the test recomputes here.
-    assert abs(res.loss - expected_loss) < 1e-3, f"LC-ASH loss = {res.loss}, expected -marginal_ll = {expected_loss}"
-
-
-def test_po_lcash_loss_equals_negative_marginal_loglik_penalty1():
-    X, x, s = _make_data()
-    res = po_lcash_posterior_means(
-        X=X,
-        betahat=x,
-        sebetahat=s,
-        n_epochs=50,
-        batch_size=512,
-        lr=1e-3,
-        weight_decay=1e-3,
-        penalty=1.0,
-        ash_init=True,
-        verbose=False,
-        device=torch.device("cpu"),
-        seed=42,
-    )
-    proper_ll = _proper_marginal_loglik(x, s, res.scale, res.pi_np)
-    assert abs(res.loss - (-proper_ll)) < 1e-3
-
-
-def test_lcash_loss_independent_of_penalty():
-    """Two LC-ASH fits whose only difference is `penalty` should produce
-    `loss` values that, after the fix, both equal the proper marginal log-lik
-    (computed from the respective fitted pi). Pre-fix the two values would
-    differ by exactly (penalty-1) * sum_g log(pi_g,0)."""
-    X, x, s = _make_data()
-    common = {
-        "X": X,
-        "betahat": x,
-        "sebetahat": s,
-        "n_epochs": 50,
-        "batch_size": 512,
-        "lr": 1e-3,
-        "weight_decay": 1e-3,
-        "ash_init": True,
-        "verbose": False,
-        "device": torch.device("cpu"),
-        "seed": 42,
-    }
-    res1 = lcash_posterior_means(penalty=1.0, **common)
-    res2 = lcash_posterior_means(penalty=1.5, **common)
-    ll1 = _proper_marginal_loglik(x, s, res1.scale, res1.pi_np)
-    ll2 = _proper_marginal_loglik(x, s, res2.scale, res2.pi_np)
-    assert abs(res1.loss - (-ll1)) < 1e-3
-    assert abs(res2.loss - (-ll2)) < 1e-3
+    result = solver(X, x, s, max_iter=50, penalty=penalty, device="cpu")
+    expected = -_proper_marginal_loglik(x, s, result.scale, result.pi_np)
+    assert result.loss == pytest.approx(expected, abs=1e-3)
 
 
 def test_cash_loss_equals_negative_marginal_loglik_penalty1():
