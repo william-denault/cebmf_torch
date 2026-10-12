@@ -107,9 +107,7 @@ class ASHBuilder(PriorBuilder):
         """
         del device  # ASH operates on the input tensors' device directly
         obj = ash(betahat, sebetahat, prior=str(self.type), **self.kwargs)
-        # `obj.log_lik` is a 0-d tensor on the input device; keep it that way.
-        # cEBMF reads `loss` via `(-resL.loss) - nm_ll_L`, which is fine for
-        # tensors and avoids a per-factor-update host sync.
+        # Keep the marginal log-likelihood on-device for cEBMF's KL calculation.
         return Prior(
             post_mean=obj.post_mean,
             post_mean2=obj.post_mean2,

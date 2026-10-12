@@ -425,10 +425,8 @@ def _compute_posteriors(
     post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik
         ``marginal_loglik`` is the full-data marginal log-likelihood
         ``sum_g logsumexp_k (log pi_g,k + log p(beta_g | 0, sqrt(se_g^2 + scale_k^2)))``,
-        i.e. ``log p(y | fitted prior)`` without any spike Dirichlet penalty.
-        It is what the cebmf consumer at ``cebmf.py:299``
-        (``self.kl_l[k] = (-resL.loss) - nm_ll_L``) requires of the loss
-        field on this object.
+        i.e. ``log p(y | fitted prior)`` without fitting penalties.
+        The outer cEBMF KL calculation requires this unpenalized sum.
     """
     model.eval()
     loc = torch.zeros_like(scale)

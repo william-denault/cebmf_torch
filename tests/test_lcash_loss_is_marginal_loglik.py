@@ -1,14 +1,7 @@
-"""Regression test for cebmf_torch.cebnm.lcash and cebnm.cash_solver:
+"""The returned loss is the summed, unpenalized negative marginal log likelihood.
 
-Asserts that ``result.loss == -log p(y | fitted prior)`` (i.e. the negative
-full-data marginal log-likelihood, no penalty), as required by the cebmf
-consumer at ``cebmf/cebmf.py:299``: ``self.kl_l[k] = (-resL.loss) - nm_ll_L``.
-
-Before the fix the returned ``loss`` was ``final_epoch_loss`` from training
-(a sum of per-batch ``pen_loglik_loss`` values on the last epoch), which is
-not on the marginal-log-lik scale once ``penalty > 1`` and clamps the inner
-density at ``1e-10``. After the fix it is computed via a single full-batch
-``logsumexp`` over the saved per-observation pi values.
+cEBMF uses this value to compute its KL term. The training penalty must not
+be included in the reported value.
 """
 
 import math
