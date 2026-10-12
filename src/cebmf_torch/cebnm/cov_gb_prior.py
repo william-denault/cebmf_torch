@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
+from cebmf_torch.ebnm.ash import AshConfig
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
 from cebmf_torch.utils.standard_scaler import standard_scale
 
@@ -84,7 +85,15 @@ class CgbNet(nn.Module):
 # -------------------------
 # Loss (mixture NLL, stable)
 # -------------------------
-def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8):
+def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8, *, n_obs: int = 1):
+    """Mean mixture loss with null coefficient ``(penalty - 1) / n_obs``.
+
+    ``n_obs`` is the positive full training count, including for partial
+    batches. Its default of one gives a per-observation penalty.
+    Values of ``penalty`` at or below one omit the null term.
+    """
+    if n_obs <= 0:
+        raise ValueError("n_obs must be positive.")
     var1 = se**2
     var2 = sigma2_sq + se**2
 
@@ -96,7 +105,7 @@ def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8):
     if penalty > 1.0:
         # Penalize per-observation spike probability
         log_pi0 = torch.log(pi_1.clamp_min(eps))
-        log_mix = log_mix + (penalty - 1.0) * log_pi0
+        log_mix = log_mix + ((penalty - 1.0) / n_obs) * log_pi0
 
     return -(log_mix.mean())
 
@@ -197,7 +206,7 @@ def cgb_posterior_means(
     hidden_dim=32,
     batch_size=128,
     lr=1e-3,
-    penalty: float = 1.5,
+    penalty: float = AshConfig.penalty,
     model_param=None,
     device: torch.device | None = None,
 ):
@@ -223,7 +232,9 @@ def cgb_posterior_means(
     lr : float, optional
         Learning rate for the optimizer (default=1e-3).
     penalty : float, optional
-        Penalty for spike probability (default=1.5).
+        Nullweight (default=10). The coefficient per observation is
+        ``(penalty - 1) / n``, where ``n`` is the full training count.
+        Values at or below one omit the null term.
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
 
@@ -284,7 +295,7 @@ def cgb_posterior_means(
             pi1, pi2, mu2 = model(xb)
 
             # Calculate loss using the fixed, global sigma2_sq
-            loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
+            loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty, n_obs=len(dataset))
 
             optimizer.zero_grad()
             loss.backward()
