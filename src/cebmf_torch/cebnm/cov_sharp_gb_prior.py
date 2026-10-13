@@ -8,7 +8,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
 from cebmf_torch.cebnm.cov_gb_prior import cgb_loss
-from cebmf_torch.ebnm.ash import AshConfig
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
 from cebmf_torch.utils.standard_scaler import standard_scale
 
@@ -180,7 +179,7 @@ def sharp_cgb_posterior_means(
     hidden_dim=32,
     batch_size=128,
     lr=1e-3,
-    penalty: float = AshConfig.penalty,
+    penalty: float = 10.0,
     model_param=None,
     eps=1e-8,
     device: torch.device | None = None,

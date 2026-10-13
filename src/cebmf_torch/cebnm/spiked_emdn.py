@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-from cebmf_torch.ebnm.ash import AshConfig
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 from cebmf_torch.utils.posterior import posterior_mean_norm
 from cebmf_torch.utils.standard_scaler import standard_scale
@@ -93,10 +92,10 @@ def mdn_spike_loss_with_varying_noise(
     betahat,
     sebetahat,
     *,
-    penalty: float = 1.5,
+    penalty: float,
     beta_prior: tuple | None = None,
     eps: float = 1e-8,
-    n_obs: int = 1,
+    n_obs: int,
 ):
     """
     Compute the negative log-likelihood loss for a spike-and-slab mixture model with optional
@@ -114,17 +113,16 @@ def mdn_spike_loss_with_varying_noise(
         Observed effect estimates, shape (N,).
     sebetahat : torch.Tensor
         Standard errors of the effect estimates, shape (N,).
-    penalty : float, optional
-        Null penalty strength (default=1.5). The coefficient per observation
+    penalty : float
+        Null penalty strength. The coefficient per observation
         is ``(penalty - 1) / n_obs``. Values of ``penalty`` above one
         encourage the spike; values below one discourage it.
     beta_prior : tuple, optional
         (alpha0, beta0) for a separate per-observation Beta prior on pi_spike.
     eps : float, optional
         Small value to avoid log(0) (default is 1e-8).
-    n_obs : int, optional
+    n_obs : int
         Positive full training count, including for partial batches.
-        The default of one gives a per-observation null penalty.
 
     Returns
     -------
@@ -228,7 +226,7 @@ def spiked_emdn_posterior_means(
     lr=1e-3,
     model_param=None,
     *,
-    penalty: float = AshConfig.penalty,  # >1 encourages spike; =1 neutral
+    penalty: float = 10.0,  # >1 encourages spike; =1 neutral
     beta_prior: tuple | None = None,  # e.g. (17., 5.) => target pi_spike ~ 0.77
     print_every=10,
     device: torch.device | None = None,

@@ -33,7 +33,7 @@ def _args(pi0, y):
 
 
 @pytest.mark.parametrize("penalty", [0.5, 1.0, 1.5, 10.0])
-def test_loss_values_gradients_and_count_one_contract(penalty):
+def test_loss_values_and_gradients(penalty):
     pi0 = torch.tensor([0.2, 0.5, 0.8], dtype=torch.float64, requires_grad=True)
     args = _args(pi0, torch.tensor([-2.0, 0.0, 3.0], dtype=torch.float64))
     loss = cov_gb_prior.cgb_loss
@@ -45,14 +45,13 @@ def test_loss_values_gradients_and_count_one_contract(penalty):
             torch.autograd.grad(actual, pi0, retain_graph=True)[0],
             torch.autograd.grad(expected, pi0, retain_graph=True)[0],
         )
-    torch.testing.assert_close(loss(*args, penalty=penalty), loss(*args, penalty=penalty, n_obs=1))
 
 
 @pytest.mark.parametrize("n_obs", [0, -1])
 def test_count_must_be_positive(n_obs):
     args = _args(torch.full((2,), 0.5), torch.zeros(2))
     with pytest.raises(ValueError):
-        cov_gb_prior.cgb_loss(*args, n_obs=n_obs)
+        cov_gb_prior.cgb_loss(*args, penalty=10.0, n_obs=n_obs)
 
 
 @pytest.mark.parametrize("module,solver_name", CASES)
@@ -143,6 +142,5 @@ def test_spiked_emdn_count_scaling_and_separate_beta_prior(penalty):
             torch.autograd.grad(actual, pi0, retain_graph=True)[0],
             torch.autograd.grad(expected, pi0, retain_graph=True)[0],
         )
-    torch.testing.assert_close(loss(*args, penalty=penalty), loss(*args, penalty=penalty, n_obs=1))
     with pytest.raises(ValueError):
-        loss(*args, n_obs=0)
+        loss(*args, penalty=penalty, n_obs=0)

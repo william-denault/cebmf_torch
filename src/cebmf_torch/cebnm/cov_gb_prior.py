@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-from cebmf_torch.ebnm.ash import AshConfig
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
 from cebmf_torch.utils.standard_scaler import standard_scale
 
@@ -85,11 +84,11 @@ class CgbNet(nn.Module):
 # -------------------------
 # Loss (mixture NLL, stable)
 # -------------------------
-def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8, *, n_obs: int = 1):
+def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty, eps=1e-8, *, n_obs: int):
     """Mean mixture loss with null coefficient ``(penalty - 1) / n_obs``.
 
     ``n_obs`` is the positive full training count, including for partial
-    batches. Its default of one gives a per-observation penalty.
+    batches.
     Values of ``penalty`` at or below one omit the null term.
     """
     if n_obs <= 0:
@@ -206,7 +205,7 @@ def cgb_posterior_means(
     hidden_dim=32,
     batch_size=128,
     lr=1e-3,
-    penalty: float = AshConfig.penalty,
+    penalty: float = 10.0,
     model_param=None,
     device: torch.device | None = None,
 ):
