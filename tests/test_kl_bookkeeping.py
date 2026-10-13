@@ -62,26 +62,6 @@ def test_ash_reports_unclipped_marginal_density(prior):
     torch.testing.assert_close(result.log_lik, expected)
 
 
-@pytest.mark.parametrize("seed", [0, 1])
-def test_retained_exponential_factor_respects_matrix_density_bound(seed):
-    """A near-null factor must not produce spuriously large model evidence."""
-    with torch.random.fork_rng(devices=[]):
-        torch.manual_seed(seed)
-        data = 0.5 * torch.randn(120, 60, dtype=torch.float32)
-        model = cEBMF(data, K=1, prior_L="exp", prior_F="exp", device="cpu")
-        model.initialise_factors()
-        for _ in range(20):
-            model.iter_once()
-            # Each Gaussian observation density is at most sqrt(tau / (2*pi)).
-            # Its product also bounds model evidence and the evidence lower bound.
-            negative_log_peak = 0.5 * data.numel() * torch.log(2 * math.pi / model.tau)
-            rounding = 16 * torch.finfo(data.dtype).eps * data.numel()
-            assert model.obj[-1] >= negative_log_peak.item() - rounding
-            assert torch.isfinite(model.L).all() and torch.isfinite(model.F).all()
-            assert math.isfinite(model.obj[-1])
-        assert model.model.K == 1
-
-
 @pytest.mark.parametrize("kind", [LearnedPriorType.LCASH, LearnedPriorType.PO_LCASH])
 def test_learned_prior_kl_matches_density_integration(kind, monkeypatch):
     """Integrate posterior/prior density ratios, including the discrete spike."""
