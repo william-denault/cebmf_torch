@@ -16,7 +16,7 @@ def test_loss_finite_for_large_log_likelihoods():
     B, K = 16, 5
     pred_pi = torch.softmax(torch.randn(B, K), dim=1)
     marginal_log_lik = torch.full((B, K), 90.0)  # exp(90) overflows float32
-    loss = pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5)
+    loss = pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, n_obs=B)
     assert torch.isfinite(loss), loss
 
 
@@ -28,8 +28,8 @@ def test_loss_matches_naive_in_safe_regime():
     mll = torch.randn(B, K) * 0.5  # small -> no overflow
     eps = 1e-10
     naive_first = torch.log(torch.clamp((pred_pi * torch.exp(mll)).sum(1), min=eps)).sum()
-    naive = -(naive_first + (1.5 - 1) * torch.log(torch.clamp(pred_pi[:, 0], min=eps)).sum())
-    got = pen_loglik_loss(pred_pi, mll, penalty=1.5)
+    naive = -(naive_first + ((1.5 - 1) / B) * torch.log(torch.clamp(pred_pi[:, 0], min=eps)).sum())
+    got = pen_loglik_loss(pred_pi, mll, penalty=1.5, n_obs=B)
     assert abs(float(got) - float(naive)) < 1e-4, (float(got), float(naive))
 
 
@@ -38,6 +38,6 @@ def test_loss_is_differentiable():
     logits = torch.randn(B, K, requires_grad=True)
     pred_pi = torch.softmax(logits, dim=1)
     mll = torch.full((B, K), 50.0)
-    loss = pen_loglik_loss(pred_pi, mll, penalty=2.0)
+    loss = pen_loglik_loss(pred_pi, mll, penalty=2.0, n_obs=B)
     loss.backward()
     assert logits.grad is not None and torch.isfinite(logits.grad).all()

@@ -93,4 +93,4 @@ def test_cebmf_uses_each_matrix_side_count(monkeypatch):
 @pytest.mark.parametrize("n_obs", [0, -1])
 def test_count_must_be_positive(n_obs):
     with pytest.raises(ValueError):
-        cash_solver.pen_loglik_loss(torch.full((2, 2), 0.5), torch.zeros(2, 2), n_obs=n_obs)
+        cash_solver.pen_loglik_loss(torch.full((2, 2), 0.5), torch.zeros(2, 2), penalty=10.0, n_obs=n_obs)

@@ -21,7 +21,7 @@ from cebmf_torch.cebnm.cash_solver import (
     cash_PosteriorMeanNorm,
     pen_loglik_loss_from_log_pi,
 )
-from cebmf_torch.ebnm.ash import AshConfig, PriorType, ash
+from cebmf_torch.ebnm.ash import PriorType, ash
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
 from cebmf_torch.utils.posterior import posterior_mean_norm
@@ -340,7 +340,7 @@ def _select_grid(
             betahat,
             sebetahat,
             prior=PriorType.NORM,
-            penalty=AshConfig.penalty,
+            penalty=10.0,
             verbose=False,
             optimizer="lbfgs",
             mult=mult,
@@ -376,6 +376,23 @@ def _select_grid(
     return scale, None
 
 
+def _conditional_loss(
+    model: nn.Module,
+    X_scaled: torch.Tensor,
+    data_loglik: torch.Tensor,
+    penalty: float,
+    coefficient_prior: torch.distributions.StudentT | None,
+) -> torch.Tensor:
+    """Mean negative log likelihood with nullweight and optional slope priors."""
+    n = X_scaled.shape[0]
+    loss = pen_loglik_loss_from_log_pi(model.log_probs(X_scaled), data_loglik, null_coefficient=(penalty - 1) / n)
+    if coefficient_prior is not None:
+        # Multinomial slopes are log-odds contrasts against the null component.
+        slopes = model.linear.weight[1:] - model.linear.weight[:1] if isinstance(model, LcashNet) else model.w
+        loss = loss - coefficient_prior.log_prob(slopes).sum()
+    return loss / n
+
+
 def _train_model(
     model: nn.Module,
     X_scaled: torch.Tensor,
@@ -393,7 +410,6 @@ def _train_model(
     Each call uses fresh curvature history for its normal-means problem.
     """
     model.train()
-    n = X_scaled.shape[0]
     params = list(model.parameters())
     coefficient_prior = None
     if coefficient_prior_scale is not None:
@@ -412,12 +428,7 @@ def _train_model(
 
     def closure():
         optimizer.zero_grad(set_to_none=True)
-        loss = pen_loglik_loss_from_log_pi(model.log_probs(X_scaled), data_loglik, null_coefficient=(penalty - 1) / n)
-        if coefficient_prior is not None:
-            # Multinomial slopes are log-odds contrasts against the null component.
-            slopes = model.linear.weight[1:] - model.linear.weight[:1] if isinstance(model, LcashNet) else model.w
-            loss = loss - coefficient_prior.log_prob(slopes).sum()
-        loss = loss / n
+        loss = _conditional_loss(model, X_scaled, data_loglik, penalty, coefficient_prior)
         _require_finite(loss, "Conditional optimization objective")
         loss.backward()
         _require_finite(torch.cat([p.grad.reshape(-1) for p in params]), "Conditional optimization gradient")
@@ -489,7 +500,7 @@ def _fit_lcash(
     label: str,
     *,
     max_iter: int | None = None,
-    penalty: float = AshConfig.penalty,
+    penalty: float = 10.0,
     coefficient_prior_scale: float | None = 1.0,
     coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
@@ -619,7 +630,7 @@ def lcash_posterior_means(
     sebetahat: torch.Tensor,
     *,
     max_iter: int | None = None,
-    penalty: float = AshConfig.penalty,
+    penalty: float = 10.0,
     coefficient_prior_scale: float | None = 1.0,
     coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
@@ -756,7 +767,7 @@ def po_lcash_posterior_means(
     sebetahat: torch.Tensor,
     *,
     max_iter: int | None = None,
-    penalty: float = AshConfig.penalty,
+    penalty: float = 10.0,
     coefficient_prior_scale: float | None = 1.0,
     coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,

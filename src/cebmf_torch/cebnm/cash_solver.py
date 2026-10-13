@@ -67,11 +67,11 @@ class CashNet(nn.Module):
 
 
 # Custom loss function
-def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10, *, n_obs: int = 1):
+def pen_loglik_loss(pred_pi, marginal_log_lik, penalty, epsilon=1e-10, *, n_obs: int):
     """Sum mixture losses with null coefficient ``(penalty - 1) / n_obs``.
 
     ``n_obs`` is the positive full training count, including for partial
-    batches. Its default of one gives a per-observation penalty.
+    batches.
     Values of ``penalty`` at or below one omit the null term.
     """
     if n_obs <= 0:

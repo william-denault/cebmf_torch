@@ -70,11 +70,7 @@ def test_informative_covariate_recovery_with_few_observations(solver, fixed_grid
 @pytest.mark.parametrize("model_class", [LcashNet, PropOddsLcashNet])
 @pytest.mark.parametrize("penalty", [1.0, 1.5, 10.0])
 @pytest.mark.parametrize("prior_scale,prior_df", [(None, 5.0), (1.0, 5.0), (0.5, 3.0)])
-def test_full_data_objective_matches_null_and_student_t_priors(
-    model_class, penalty, prior_scale, prior_df, monkeypatch
-):
-    calls = []
-    original_step = torch.optim.LBFGS.step
+def test_full_data_objective_matches_null_and_student_t_priors(model_class, penalty, prior_scale, prior_df):
     model = model_class(1, 3, log_pi_init=torch.tensor([0.6, 0.3, 0.1]).log()).double()
     with torch.no_grad():
         slopes = model.linear.weight if isinstance(model, LcashNet) else model.w
@@ -85,38 +81,30 @@ def test_full_data_objective_matches_null_and_student_t_priors(
     scale = torch.tensor([0.0, 1.0, 2.0], dtype=torch.float64)
     log_lik = lcash.get_data_loglik_normal_torch(x, torch.ones_like(x), torch.zeros_like(scale), scale)
 
-    def inspect_first_closure(optimizer, closure):
-        actual = closure()
-        actual_gradients = [parameter.grad.detach().clone() for parameter in model.parameters()]
-        log_pi = model.log_probs(x[:, None])
-        expected = -torch.logsumexp(log_pi + log_lik, dim=1).sum()
-        expected -= ((penalty - 1) / len(x)) * log_pi[:, 0].sum()
-        if prior_scale is not None:
-            coefficients = (
-                model.linear.weight[1:] - model.linear.weight[:1] if isinstance(model, LcashNet) else model.w
-            )
-            # Student-t(df, 0, scale) log density, including its normalizing constant.
-            normalizer = (
-                math.lgamma((prior_df + 1) / 2)
-                - math.lgamma(prior_df / 2)
-                - 0.5 * math.log(prior_df * math.pi)
-                - math.log(prior_scale)
-            )
-            log_prior = normalizer - (prior_df + 1) / 2 * torch.log1p(
-                coefficients.square() / (prior_df * prior_scale**2)
-            )
-            expected -= log_prior.sum()
-        expected /= len(x)
-        gradients = torch.autograd.grad(expected, tuple(model.parameters()))
-        torch.testing.assert_close(actual, expected)
-        for actual_gradient, gradient in zip(actual_gradients, gradients, strict=True):
-            torch.testing.assert_close(actual_gradient, gradient)
-        calls.append(True)
-        return original_step(optimizer, closure)
-
-    monkeypatch.setattr(torch.optim.LBFGS, "step", inspect_first_closure)
-    lcash._train_model(model, x[:, None], log_lik, 2, penalty, False, "test", prior_scale, prior_df)
-    assert calls
+    coefficient_prior = None
+    if prior_scale is not None:
+        coefficient_prior = torch.distributions.StudentT(x.new_tensor(prior_df), scale=prior_scale)
+    actual = lcash._conditional_loss(model, x[:, None], log_lik, penalty, coefficient_prior)
+    actual_gradients = torch.autograd.grad(actual, tuple(model.parameters()))
+    log_pi = model.log_probs(x[:, None])
+    expected = -torch.logsumexp(log_pi + log_lik, dim=1).sum()
+    expected -= ((penalty - 1) / len(x)) * log_pi[:, 0].sum()
+    if prior_scale is not None:
+        coefficients = model.linear.weight[1:] - model.linear.weight[:1] if isinstance(model, LcashNet) else model.w
+        # Student-t(df, 0, scale) log density, including its normalizing constant.
+        normalizer = (
+            math.lgamma((prior_df + 1) / 2)
+            - math.lgamma(prior_df / 2)
+            - 0.5 * math.log(prior_df * math.pi)
+            - math.log(prior_scale)
+        )
+        log_prior = normalizer - (prior_df + 1) / 2 * torch.log1p(coefficients.square() / (prior_df * prior_scale**2))
+        expected -= log_prior.sum()
+    expected /= len(x)
+    gradients = torch.autograd.grad(expected, tuple(model.parameters()))
+    torch.testing.assert_close(actual, expected)
+    for actual_gradient, gradient in zip(actual_gradients, gradients, strict=True):
+        torch.testing.assert_close(actual_gradient, gradient)
 
 
 @pytest.mark.parametrize("solver", SOLVERS)

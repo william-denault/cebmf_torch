@@ -133,10 +133,8 @@ class LearnedBuilder(PriorBuilder):
             ``max_iter`` is omitted or None. Explicit numeric solver budgets,
             including zero, take precedence.
         device : torch.device, optional
-            Target device. Forwarded to the underlying cebnm builder so that
-            the neural network and its tensors live on the same device as the
-            caller (e.g. ``cEBMF``). When ``None``, the builder falls back to
-            inheriting from the input tensor.
+            Requested output device, forwarded to the solver. The solver controls
+            its training device. When None, the solver chooses its default device.
 
         Returns
         -------
@@ -183,9 +181,7 @@ class LearnedBuilder(PriorBuilder):
             case _:
                 raise ValueError(f"Default pi0 unknown for prior type: {self.type}")
 
-        # `obj.loss` is already on the prior's device; keep it that way so the
-        # ELBO term in cEBMF doesn't force a host sync. Wrap a Python float in
-        # a 0-d tensor (rare path: ash-style learned priors) for uniformity.
+        # Preserve tensor losses; place Python scalar losses on the posterior device.
         loss = obj.loss
         if not isinstance(loss, torch.Tensor):
             loss = torch.as_tensor(loss, device=obj.post_mean.device, dtype=obj.post_mean.dtype)

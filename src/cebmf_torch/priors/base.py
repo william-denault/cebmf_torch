@@ -67,7 +67,7 @@ class PriorBuilder(ABC):
         model_param : Any or None, optional
             Additional model parameters (for warm starts).
         internal_epoch : Any or None, optional
-            Number of inner training epochs (used by learned priors).
+            Inner training budget, interpreted by the prior builder.
         device : torch.device or None, optional
             Target device. If not provided, the implementation should infer
             it from the input tensors (the conventional GPU-friendly behaviour
