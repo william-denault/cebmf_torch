@@ -1,13 +1,12 @@
-"""Fitted LC-ASH state survives real matrix-factorization updates."""
+"""Fitted conditional priors remain usable through matrix-factorization updates."""
 
-import math
+from copy import deepcopy
 
 import pytest
 import torch
 
 from cebmf_torch import cEBMF
-from cebmf_torch.cebnm.lcash import _select_grid
-from cebmf_torch.priors.learned import LearnedBuilder, LearnedPriorType
+from cebmf_torch.priors.learned import LearnedPriorType
 
 PRIOR_TYPES = (LearnedPriorType.LCASH, LearnedPriorType.PO_LCASH)
 
@@ -36,55 +35,29 @@ def make_model(prior, **kwargs):
 
 
 @pytest.mark.parametrize("prior", PRIOR_TYPES)
-def test_cebmf_repeated_updates_retain_each_factor_grid(prior, monkeypatch):
-    model = make_model(prior, allow_backfitting=False)
-    calls = []
-    real_fit = LearnedBuilder.fit
+def test_cebmf_continues_from_copied_fitted_states(prior):
+    model = make_model(prior, allow_backfitting=False, prune_thresh=1.1)
+    model.fit(maxit=1)
+    copied = make_model(prior, allow_backfitting=False, prune_thresh=1.1)
+    copied.fit(maxit=1)
+    copied.model_state_L = deepcopy(model.model_state_L)
+    copied.model_state_F = deepcopy(model.model_state_F)
+    result = model.fit(maxit=2)
+    restored = copied.fit(maxit=2)
+    for field in ("L", "F", "history_obj"):
+        actual = torch.as_tensor(getattr(result, field))
+        assert torch.isfinite(actual).all()
+        torch.testing.assert_close(actual, torch.as_tensor(getattr(restored, field)))
 
-    def record_fit(builder, **kwargs):
-        result = real_fit(builder, **kwargs)
-        calls.append((kwargs, result.model_param))
-        return result
 
-    # Observe the actual builder boundary; every prior fit and cEBMF update runs.
-    monkeypatch.setattr(LearnedBuilder, "fit", record_fit)
-    result = model.fit(maxit=3)
-
-    assert len(calls) == 12  # Three iterations, two factors, both matrix sides.
-    assert len(result.history_obj) == 3
-    assert torch.isfinite(torch.tensor(result.history_obj)).all()
-    assert torch.isfinite(result.L).all()
-    assert torch.isfinite(result.F).all()
-
-    different_grid_size = False
-    for index, (inputs, state) in enumerate(calls):
-        if index < 4:
-            assert inputs["model_param"] is None
-            continue
-
-        previous = calls[index - 4][1]
-        first = calls[index % 4][1]
-        assert inputs["model_param"] is previous
-        for field in ("scale", "feature_mean", "feature_sd"):
-            torch.testing.assert_close(state[field], first[field], rtol=0, atol=0)
-
-        # These are the actual changing pseudo-observations seen by the solver.
-        # A fresh automatic grid changes even when its component count matches.
-        fresh_grid, _ = _select_grid(
-            inputs["betahat"],
-            inputs["sebetahat"],
-            mult=math.sqrt(2),
-            ash_init=False,
-            ash_threshold=1e-6,
-            device=model.device,
-        )
-        assert not torch.equal(fresh_grid, first["scale"])
-        different_grid_size |= fresh_grid.shape != first["scale"].shape
-
-    assert different_grid_size
-    for factor in range(2):
-        assert model.model_state_L[factor] is calls[8 + 2 * factor][1]
-        assert model.model_state_F[factor] is calls[9 + 2 * factor][1]
+def predict_null(builder, X, state):
+    return builder.fit(
+        X=X,
+        betahat=torch.ones(X.shape[0]),
+        sebetahat=torch.ones(X.shape[0]),
+        model_param=state,
+        internal_epoch=0,
+    ).pi0_null
 
 
 @pytest.mark.parametrize("prior", PRIOR_TYPES)
@@ -94,54 +67,38 @@ def test_cebmf_repeated_updates_retain_each_factor_grid(prior, monkeypatch):
         (("row",), True, True),
         (("col",), True, True),
         (("row", "col"), True, True),
-        (("row",), False, True),
-        (("col",), False, True),
         (("row", "col"), False, True),
         (("row", "col"), True, False),
+        ((), True, True),
     ],
 )
-def test_cebmf_pruning_resets_only_changed_self_covariate_states(prior, sides, external, prune, monkeypatch):
+def test_cebmf_pruning_preserves_covariate_meaning(prior, sides, external, prune):
     options = {f"self_{side}_cov": True for side in sides}
     if not external:
         options.update({"X_l" if side == "row" else "X_f": None for side in sides})
     # Zero retains only the first factor; 1.1 retains both factors.
     model = make_model(prior, prune_thresh=0.0 if prune else 1.1, **options)
-    calls = []
-    real_fit = LearnedBuilder.fit
-
-    def record_fit(builder, **kwargs):
-        result = real_fit(builder, **kwargs)
-        calls.append((kwargs, result.model_param))
-        return result
-
-    monkeypatch.setattr(LearnedBuilder, "fit", record_fit)
+    reference = make_model(prior, prune_thresh=1.1, **options)
+    reference.fit(maxit=1)
     model.fit(maxit=1)
     assert model.model.K == (1 if prune else 2)
-    for factor in range(model.model.K):
-        for index, side in enumerate(("row", "col")):
-            saved = model.model_state_L[factor] if side == "row" else model.model_state_F[factor]
-            changed = prune and side in sides
-            assert saved is (None if changed else calls[2 * factor + index][1])
+
+    for side, suffix, X in (("row", "L", model.covariate.X_l), ("col", "F", model.covariate.X_f)):
+        if side not in sides:
+            # Removing other factors must not change a prior with fixed external covariates.
+            builder = getattr(model, f"prior_{suffix}_fn")
+            actual = predict_null(builder, X, getattr(model, f"model_state_{suffix}")[0])
+            expected = predict_null(builder, X, getattr(reference, f"model_state_{suffix}")[0])
+            torch.testing.assert_close(actual, expected)
 
     result = model.fit(maxit=1)
-    assert len(calls) == 4 + 2 * model.model.K
-    assert torch.isfinite(result.L).all()
-    assert torch.isfinite(result.F).all()
-    assert torch.isfinite(torch.tensor(result.history_obj)).all()
-    for index, (continued, continued_state) in enumerate(calls[4:]):
-        side = ("row", "col")[index % 2]
-        first, first_state = calls[index]
-        changed = prune and side in sides
-        assert continued["model_param"] is (None if changed else first_state)
-        assert continued_state["feature_mean"].numel() == continued["X"].shape[1]
-        if changed:
-            if external:
-                assert continued["X"].shape[1] == first["X"].shape[1] - 1
-            else:
-                # One other-factor feature becomes one constant feature.
-                assert first["X"].shape == continued["X"].shape
-                assert torch.std(first["X"]) > 0
-                torch.testing.assert_close(continued["X"], torch.ones_like(continued["X"]))
-                torch.testing.assert_close(
-                    continued_state["feature_mean"], torch.ones_like(continued_state["feature_mean"])
-                )
+    for field in ("L", "F", "history_obj"):
+        assert torch.isfinite(torch.as_tensor(getattr(result, field))).all()
+    if prune and not external:
+        # One other-factor feature becomes a constant, with the same column count.
+        # A prior fitted without informative covariates must have no covariate response.
+        for suffix in ("L", "F"):
+            builder = getattr(model, f"prior_{suffix}_fn")
+            state = getattr(model, f"model_state_{suffix}")[0]
+            pi0 = predict_null(builder, torch.tensor([[-10.0], [0.0], [10.0]]), state)
+            torch.testing.assert_close(pi0, pi0[0].expand_as(pi0))

@@ -263,9 +263,9 @@ epochs per call. ``po_lcash_posterior_means`` supports the same calling pattern.
     torch.testing.assert_close(updated.scale, first.scale)
 
 Within cEBMF, fitted state is passed between successive factor updates.
-Factor pruning clears saved prior states on sides that use self-covariates,
-because their feature columns change. The next update fits those priors to
-the current covariates. States on sides with only external covariates are retained.
+After factor pruning, priors that use self-covariates are fitted against the
+current feature columns. States on sides with only external covariates remain
+valid and are reused.
 
 Custom Initialization
 ~~~~~~~~~~~~~~~~~~~~~
