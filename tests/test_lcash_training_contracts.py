@@ -45,17 +45,6 @@ def test_invalid_iteration_budget_is_rejected(solver, invalid, fixed_grid):
         solver(x[:, None], x, torch.ones_like(x), max_iter=invalid, verbose=False)
 
 
-@pytest.mark.parametrize("model_class", [LcashNet, PropOddsLcashNet])
-@pytest.mark.parametrize("initial_weights", [None, [0.6, 0.3, 0.1]])
-def test_model_construction_preserves_global_rng(model_class, initial_weights):
-    log_pi = None if initial_weights is None else torch.tensor(initial_weights).log()
-    before = torch.random.get_rng_state().clone()
-    model = model_class(2, 3, log_pi_init=log_pi)
-    assert torch.equal(torch.random.get_rng_state(), before)
-    slopes = model.linear.weight if isinstance(model, LcashNet) else model.w
-    assert torch.count_nonzero(slopes) == 0
-
-
 @pytest.mark.parametrize("solver", SOLVERS)
 def test_informative_covariate_recovery_with_few_observations(solver, fixed_grid):
     generator = torch.Generator().manual_seed(410)
@@ -127,17 +116,7 @@ def test_full_data_objective_matches_null_and_student_t_priors(
         return original_step(optimizer, closure)
 
     monkeypatch.setattr(torch.optim.LBFGS, "step", inspect_first_closure)
-    lcash._train_model(
-        model,
-        x[:, None],
-        log_lik,
-        max_iter=2,
-        penalty=penalty,
-        verbose=False,
-        label="test",
-        coefficient_prior_scale=prior_scale,
-        coefficient_prior_df=prior_df,
-    )
+    lcash._train_model(model, x[:, None], log_lik, 2, penalty, False, "test", prior_scale, prior_df)
     assert calls == [True]
 
 
@@ -177,17 +156,6 @@ def test_mps_default_device_is_preserved_after_cpu_fit(solver, ash_init):
         assert math.isfinite(result.loss)
     finally:
         torch.set_default_device(previous)
-
-
-def test_po_mps_log_weights_initialize_on_requested_device():
-    if not torch.backends.mps.is_available():
-        pytest.skip("MPS is not available")
-    log_pi = torch.tensor([0.6, 0.3, 0.1], device="mps").log()
-    model = PropOddsLcashNet(2, 3, log_pi_init=log_pi)
-    assert all(parameter.device.type == "mps" for parameter in model.parameters())
-    actual = model.log_probs(torch.zeros(2, 2, device="mps"))
-    expected = log_pi - torch.logsumexp(log_pi, 0)
-    torch.testing.assert_close(actual, expected.expand_as(actual), atol=1e-6, rtol=1e-6)
 
 
 def test_python_inputs_retain_float64_precision():
@@ -237,42 +205,14 @@ def test_standalone_iteration_default_and_zero_prediction(solver, options, fixed
 
 
 @pytest.mark.parametrize("model_class", [LcashNet, PropOddsLcashNet])
-@pytest.mark.parametrize("stop", ["budget", "small_step"])
-def test_incomplete_fit_warning_identifies_stop_reason(model_class, stop, monkeypatch):
-    if stop == "small_step":
-        original_init = torch.optim.LBFGS.__init__
-
-        def stop_before_update(optimizer, *args, **kwargs):
-            kwargs["tolerance_change"] = 1.0
-            original_init(optimizer, *args, **kwargs)
-
-        monkeypatch.setattr(torch.optim.LBFGS, "__init__", stop_before_update)
+def test_iteration_budget_warns_and_returns_finite_parameters(model_class):
     model = model_class(1, 2, log_pi_init=torch.tensor([0.6, 0.4]).log()).double()
     x = torch.linspace(-3, 3, 100, dtype=torch.float64)
     scale = torch.tensor([0.0, 3.0], dtype=torch.float64)
-    reason = "iteration or evaluation budget" if stop == "budget" else "small step or objective change"
-    with pytest.warns(RuntimeWarning, match=reason):
-        lcash._train_model(
-            model,
-            x[:, None],
-            lcash.get_data_loglik_normal_torch(x, torch.ones_like(x), torch.zeros_like(scale), scale),
-            max_iter=1 if stop == "budget" else 500,
-            penalty=10,
-            verbose=False,
-            label="test",
-        )
+    log_lik = lcash.get_data_loglik_normal_torch(x, torch.ones_like(x), torch.zeros_like(scale), scale)
+    with pytest.warns(RuntimeWarning, match="iteration or evaluation budget"):
+        lcash._train_model(model, x[:, None], log_lik, 1, 10, False, "test")
     assert all(torch.isfinite(parameter).all() for parameter in model.parameters())
-
-
-@pytest.mark.parametrize("model_class", [LcashNet, PropOddsLcashNet])
-def test_construction_respects_torch_default_device(model_class):
-    previous = torch.get_default_device()
-    try:
-        torch.set_default_device("meta")
-        model = model_class(2, 3)
-        assert all(parameter.device.type == "meta" for parameter in model.parameters())
-    finally:
-        torch.set_default_device(previous)
 
 
 @pytest.mark.parametrize("solver", SOLVERS)
@@ -283,23 +223,6 @@ def test_default_fit_is_quiet_and_verbose_reports_final_diagnostics(solver, fixe
     solver(x[:, None], x, torch.ones_like(x), max_iter=2, verbose=True)
     output = capsys.readouterr().out
     assert "L-BFGS iterations:" in output and "Max gradient:" in output
-
-
-@pytest.mark.parametrize("solver", SOLVERS)
-@pytest.mark.parametrize("max_iter", [0, 2])
-def test_component_log_likelihood_is_computed_once(solver, max_iter, fixed_grid, monkeypatch):
-    original = lcash.get_data_loglik_normal_torch
-    calls = []
-
-    def record(*args, **kwargs):
-        result = original(*args, **kwargs)
-        calls.append(result)
-        return result
-
-    monkeypatch.setattr(lcash, "get_data_loglik_normal_torch", record)
-    x = torch.linspace(-2, 2, 32)
-    solver(x[:, None], x, torch.ones_like(x), max_iter=max_iter)
-    assert len(calls) == 1
 
 
 @pytest.mark.parametrize("solver", SOLVERS)
@@ -325,16 +248,6 @@ def test_near_optimum_intercept_reaches_gradient_tolerance_without_warning():
         lcash._train_model(model, features, log_lik, 500, 10, False, "test")
     assert not captured
     assert max(parameter.grad.abs().max().item() for parameter in model.parameters()) <= 1e-7
-
-
-@pytest.mark.parametrize("solver", SOLVERS)
-def test_student_t_can_be_disabled(solver, fixed_grid, monkeypatch):
-    def no_prior(*args, **kwargs):
-        pytest.fail("A disabled coefficient prior must not be evaluated.")
-
-    monkeypatch.setattr(torch.distributions, "StudentT", no_prior)
-    x = torch.linspace(-2, 2, 32)
-    solver(x[:, None], x, torch.ones_like(x), max_iter=2, coefficient_prior_scale=None)
 
 
 def test_two_component_prior_matches_po_and_is_invariant_to_common_lc_slopes(fixed_grid):

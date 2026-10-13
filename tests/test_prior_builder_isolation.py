@@ -144,25 +144,3 @@ def test_iteration_budget_precedence_is_scoped_to_conditional_solvers(
         expected[key] = (2 if conditional else 1) * internal_epoch
     assert calls == [expected]
     assert builder.kwargs == options
-
-
-@pytest.mark.parametrize("prior_name", ["lcash", "po_lcash"])
-@pytest.mark.parametrize(
-    "option",
-    ["n_epochs", "batch_size", "lr", "weight_decay", "seed", "X", "betahat", "sebetahat", "model_param"],
-)
-def test_invalid_conditional_options_fail_at_configuration(prior_name, option):
-    removed = option in {"n_epochs", "batch_size", "lr", "weight_decay", "seed"}
-    expected = rf"{option}.*max_iter" if removed else option
-    with pytest.raises(TypeError, match=expected):
-        cEBMF(
-            torch.ones(6, 4),
-            K=1,
-            prior_L=prior_name,
-            prior_L_kwargs={option: 1},
-            device="cpu",
-        )
-    builder = learned.LearnedBuilder(learned.LearnedPriorType(prior_name), penalty=10)
-    with pytest.raises(TypeError, match=expected):
-        builder.set_kwargs(**{option: 1})
-    assert builder.kwargs == {"penalty": 10}

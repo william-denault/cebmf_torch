@@ -62,44 +62,15 @@ def test_public_handoff_matches_retained_ash10_for_every_conditional_penalty(mod
     actual_log_pi = model.log_probs(torch.tensor([[-2.0], [2.0]], dtype=torch.float64))
     torch.testing.assert_close(actual_log_pi.double(), log_pi.expand_as(actual_log_pi), rtol=0, atol=1e-5)
 
-    eps = torch.finfo(torch.float32).eps
-    tolerance = 64 * eps
-    mean = actual.post_mean.double() / se.double()
-    mean2 = actual.post_mean2.double() / se.double().square()
-    reference_mean = expected.post_mean / se.double()
-    reference_mean2 = expected.post_mean2 / se.double().square()
-    torch.testing.assert_close(mean, reference_mean, atol=tolerance, rtol=tolerance)
-    torch.testing.assert_close(mean2, reference_mean2, atol=tolerance, rtol=tolerance)
-    torch.testing.assert_close(
-        torch.tensor(actual.loss / len(x), dtype=torch.float64), expected_mean_loss, atol=tolerance, rtol=tolerance
-    )
-    # Propagate the declared moment errors through variance = second moment - mean^2.
-    mean_bound = tolerance * (1 + reference_mean.abs())
-    second_bound = tolerance * (1 + reference_mean2.abs())
-    variance_bound = second_bound + (2 * reference_mean.abs() + mean_bound) * mean_bound
-    variance_bound += 8 * eps * (1 + reference_mean2.abs() + reference_mean.square())
-    variance_error = (
-        (actual.post_sd.double() / se.double()).square() - (expected.post_sd / se.double()).square()
-    ).abs()
-    assert torch.all(variance_error <= variance_bound)
-
-
-@pytest.mark.parametrize("gap", [-1000.0, -90.0, -20.0, 0.0, 5.0])
-def test_po_gap_value_and_gradient_are_finite(gap, precision):
-    model = PropOddsLcashNet(1, 3)
-    with torch.no_grad():
-        model.w.zero_()
-        model.delta_1.fill_(2)
-        model.delta_gaps.fill_(gap)
-    value = model.log_probs(torch.zeros(2, 1))[:, 1].sum()
-    value.backward()
-    assert torch.isfinite(value)
-    assert all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters())
-    if gap <= -90:
-        # Each narrow interior interval is proportional to its gap.
+    tolerance = 64 * torch.finfo(torch.float32).eps
+    for field, units in (("post_mean", se), ("post_mean2", se.square()), ("post_sd", se)):
         torch.testing.assert_close(
-            model.delta_gaps.grad, torch.tensor([2.0]), rtol=0, atol=8 * torch.finfo(precision).eps
+            getattr(actual, field).double() / units.double(),
+            getattr(expected, field) / units.double(),
+            atol=tolerance,
+            rtol=tolerance,
         )
+    assert actual.loss / len(x) == pytest.approx(expected_mean_loss.item(), abs=tolerance, rel=tolerance)
 
 
 @pytest.mark.parametrize("solver", SOLVERS)
@@ -123,18 +94,6 @@ def test_single_spike_skips_optimizer_and_round_trips(solver, monkeypatch):
             assert torch.equal(getattr(result, field), torch.zeros_like(x))
         expected_loss = -torch.distributions.Normal(0, 1).log_prob(x).sum().item()
         assert result.loss == pytest.approx(expected_loss, abs=1e-5)
-
-
-@pytest.mark.parametrize("n,expected", [(500000, 2), (500001, 3), (10000000, 3)])
-def test_adaptive_cutoff_changes_only_above_boundary(n, expected, monkeypatch):
-    weights = torch.tensor([0.8, 0.2 - 9.99999e-7, 9.99999e-7], dtype=torch.float64)
-    monkeypatch.setattr(
-        lcash, "ash", lambda *args, **kwargs: SimpleNamespace(pi=weights, scale=torch.tensor([0.0, 1.0, 2.0]))
-    )
-    # Expanded views exercise the count without allocating a large panel.
-    x = torch.zeros(1).expand(n)
-    scales, _ = lcash._select_grid(x, torch.ones(1).expand(n), 2**0.5, True, None, torch.device("cpu"))
-    assert len(scales) == expected
 
 
 @pytest.mark.parametrize("solver", SOLVERS)

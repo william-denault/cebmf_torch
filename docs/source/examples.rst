@@ -198,113 +198,63 @@ Using Covariates
 Linear Covariate Adaptive Shrinkage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-LC-ASH uses multinomial logistic regression to model the weights of a
-zero-centred normal mixture prior from covariates. PO-LC-ASH uses
-proportional odds regression. The component grid is the ordered set of
-mixture standard deviations; zero represents a point mass at zero (the spike).
+``lcash_posterior_means`` uses multinomial logistic regression to model the
+weights of a zero-centred normal mixture prior. ``po_lcash_posterior_means``
+uses proportional odds regression. Component standard deviations stay fixed;
+zero represents the point mass at zero.
 
-For a fresh fit, ``ash_init=True`` calls ``ash`` without covariates,
-using its default penalty of 10. It retains weights above
-``ash_threshold``. The default ``None`` resolves to ``min(1e-6, 0.5/n)``,
-where ``n`` is the training observation count. A numeric ``ash_threshold``
-sets the cutoff directly.
-The initial covariate coefficients are zero, so the initial conditional
-mixture equals the retained, normalized mixture from ``ash``.
-
-``ash_init=False`` uses the full automatically selected grid. Component
-scales stay fixed during training and warm starts. Selection raises
-``ValueError`` if the spike or every component is removed. A single retained
-spike returns its exact posterior without optimization.
-
-To inspect the initializer, call
-``ash(betahat, se, optimizer="lbfgs", zero_threshold=0.0)`` with the same
-``mult`` and float64 inputs. The caller's conditional penalty does not change
-this ``ash(..., penalty=10)`` fit. With ``ash_threshold=0``, the numerical
-return floor in ``ash`` can retain components whose optimizer weights were zero.
-
-The conditional ``penalty`` defaults to 10 and uses the coefficient
-``(penalty-1)/n`` in the full-data objective. At zero slopes this equals
-the null penalty used by ``ash`` at the same strength. A value of 1 omits the null term.
-
-Continued training uses the supplied penalty and the number of supplied
-observations. Saved-state prediction with ``max_iter=0`` applies no penalty.
+For a fresh fit, ``ash_init=True`` calls ``ash`` at penalty 10 and retains
+components with weight above ``ash_threshold`` (default ``1e-6``). Zero
+initial slopes reproduce the retained, normalized mixture. The conditional
+penalty does not affect this initialization. ``ash_init=False`` uses the full
+automatically selected grid. Selection raises ``ValueError`` if the spike or
+every component is removed. A single retained spike needs no optimization.
 
 Training uses native PyTorch ``torch.optim.LBFGS`` with full batches,
-float64 arithmetic and direct log probabilities. Component log likelihoods
-are computed once per fit and reused for optimization and posterior summaries.
+float64 arithmetic and log probabilities. In the summed objective, the null
+term uses coefficient ``(penalty-1)/n`` per observation, where ``n`` is the
+training count. The default ``penalty=10`` matches ``ash`` at zero slopes;
+``penalty=1`` omits the null term.
 
-The standardized covariate coefficients have independent Student-t priors,
-evaluated with native ``torch.distributions.StudentT``. The defaults are
-``coefficient_prior_scale=1.0`` and ``coefficient_prior_df=5.0``, with location
-zero. When the prior is enabled, its scale and degrees of freedom must be
-finite and positive. Scale is the
-distribution's scale parameter, not its standard deviation. The default has
-standard deviation 1.29 and places 95% of its mass between -2.57 and 2.57.
-`Stan's prior-choice guidance <https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations>`_
-supports Student-t priors with moderate degrees of freedom and scales chosen
-for the parameter's units.
+Standardized covariate coefficients have independent Student-t priors,
+evaluated with ``torch.distributions.StudentT``. Defaults are location zero,
+``coefficient_prior_scale=1.0`` and ``coefficient_prior_df=5.0``. The scale
+and degrees of freedom must be finite and positive. Scale differs from
+standard deviation: these defaults give a standard deviation of 1.29 and
+95% of the mass between -2.57 and 2.57. See
+`Stan's prior-choice guidance <https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations>`_.
 Set ``coefficient_prior_scale=None`` to disable this prior.
 
 For ``lcash_posterior_means``, the prior applies to each non-null component's
-slope minus the
-null component's slope. These contrasts describe component-versus-null log odds;
-adding the same slope to all components does not change the model or its prior.
-For ``po_lcash_posterior_means``, the prior applies to the shared slope vector.
-With two components, these are the same coefficient interpretation. Intercepts and cut-points are
-not penalized. Each coefficient refers to a one-standard-deviation covariate
-change, using the saved training means and standard deviations.
+slope minus the null component's slope. For ``po_lcash_posterior_means``, it
+applies to the shared slope vector. Intercepts and cut-points are not
+penalized. The summed negative log prior is divided by ``n`` in the mean
+training objective. Returned ``loss`` excludes both prior terms and is the
+summed negative marginal log likelihood required by cEBMF.
 
-The summed negative log prior is divided by ``n`` and added to the mean
-training objective. It regularizes covariate effects separately from the
-null penalty. Returned ``loss`` excludes both prior terms: it is the summed
-negative marginal log likelihood required by cEBMF.
+The standalone iteration limit is ``max_iter=500``. Within cEBMF, omitted
+or ``None`` inner ``max_iter`` uses ``2 * internal_epoch``; an explicit
+value overrides it. A finite fit above the gradient tolerance warns.
+Non-finite optimization losses or gradients raise ``FloatingPointError``.
+``verbose=True`` prints the final optimization diagnostics.
 
-``po_lcash_posterior_means`` caps log cut-point gaps at the floating-point
-range limit before exponentiation, leaving room for their cumulative sum. This keeps very large,
-finite trial gaps from overflowing. Values below the cap are unchanged.
-The solver raises ``FloatingPointError`` for a non-finite optimization
-loss or gradient and restores the initial parameters before raising.
-A finite fit above the gradient tolerance emits ``RuntimeWarning``,
-with the stopping reason. To continue fitting, pass the complete
-``model_param`` with the same data, ``penalty``, ``coefficient_prior_scale``
-and ``coefficient_prior_df``. Prior settings are not stored in ``model_param``.
-Fits are quiet by default; ``verbose=True`` prints the final iteration count,
-evaluation count, mean objective and maximum gradient.
+The complete returned ``model_param`` stores the component grid, coefficients,
+training covariate means and standard deviations, and solver/version identifiers.
+Pass it to the same solver to continue fitting. ``ash_init``, ``ash_threshold``
+and ``mult`` are then ignored. Effect estimates, standard errors and observation
+count may change; covariate columns must retain their meaning, order and units.
+Missing values and columns with zero training standard deviation contribute zero.
 
-Fitting and saved state use float64. MPS fits run on CPU because MPS does
-not support float64. MPS inputs and saved parameters move to CPU before
-conversion to float64. A native PyTorch device context keeps intermediate
-allocations on the fitting device and preserves the caller's default device.
-Returned posterior summaries, weights and scales use float32 on the requested
-device.
+Use ``max_iter=0`` for posterior prediction without optimization or penalties.
+To resume the same objective, also pass the same ``penalty``,
+``coefficient_prior_scale`` and ``coefficient_prior_df``; these are not stored
+in ``model_param``. Each training call starts fresh L-BFGS curvature history.
+Start without ``model_param`` to select another grid or estimate new covariate
+statistics. ``model_param["state_dict"]`` contains only the regression parameters.
 
-The returned ``model_param`` contains the selected component grid, fitted
-regression parameters, covariate means and standard deviations used for
-standardization, and solver/version identifiers. The regression parameters are the
-component-specific coefficients and intercepts for LC-ASH, or the shared
-coefficients and parameters defining the ordered cut-points for PO-LC-ASH.
-The saved means and standard deviations define the standardized covariates
-to which these parameters apply.
-
-Pass ``model_param`` to the same solver to continue fitting with the saved
-component grid, regression parameters and covariate standardization.
-``ash_init``, ``ash_threshold`` and ``mult`` are then ignored. Effect
-estimates, standard errors and the number of observations may change.
-Covariate columns must retain their meaning, order and units. Missing
-entries and columns with zero standard deviation in the original fit are
-set to zero after standardization.
-
-Each training call with more than one component starts a new L-BFGS optimizer.
-Use ``max_iter=0`` to calculate posterior summaries with the saved prior.
-To select a new grid or estimate new covariate statistics, start a fresh fit
-without ``model_param``.
-Pass the complete returned dictionary as ``model_param``;
-``model_param["state_dict"]`` contains only the regression parameters.
-
-Within cEBMF, omitted or ``None`` inner ``max_iter`` uses
-``2 * internal_epoch``. An explicit zero or positive value overrides it.
-The standalone default is 500 iterations. Iteration counts are upper limits;
-L-BFGS can stop earlier when it meets a convergence criterion.
+Fitting and saved state use float64. MPS inputs and saved tensors move to CPU
+before fitting because MPS does not support float64. Returned posterior summaries,
+weights and scales use float32 on the requested device.
 
 The example below continues fitting from saved state, using up to 100 L-BFGS
 iterations per call. ``po_lcash_posterior_means`` supports the same calling pattern.

@@ -12,7 +12,6 @@ grid pruning.
 import math
 import operator
 import warnings
-from contextlib import nullcontext
 
 import torch
 import torch.nn as nn
@@ -85,8 +84,9 @@ class LcashNet(nn.Module):
             device = log_pi_init.device if device is None else device
             dtype = log_pi_init.dtype if dtype is None else dtype
         # Allocate without random initialization, then set the mixture weights.
-        self.linear = nn.Linear(input_dim, num_classes, device="meta", dtype=dtype)
-        self.linear.to_empty(device=torch.empty(0).device if device is None else device)
+        self.linear = nn.utils.skip_init(
+            nn.Linear, input_dim, num_classes, device=torch.empty(0).device if device is None else device, dtype=dtype
+        )
         with torch.no_grad():
             self.linear.weight.zero_()
             self.linear.bias.zero_()
@@ -303,12 +303,12 @@ def _select_grid(
     sebetahat: torch.Tensor,
     mult: float,
     ash_init: bool,
-    ash_threshold: float | None,
+    ash_threshold: float,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Select a component grid and optional ASH initialization for a fresh fit.
+    """Select a component grid and optional ``ash`` initialization for a fresh fit.
 
-    With ``ash_init=True``, retain components whose ASH weights exceed
+    With ``ash_init=True``, retain components whose ``ash`` weights exceed
     ``ash_threshold`` and compute centred log-weights for initialization.
     Otherwise retain the full automatically selected grid.
 
@@ -318,12 +318,12 @@ def _select_grid(
         Multiplicative step between grid SDs.  Smaller values give a
         finer grid with more components.
     ash_init : bool
-        If True, run ash internally with ``optimizer="lbfgs"`` to
+        If True, run ``ash`` internally with ``optimizer="lbfgs"`` to
         prune the grid to active components and initialise bias from
-        the ash weights.
-    ash_threshold : float or None
+        the ``ash`` weights.
+    ash_threshold : float
         Pruning threshold: components with ``pi <= ash_threshold``
-        are dropped. None uses min(1e-6, 0.5/n). Only used when ash_init=True.
+        are dropped. Only used when ash_init=True.
 
     Returns
     -------
@@ -334,10 +334,6 @@ def _select_grid(
         None when ``ash_init=False``.
     """
     if ash_init:
-        if betahat.numel() == 0:
-            raise ValueError("ASH initialization requires a positive observation count.")
-        if ash_threshold is None:
-            ash_threshold = min(1e-6, 0.5 / betahat.numel())
         if not math.isfinite(ash_threshold) or ash_threshold < 0:
             raise ValueError("ash_threshold must be finite and nonnegative.")
         ash_result = ash(
@@ -516,7 +512,7 @@ def _fit_lcash(
     coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
     ash_init: bool = True,
-    ash_threshold: float | None = None,
+    ash_threshold: float = 1e-6,
     model_param: dict | None = None,
     device: torch.device | None = None,
     verbose: bool = False,
@@ -545,91 +541,89 @@ def _fit_lcash(
     if max_iter is None:
         max_iter = 500
 
-    # Keep implicit tensor factories on the fitting device without changing the caller's default.
-    with torch.device(device) if torch.empty(0).device != device else nullcontext():
-        X, betahat, sebetahat = _prepare_inputs(X, betahat, sebetahat, device)
-        if X.ndim != 2 or betahat.ndim != 1 or sebetahat.shape != betahat.shape or X.shape[0] != betahat.shape[0]:
-            raise ValueError("X, betahat, and sebetahat must have matching observation counts.")
-        if betahat.numel() == 0:
-            raise ValueError("Conditional fitting requires a positive observation count.")
-        try:
-            max_iter = operator.index(max_iter)
-        except TypeError:
-            raise ValueError("max_iter must be a nonnegative integer or None.") from None
-        if max_iter < 0:
-            raise ValueError("max_iter must be a nonnegative integer or None.")
-        if max_iter > 0 and (not math.isfinite(penalty) or penalty < 1):
-            raise ValueError("penalty must be finite and at least one.")
-        if max_iter > 0 and coefficient_prior_scale is not None:
-            for name, value in (
-                ("coefficient_prior_scale", coefficient_prior_scale),
-                ("coefficient_prior_df", coefficient_prior_df),
-            ):
-                if not math.isfinite(value) or value <= 0:
-                    raise ValueError(f"{name} must be finite and positive.")
-        if model_param is None:
-            feature_mean, feature_sd = _feature_statistics(X)
-            scale, log_pi_init = _select_grid(betahat, sebetahat, mult, ash_init, ash_threshold, device)
-        else:
-            scale, feature_mean, feature_sd = _restore_model_param(model_param, label, X)
-            log_pi_init = None
-        X_scaled = _nanstandardise(X, feature_mean, feature_sd)
+    X, betahat, sebetahat = _prepare_inputs(X, betahat, sebetahat, device)
+    if X.ndim != 2 or betahat.ndim != 1 or sebetahat.shape != betahat.shape or X.shape[0] != betahat.shape[0]:
+        raise ValueError("X, betahat, and sebetahat must have matching observation counts.")
+    if betahat.numel() == 0:
+        raise ValueError("Conditional fitting requires a positive observation count.")
+    try:
+        max_iter = operator.index(max_iter)
+    except TypeError:
+        raise ValueError("max_iter must be a nonnegative integer or None.") from None
+    if max_iter < 0:
+        raise ValueError("max_iter must be a nonnegative integer or None.")
+    if max_iter > 0 and (not math.isfinite(penalty) or penalty < 1):
+        raise ValueError("penalty must be finite and at least one.")
+    if max_iter > 0 and coefficient_prior_scale is not None:
+        for name, value in (
+            ("coefficient_prior_scale", coefficient_prior_scale),
+            ("coefficient_prior_df", coefficient_prior_df),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive.")
+    if model_param is None:
+        feature_mean, feature_sd = _feature_statistics(X)
+        scale, log_pi_init = _select_grid(betahat, sebetahat, mult, ash_init, ash_threshold, device)
+    else:
+        scale, feature_mean, feature_sd = _restore_model_param(model_param, label, X)
+        log_pi_init = None
+    X_scaled = _nanstandardise(X, feature_mean, feature_sd)
 
-        K = scale.shape[0]
-        model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init, device=device, dtype=X.dtype)
-        if model_param is not None:
-            model.load_state_dict({name: value.to(device=device) for name, value in model_param["state_dict"].items()})
+    K = scale.shape[0]
+    model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init, device=device, dtype=X.dtype)
+    if model_param is not None:
+        model.load_state_dict({name: value.to(device=device) for name, value in model_param["state_dict"].items()})
 
-        with torch.no_grad():
-            data_loglik = get_data_loglik_normal_torch(betahat, sebetahat, torch.zeros_like(scale), scale)
-            _require_finite(data_loglik, "Conditional component log likelihoods")
-        if K > 1 and max_iter > 0:
-            _train_model(
-                model,
-                X_scaled,
-                data_loglik,
-                max_iter,
-                penalty,
-                verbose,
-                label,
-                coefficient_prior_scale,
-                coefficient_prior_df,
-            )
-
-        post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik = _compute_posteriors(
+    with torch.no_grad():
+        data_loglik = get_data_loglik_normal_torch(betahat, sebetahat, torch.zeros_like(scale), scale)
+        _require_finite(data_loglik, "Conditional component log likelihoods")
+    if K > 1 and max_iter > 0:
+        _train_model(
             model,
             X_scaled,
-            betahat,
-            sebetahat,
-            scale,
             data_loglik,
+            max_iter,
+            penalty,
+            verbose,
+            label,
+            coefficient_prior_scale,
+            coefficient_prior_df,
         )
 
-        fitted_state = {
-            "version": _MODEL_PARAM_VERSION,
-            "solver": label,
-            "scale": scale.detach().clone(),
-            "feature_mean": feature_mean.detach().clone(),
-            "feature_sd": feature_sd.detach().clone(),
-            "state_dict": {key: value.detach().clone() for key, value in model.state_dict().items()},
-        }
-        output = {
-            name: value.to(device=output_device, dtype=torch.float32)
-            for name, value in (
-                ("post_mean", post_mean),
-                ("post_mean2", post_mean2),
-                ("post_sd", post_sd),
-                ("pi_np", all_pi_values),
-                ("scale", scale),
-            )
-        }
-        # Separate float32 rounding must preserve E[theta^2] >= E[theta]^2.
-        output["post_mean2"] = torch.maximum(output["post_mean2"], output["post_mean"].square())
-        for name, value in output.items():
-            _require_finite(value, f"Returned conditional {name}")
-        _validate_grid(output["scale"])
-        # cEBMF's per-factor KL calculation uses the unpenalized sum.
-        return cash_PosteriorMeanNorm(**output, loss=-marginal_loglik, model_param=fitted_state)
+    post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik = _compute_posteriors(
+        model,
+        X_scaled,
+        betahat,
+        sebetahat,
+        scale,
+        data_loglik,
+    )
+
+    fitted_state = {
+        "version": _MODEL_PARAM_VERSION,
+        "solver": label,
+        "scale": scale.detach().clone(),
+        "feature_mean": feature_mean.detach().clone(),
+        "feature_sd": feature_sd.detach().clone(),
+        "state_dict": {key: value.detach().clone() for key, value in model.state_dict().items()},
+    }
+    output = {
+        name: value.to(device=output_device, dtype=torch.float32)
+        for name, value in (
+            ("post_mean", post_mean),
+            ("post_mean2", post_mean2),
+            ("post_sd", post_sd),
+            ("pi_np", all_pi_values),
+            ("scale", scale),
+        )
+    }
+    # Separate float32 rounding must preserve E[theta^2] >= E[theta]^2.
+    output["post_mean2"] = torch.maximum(output["post_mean2"], output["post_mean"].square())
+    for name, value in output.items():
+        _require_finite(value, f"Returned conditional {name}")
+    _validate_grid(output["scale"])
+    # cEBMF's per-factor KL calculation uses the unpenalized sum.
+    return cash_PosteriorMeanNorm(**output, loss=-marginal_loglik, model_param=fitted_state)
 
 
 # ============================================================
@@ -648,7 +642,7 @@ def lcash_posterior_means(
     coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
     ash_init: bool = True,
-    ash_threshold: float | None = None,
+    ash_threshold: float = 1e-6,
     model_param: dict | None = None,
     device: torch.device | None = None,
     verbose: bool = False,
@@ -706,9 +700,9 @@ def lcash_posterior_means(
         within floating-point accuracy. The initial coefficients are zero.
         If False, use the full grid with uniform bias initialisation.
         Ignored when ``model_param`` is supplied.
-    ash_threshold : float or None
-        For fresh ASH initialization, remove components with fitted
-        weight at or below this value. None uses min(1e-6, 0.5/n).
+    ash_threshold : float
+        For fresh ``ash`` initialization, remove components with fitted
+        weight at or below this value. Default 1e-6.
         Explicit zero retains every positive weight returned by ``ash``, including
         weights supplied by its numerical floor. Initialization
         raises if no component remains or the spike is removed. A single
@@ -788,7 +782,7 @@ def po_lcash_posterior_means(
     coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
     ash_init: bool = True,
-    ash_threshold: float | None = None,
+    ash_threshold: float = 1e-6,
     model_param: dict | None = None,
     device: torch.device | None = None,
     verbose: bool = False,

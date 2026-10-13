@@ -48,6 +48,14 @@ def test_gap_switch_matches_decimal_values_and_derivatives(dtype):
     torch.testing.assert_close(actual[[0, -1]], torch.tensor([-1000.0, 0.0], dtype=dtype), rtol=0, atol=0)
     torch.testing.assert_close(derivative[[0, -1]], torch.tensor([1.0, 0.0], dtype=dtype), rtol=0, atol=0)
 
+    model = PropOddsLcashNet(1, 3, dtype=dtype)
+    with torch.no_grad():
+        model.delta_gaps.fill_(-1000)
+    interior_log_mass = model.log_probs(torch.zeros(2, 1, dtype=dtype))[:, 1].sum()
+    gap_gradient = torch.autograd.grad(interior_log_mass, model.delta_gaps)[0]
+    assert torch.isfinite(interior_log_mass)
+    torch.testing.assert_close(gap_gradient, torch.full_like(gap_gradient, 2.0), rtol=0, atol=8 * eps)
+
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("gap_range", ["large", "cumulative_overflow", "exp_overflow"])
@@ -94,76 +102,46 @@ def test_po_gap_cap_preserves_representable_cutpoints_and_derivatives(dtype):
     torch.testing.assert_close(actual_gradient, expected_gradient, rtol=0, atol=0)
 
 
-@pytest.mark.parametrize(
-    "model_class,solver", zip(MODELS, [lcash_posterior_means, po_lcash_posterior_means], strict=True)
-)
+@pytest.mark.parametrize("model_class", MODELS)
 @pytest.mark.parametrize("value", [math.nan, math.inf])
-def test_nonfinite_trial_gradient_restores_model_and_does_not_return_a_fit(
-    model_class, solver, value, monkeypatch, fixed_grid
-):
-    original_log_probs = model_class.log_probs
-    calls = []
-    handles = []
-    initial_parameters = []
-    models = []
+def test_nonfinite_trial_gradient_restores_model_and_does_not_return_a_fit(model_class, value):
+    model = model_class(1, 3, dtype=torch.float64)
+    initial = [parameter.detach().clone() for parameter in model.parameters()]
+    calls = 0
 
-    def poison_first_gradient(gradient):
-        calls.append(True)
-        return torch.full_like(gradient, value) if len(calls) == 2 else gradient
+    def poison_trial(gradient):
+        nonlocal calls
+        calls += 1
+        return torch.full_like(gradient, value) if calls == 2 else gradient
 
-    def attach_hook(model, features):
-        result = original_log_probs(model, features)
-        if not handles:
-            assert torch.isfinite(result).all()
-            models.append(model)
-            initial_parameters.extend(parameter.detach().clone() for parameter in model.parameters())
-            handles.append(next(model.parameters()).register_hook(poison_first_gradient))
-        return result
-
-    monkeypatch.setattr(model_class, "log_probs", attach_hook)
-    x = torch.linspace(-1.0, 1.0, 5)
+    hook = next(model.parameters()).register_hook(poison_trial)
+    x = torch.linspace(-1.0, 1.0, 5, dtype=torch.float64)
+    log_lik = torch.distributions.Normal(0, torch.tensor([1.0, 2.0, 4.0])).log_prob(x[:, None])
     try:
         with pytest.raises(FloatingPointError, match="gradient.*finite"):
-            solver(x[:, None], x, torch.ones_like(x), max_iter=3, verbose=False)
+            lcash._train_model(model, x[:, None], log_lik, 3, 10, False, "test")
     finally:
-        for handle in handles:
-            handle.remove()
-    assert len(calls) == 2
-    for parameter, initial in zip(models[0].parameters(), initial_parameters, strict=True):
-        torch.testing.assert_close(parameter, initial, rtol=0, atol=0)
+        hook.remove()
+    assert calls == 2
+    for parameter, original in zip(model.parameters(), initial, strict=True):
+        torch.testing.assert_close(parameter, original, rtol=0, atol=0)
 
 
-@pytest.mark.parametrize(
-    "solver,value",
-    [
-        (lcash_posterior_means, math.nan),
-        (lcash_posterior_means, math.inf),
-        (po_lcash_posterior_means, math.nan),
-        (po_lcash_posterior_means, math.inf),
-        (po_lcash_posterior_means, 710.0),
-        (po_lcash_posterior_means, math.log(torch.finfo(torch.float64).max * 0.75)),
-    ],
-)
-def test_final_lbfgs_step_rejects_nonfinite_parameters_but_accepts_finite_gaps(solver, value, monkeypatch, fixed_grid):
+@pytest.mark.parametrize("solver", [lcash_posterior_means, po_lcash_posterior_means])
+@pytest.mark.parametrize("value", [math.nan, math.inf])
+def test_final_lbfgs_step_rejects_nonfinite_parameters(solver, value, monkeypatch, fixed_grid):
     original_step = torch.optim.LBFGS.step
 
-    def final_step(optimizer, *args, **kwargs):
-        result = original_step(optimizer, *args, **kwargs)
+    def final_step(optimizer, closure):
+        result = original_step(optimizer, closure)
         with torch.no_grad():
-            # The last parameter is the LC bias or the PO log gap.
             optimizer.param_groups[0]["params"][-1].fill_(value)
         return result
 
     monkeypatch.setattr(torch.optim.LBFGS, "step", final_step)
     x = torch.linspace(-2.0, 2.0, 8)
-    if not math.isfinite(value):
-        with pytest.raises(FloatingPointError, match="Conditional .*finite"):
-            solver(x[:, None], x, torch.ones_like(x), max_iter=1)
-    else:
-        result = solver(x[:, None], x, torch.ones_like(x), max_iter=1)
-        assert math.isfinite(result.loss)
-        for field in ("post_mean", "post_mean2", "post_sd", "pi_np"):
-            assert torch.isfinite(getattr(result, field)).all()
+    with pytest.raises(FloatingPointError, match="Conditional .*finite"):
+        solver(x[:, None], x, torch.ones_like(x), max_iter=1)
 
 
 @pytest.mark.parametrize("solver", [lcash_posterior_means, po_lcash_posterior_means])

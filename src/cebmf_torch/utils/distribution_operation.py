@@ -57,7 +57,7 @@ def convolved_logpdf_normal_torch(
     torch.Tensor
         Log-likelihood matrix of shape ``(J, K)``.
     """
-    betahat = torch.as_tensor(betahat)
+    betahat = betahat if isinstance(betahat, torch.Tensor) else torch.as_tensor(betahat)
     dt, dev = betahat.dtype, betahat.device
     sebetahat = torch.as_tensor(sebetahat, dtype=dt, device=dev)
     scale = torch.as_tensor(scale, dtype=dt, device=dev)
