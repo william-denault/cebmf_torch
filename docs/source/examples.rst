@@ -238,9 +238,9 @@ value overrides it. A finite fit above the gradient tolerance warns.
 Non-finite optimization losses or gradients raise ``FloatingPointError``.
 ``verbose=True`` prints the final optimization diagnostics.
 
-The complete returned ``model_param`` stores the component grid, coefficients,
-training covariate means and standard deviations, and solver/version identifiers.
-Pass it to the same solver to continue fitting. ``ash_init``, ``ash_threshold``
+Pass the complete returned ``model_param`` unchanged to the same solver to
+continue fitting. It preserves the fitted prior, component grid and covariate
+standardization. ``ash_init``, ``ash_threshold``
 and ``mult`` are then ignored. Effect estimates, standard errors and observation
 count may change; covariate columns must retain their meaning, order and units.
 Missing values and columns with zero training standard deviation contribute zero.
@@ -250,7 +250,7 @@ To resume the same objective, also pass the same ``penalty``,
 ``coefficient_prior_scale`` and ``coefficient_prior_df``; these are not stored
 in ``model_param``. Each training call starts fresh L-BFGS curvature history.
 Start without ``model_param`` to select another grid or estimate new covariate
-statistics. ``model_param["state_dict"]`` contains only the regression parameters.
+statistics.
 
 Fitting and saved state use float64. MPS inputs and saved tensors move to CPU
 before fitting because MPS does not support float64. Returned posterior summaries,

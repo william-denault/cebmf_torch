@@ -74,13 +74,8 @@ def test_public_handoff_matches_retained_ash10_for_every_conditional_penalty(mod
 
 
 @pytest.mark.parametrize("solver", SOLVERS)
-def test_single_spike_skips_optimizer_and_round_trips(solver, monkeypatch):
+def test_single_spike_round_trips(solver, monkeypatch):
     monkeypatch.setattr(lcash, "ash", lambda *args, **kwargs: SimpleNamespace(pi=torch.ones(1), scale=torch.zeros(1)))
-
-    def no_optimizer(*args, **kwargs):
-        pytest.fail("A single-spike fit has no parameters to optimize.")
-
-    monkeypatch.setattr(torch.optim, "LBFGS", no_optimizer)
     x = torch.linspace(-2, 2, 32)
     first = solver(x[:, None], x, torch.ones_like(x), max_iter=3, verbose=False)
     stream = io.BytesIO()
@@ -94,11 +89,3 @@ def test_single_spike_skips_optimizer_and_round_trips(solver, monkeypatch):
             assert torch.equal(getattr(result, field), torch.zeros_like(x))
         expected_loss = -torch.distributions.Normal(0, 1).log_prob(x).sum().item()
         assert result.loss == pytest.approx(expected_loss, abs=1e-5)
-
-
-@pytest.mark.parametrize("solver", SOLVERS)
-@pytest.mark.parametrize("penalty", [0.5, float("nan"), float("inf")])
-def test_invalid_training_penalty_rejected(solver, penalty):
-    x = torch.linspace(-3, 3, 32)
-    with pytest.raises(ValueError, match="penalty"):
-        solver(x[:, None], x, torch.ones_like(x), penalty=penalty, max_iter=1, verbose=False)

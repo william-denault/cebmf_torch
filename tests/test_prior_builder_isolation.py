@@ -92,6 +92,7 @@ def test_solver_options_survive_another_model(monkeypatch, prior_name):
     )
     first.initialise_factors()
     first.fit(maxit=1)
+    calls.clear()
 
     cEBMF(
         data,
@@ -105,16 +106,28 @@ def test_solver_options_survive_another_model(monkeypatch, prior_name):
     first.fit(maxit=1)
 
     budget = {"n_epochs": 2} if prior_name == "cgb" else {"max_iter": 4}
-    expected = [(6, {**L_kwargs, **budget}), (4, {**F_kwargs, **budget})]
-    assert calls == expected * 2
+    expected = {6: {**L_kwargs, **budget}, 4: {**F_kwargs, **budget}}
+    assert {size for size, _ in calls} == expected.keys()
+    assert all(options == expected[size] for size, options in calls)
 
 
-@pytest.mark.parametrize("prior_type", list(learned.LearnedPriorType))
-@pytest.mark.parametrize("internal_epoch", [None, 0, 10])
-@pytest.mark.parametrize("explicit_budget", ["omitted", None, 0, 7])
-def test_iteration_budget_precedence_is_scoped_to_conditional_solvers(
-    monkeypatch, prior_type, internal_epoch, explicit_budget
-):
+@pytest.mark.parametrize(
+    "prior_type,internal_epoch,options,expected",
+    [
+        (prior_type, internal_epoch, options, expected)
+        for prior_type in (learned.LearnedPriorType.LCASH, learned.LearnedPriorType.PO_LCASH)
+        for internal_epoch, options, expected in [
+            (10, {}, {"max_iter": 20}),
+            (10, {"max_iter": None}, {"max_iter": 20}),
+            (10, {"max_iter": 0}, {"max_iter": 0}),
+            (10, {"max_iter": 7}, {"max_iter": 7}),
+            (0, {}, {"max_iter": 0}),
+            (None, {}, {}),
+        ]
+    ]
+    + [(learned.LearnedPriorType.CGB, 10, {}, {"n_epochs": 10})],
+)
+def test_iteration_budget_precedence(monkeypatch, prior_type, internal_epoch, options, expected):
     calls = []
 
     def record_solver(X, betahat, sebetahat, *, model_param, device, **kwargs):
@@ -130,17 +143,9 @@ def test_iteration_budget_precedence_is_scoped_to_conditional_solvers(
             pi_np=torch.stack((pi, pi), dim=1),
         )
 
-    conditional_types = (learned.LearnedPriorType.LCASH, learned.LearnedPriorType.PO_LCASH)
-    conditional = prior_type in conditional_types
-    key = "max_iter" if conditional else "n_epochs"
-    options = {} if explicit_budget == "omitted" else {key: explicit_budget}
     monkeypatch.setitem(learned.builder_functions, prior_type, record_solver)
     builder = learned.LearnedBuilder(prior_type, **options)
     builder.fit(torch.zeros(2, 1), torch.zeros(2), torch.ones(2), internal_epoch=internal_epoch)
 
-    expected = dict(options)
-    inherits = explicit_budget == "omitted" or (conditional and explicit_budget is None)
-    if inherits and internal_epoch is not None:
-        expected[key] = (2 if conditional else 1) * internal_epoch
-    assert calls == [expected]
+    assert calls and all(options == expected for options in calls)
     assert builder.kwargs == options

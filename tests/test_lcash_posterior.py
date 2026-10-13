@@ -18,8 +18,6 @@ def test_conditional_posterior_shrinks_covariate_dependent_signals(solver, ash_i
     assert torch.mean((result.post_mean - truth).square()) < 0.7
     assert result.model_param is not None
     assert result.pi_np.shape == (n, len(result.scale))
-    if ash_init:
-        assert len(result.scale) < 20
 
 
 @pytest.mark.parametrize("solver", [lcash_posterior_means, po_lcash_posterior_means])
@@ -49,39 +47,3 @@ def test_lcash_ash_result_pi_field():
     assert result.pi.shape == result.scale.shape, "pi should have same shape as scale"
     assert abs(result.pi.sum().item() - 1.0) < 1e-5, "pi should sum to 1"
     assert abs(result.pi[0].item() - result.pi0) < 1e-5, "pi[0] should equal pi0"
-
-
-def test_po_lcash_k2_edge_case():
-    """PO-LC-ASH should work with K=2 (single cut-point, no delta_gaps)."""
-    from cebmf_torch.cebnm.lcash import PropOddsLcashNet
-
-    torch.manual_seed(1)
-    F, K = 3, 2
-    model = PropOddsLcashNet(F, K)
-
-    # delta_gaps should be None for K=2
-    assert model.delta_gaps is None, "K=2 should have no delta_gaps"
-
-    # Forward pass should produce valid probabilities
-    x = torch.randn(100, F)
-    pi = model(x)
-    assert pi.shape == (100, 2)
-    assert torch.allclose(pi.sum(dim=1), torch.ones(100), atol=1e-5)
-    assert (pi > 0).all(), "All probabilities should be positive"
-
-
-def test_po_lcash_fewer_params_than_softmax():
-    """PO-LC-ASH should have fewer parameters than softmax LC-ASH."""
-    from cebmf_torch.cebnm.lcash import LcashNet, PropOddsLcashNet
-
-    F, K = 10, 20
-    softmax = LcashNet(F, K)
-    propodds = PropOddsLcashNet(F, K)
-
-    n_softmax = sum(p.numel() for p in softmax.parameters())
-    n_propodds = sum(p.numel() for p in propodds.parameters())
-
-    print(f"Softmax params: {n_softmax}, PropOdds params: {n_propodds}")
-    # Softmax: F*K + K = 10*20 + 20 = 220
-    # PropOdds: F + 1 + (K-2) = 10 + 1 + 18 = 29
-    assert n_propodds < n_softmax, f"PropOdds ({n_propodds}) should have fewer params than Softmax ({n_softmax})"

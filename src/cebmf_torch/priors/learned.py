@@ -79,7 +79,7 @@ class LearnedBuilder(PriorBuilder):
             Additional keyword arguments specific to the prior type.
         """
         self.type = type
-        self.set_kwargs(**kwargs)
+        self.kwargs = kwargs
 
     def set_kwargs(self, **new_kwargs: Any) -> None:
         """

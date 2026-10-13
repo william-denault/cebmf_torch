@@ -423,36 +423,18 @@ def _train_model(
         _require_finite(torch.cat([p.grad.reshape(-1) for p in params]), "Conditional optimization gradient")
         return loss
 
-    initial = [p.detach().clone() for p in params]
-    try:
-        optimizer.step(closure)
-        # LBFGS.step returns its initial loss; evaluate the actual endpoint.
-        final_loss = closure().detach().item()
-    except (FloatingPointError, RuntimeError) as error:
-        with torch.no_grad():
-            for parameter, value in zip(params, initial, strict=True):
-                parameter.copy_(value)
-        if isinstance(error, FloatingPointError):
-            raise FloatingPointError(
-                f"{label} L-BFGS encountered a non-finite evaluation; no fit was returned. {error}"
-            ) from error
-        raise
+    optimizer.step(closure)
+    # LBFGS.step returns its initial loss; evaluate the actual endpoint.
+    final_loss = closure().detach().item()
     grad_max = max(p.grad.abs().max().item() for p in params if p.numel())
-    state = optimizer.state[params[0]]
-    options = optimizer.param_groups[0]
-    if grad_max > options["tolerance_grad"]:
-        reason = (
-            "reached its iteration or evaluation budget"
-            if state["n_iter"] >= max_iter or state["func_evals"] >= options["max_eval"]
-            else "stopped with a small step or objective change"
-        )
+    if grad_max > optimizer.param_groups[0]["tolerance_grad"]:
         warnings.warn(
-            f"{label} L-BFGS {reason} before the gradient tolerance was met. "
-            "The finite fit is returned; convergence is not established.",
+            f"{label} L-BFGS returned a finite fit above the gradient tolerance. Convergence is not established.",
             RuntimeWarning,
             stacklevel=4,
         )
     if verbose:
+        state = optimizer.state[params[0]]
         print(
             f"[{label}] L-BFGS iterations: {state['n_iter']} | "
             f"Evaluations: {state['func_evals']} | Mean loss: {final_loss:.8g} | "
@@ -709,14 +691,11 @@ def lcash_posterior_means(
         retained spike returns its exact posterior without optimization.
         Ignored when ``ash_init=False`` or ``model_param`` is supplied.
     model_param : dict or None
-        Fitted model state returned by this solver: ordered component
-        scales, fitted regression coefficients and intercepts, feature
-        means and SDs, and solver/version identifiers. Supplied state
-        restores the prior without repeating ASH or grid selection.
+        Pass the complete returned state unchanged to the same solver.
+        It preserves the fitted prior, component grid and covariate
+        standardization without repeating ``ash`` or grid selection.
         Effect estimates, standard errors and observation count may change; feature
         columns must retain their meaning, order and units.
-        Pass the complete returned dictionary; ``model_param["state_dict"]``
-        contains only the regression coefficients and intercepts.
         Each training call creates a new L-BFGS optimizer unless only the
         spike remains. Use ``max_iter=0`` to calculate posterior summaries
         with the saved prior, without evaluating either penalty.
