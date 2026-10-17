@@ -67,31 +67,36 @@ class CashNet(nn.Module):
 
 
 # Custom loss function
-def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10, *, n_obs: int = 1):
+def pen_loglik_loss(pred_pi, marginal_log_lik, penalty, epsilon=1e-10, *, n_obs: int):
     """Sum mixture losses with null coefficient ``(penalty - 1) / n_obs``.
 
     ``n_obs`` is the positive full training count, including for partial
-    batches. Its default of one gives a per-observation penalty.
+    batches.
     Values of ``penalty`` at or below one omit the null term.
     """
     if n_obs <= 0:
         raise ValueError("n_obs must be positive.")
+    log_pi = torch.log(torch.clamp(pred_pi, min=epsilon))
+    null_coefficient = (penalty - 1) / n_obs if penalty > 1 else 0.0
+    return pen_loglik_loss_from_log_pi(log_pi, marginal_log_lik, null_coefficient)
+
+
+def pen_loglik_loss_from_log_pi(log_pi, marginal_log_lik, null_coefficient=0.0):
+    """Sum negative mixture log likelihoods and the explicit null penalty.
+
+    The caller supplies the coefficient per observation. Skip a zero
+    coefficient so an absent null component does not produce ``0 * -inf``.
+    """
     # log sum_k pi_k * exp(mll_k), reduced in log-space. The previous code
     # exponentiated marginal_log_lik directly; exp() is unnecessary here and
     # overflows float32 to inf for mll > ~88. marginal_log_lik is only clamped
     # upstream to [-1e5, 1e5], so any such value would turn the loss into
     # inf/NaN. logsumexp avoids exp() entirely and matches the reduction the
     # EMDN / spiked-EMDN solvers already use.
-    log_pi = torch.log(torch.clamp(pred_pi, min=epsilon))  # (B, K)
-    first_sum = torch.logsumexp(log_pi + marginal_log_lik, dim=1).sum()  # scalar
-
-    if penalty > 1:
+    penalized_log_likelihood_value = torch.logsumexp(log_pi + marginal_log_lik, dim=1).sum()
+    if null_coefficient != 0:
         # penalize per-gene spike probability (Dirichlet-like prior on component 0)
-        log_pi0 = torch.log(torch.clamp(pred_pi[:, 0], min=epsilon))
-        penalized_log_likelihood_value = first_sum + ((penalty - 1) / n_obs) * torch.sum(log_pi0)
-    else:
-        penalized_log_likelihood_value = first_sum
-
+        penalized_log_likelihood_value = penalized_log_likelihood_value + null_coefficient * log_pi[:, 0].sum()
     return -penalized_log_likelihood_value
 
 

@@ -10,19 +10,42 @@ grid pruning.
 """
 
 import math
+import operator
+import warnings
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from cebmf_torch.cebnm.cash_solver import (
     cash_PosteriorMeanNorm,
-    pen_loglik_loss,
+    pen_loglik_loss_from_log_pi,
 )
 from cebmf_torch.ebnm.ash import PriorType, ash
 from cebmf_torch.utils.distribution_operation import get_data_loglik_normal_torch
 from cebmf_torch.utils.mixture import autoselect_scales_mix_norm
+from cebmf_torch.utils.posterior import posterior_mean_norm
 
 _MODEL_PARAM_VERSION = 1
+
+
+def _require_finite(value: torch.Tensor, name: str) -> None:
+    """Raise FloatingPointError if a tensor contains non-finite values."""
+    if not torch.isfinite(value).all():
+        raise FloatingPointError(f"{name} must be finite.")
+
+
+def _log_gap_mass(log_gap: torch.Tensor) -> torch.Tensor:
+    """Compute log(1-exp(-exp(log_gap))) with a finite small-gap derivative."""
+    finfo = torch.finfo(log_gap.dtype)
+    small = log_gap <= math.log(finfo.eps)
+    large = log_gap >= math.log(-math.log(finfo.tiny))
+    # Mask before exponentiation: an invalid unused branch can spoil gradients.
+    regular_input = torch.where(small | large, torch.zeros_like(log_gap), log_gap)
+    gap = regular_input.exp()
+    regular = torch.log(-torch.expm1(-gap))
+    return torch.where(small, log_gap, torch.where(large, torch.zeros_like(log_gap), regular))
+
 
 # ============================================================
 # Model classes
@@ -43,8 +66,8 @@ class LcashNet(nn.Module):
         Number of mixture components (output classes).
     log_pi_init : torch.Tensor or None
         If provided, (K,) tensor of centred log-weights from a global ash
-        fit. Used to initialise the bias so that softmax(bias) approximates
-        the global ash pi when all feature coefficients are zero.
+        fit. Used to initialise the bias and zero slopes so that the
+        initial mixture matches the retained weights from ``ash``.
     """
 
     def __init__(
@@ -52,22 +75,30 @@ class LcashNet(nn.Module):
         input_dim: int,
         num_classes: int,
         log_pi_init: torch.Tensor | None = None,
-        generator: torch.Generator | None = None,
+        *,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         super().__init__()
-        self.linear = nn.Linear(input_dim, num_classes)
-        # Small random perturbation breaks symmetry across features.
-        # Starting from exact zeros leads Adam to different local
-        # optima on high-dimensional feature sets (F > 100).
-        nn.init.normal_(self.linear.weight, mean=0.0, std=0.01, generator=generator)
         if log_pi_init is not None:
-            with torch.no_grad():
+            device = log_pi_init.device if device is None else device
+            dtype = log_pi_init.dtype if dtype is None else dtype
+        # Allocate without random initialization, then set the mixture weights.
+        self.linear = nn.utils.skip_init(
+            nn.Linear, input_dim, num_classes, device=torch.empty(0).device if device is None else device, dtype=dtype
+        )
+        with torch.no_grad():
+            self.linear.weight.zero_()
+            self.linear.bias.zero_()
+            if log_pi_init is not None:
                 self.linear.bias.copy_(log_pi_init)
-        else:
-            nn.init.zeros_(self.linear.bias)
+
+    def log_probs(self, x: torch.Tensor) -> torch.Tensor:
+        """Return normalized log mixture weights."""
+        return F.log_softmax(self.linear(x), dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.softmax(self.linear(x), dim=1)
+        return self.log_probs(x).exp()
 
 
 class PropOddsLcashNet(nn.Module):
@@ -94,26 +125,37 @@ class PropOddsLcashNet(nn.Module):
         input_dim: int,
         num_classes: int,
         log_pi_init: torch.Tensor | None = None,
-        generator: torch.Generator | None = None,
+        *,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ):
         super().__init__()
         K = num_classes
 
-        # Shared feature weights: initialised near zero so the model
-        # starts close to the exchangeable prior.
-        self.w = nn.Parameter(torch.empty(input_dim))
-        nn.init.normal_(self.w, mean=0.0, std=0.01, generator=generator)
+        if log_pi_init is not None:
+            device = log_pi_init.device if device is None else device
+            dtype = log_pi_init.dtype if dtype is None else dtype
+        self.w = nn.Parameter(torch.zeros(input_dim, device=device, dtype=dtype))
 
         # Cut-point parameterisation: delta_1 (free), delta_2..K-1 (gaps)
         if log_pi_init is not None and K > 1:
-            init_cuts = self._init_cutpoints_from_pi(log_pi_init, K)
+            # Use CPU float64 for initialization, including when fitting on MPS.
+            log_pi = _as_float64(log_pi_init, torch.device("cpu"))
+            log_pi = log_pi - torch.logsumexp(log_pi, dim=0)
+            init_cuts = self._init_cutpoints_from_pi(log_pi, K)
+            if K > 2:
+                # logit(C+p)-logit(C) = log1p(p/C)+log1p(p/(1-C-p)).
+                gaps = F.softplus(log_pi[1:-1] - F.logsigmoid(init_cuts[:-1]))
+                gaps = gaps + F.softplus(log_pi[1:-1] - F.logsigmoid(-init_cuts[1:]))
+                log_gaps = gaps.log()
         else:
-            init_cuts = torch.linspace(-2.0, 2.0, K - 1)
+            init_cuts = torch.linspace(-2.0, 2.0, K - 1, device=device, dtype=dtype)
+            if K > 2:
+                log_gaps = (init_cuts[1:] - init_cuts[:-1]).log()
 
-        self.delta_1 = nn.Parameter(init_cuts[0:1])  # (1,)
+        self.delta_1 = nn.Parameter(init_cuts[0:1].to(self.w))  # (1,), empty for K=1
         if K > 2:
-            gaps = torch.log(torch.clamp(init_cuts[1:] - init_cuts[:-1], min=1e-6))
-            self.delta_gaps = nn.Parameter(gaps)  # (K-2,)
+            self.delta_gaps = nn.Parameter(log_gaps.to(self.w))  # (K-2,)
         else:
             self.delta_gaps = None
 
@@ -121,64 +163,52 @@ class PropOddsLcashNet(nn.Module):
 
     @staticmethod
     def _init_cutpoints_from_pi(log_pi_init: torch.Tensor, K: int) -> torch.Tensor:
-        """Initialise cut-points so that sigma(theta_k) approx cumprob_k.
-
-        At initialisation w ~ 0, so s_i ~ 0 for all genes.  Then
-        pi_k = sigma(theta_{k+1}) - sigma(theta_k), so we need
-        sigma(theta_k) = sum_{j<k} pi_j, i.e. theta_k = logit(cumprob_k).
-        """
-        pi = torch.exp(log_pi_init - log_pi_init.max())
-        pi = pi / pi.sum()
-        cumprob = torch.cumsum(pi, dim=0)[:-1]  # K-1 values
-        cumprob = torch.clamp(cumprob, 1e-6, 1 - 1e-6)
-        cuts = torch.log(cumprob / (1 - cumprob))
-        return cuts
+        """Compute log cumulative mass minus log survival mass at zero slopes."""
+        log_cdf = torch.logcumsumexp(log_pi_init, dim=0)[: K - 1]
+        log_survival = torch.logcumsumexp(log_pi_init.flip(0), dim=0).flip(0)[1:K]
+        return log_cdf - log_survival
 
     def _get_cutpoints(self) -> torch.Tensor:
         """Reconstruct ordered cut-points from unconstrained parameters."""
         # K=1: degenerate case, all weight on the single component.
         if self._K == 1:
-            return torch.empty(0, device=self.delta_1.device)
+            return self.delta_1.new_empty(0)
         if self.delta_gaps is not None:
-            gaps = torch.exp(self.delta_gaps)
-            return torch.cat([self.delta_1, self.delta_1 + torch.cumsum(gaps, dim=0)])
-        return self.delta_1  # K = 2: single cut-point
+            # Leave room for the cumulative sum of saturated, positive gaps.
+            max_log_gap = math.log(torch.finfo(self.delta_gaps.dtype).max) - math.log(self._K) - 1
+            gaps = self.delta_gaps.clamp(max=max_log_gap).exp()
+            cuts = torch.cat([self.delta_1, self.delta_1 + torch.cumsum(gaps, dim=0)])
+        else:
+            cuts = self.delta_1  # K = 2: single cut-point
+        return cuts
+
+    def log_probs(self, x: torch.Tensor) -> torch.Tensor:
+        """Return log category masses from cumulative logits and log gaps."""
+        if self._K == 1:
+            return x.new_zeros((x.shape[0], 1))
+        z = self._get_cutpoints()[None, :] - (x @ self.w)[:, None]
+        parts = [F.logsigmoid(z[:, :1])]
+        if self._K > 2:
+            parts.append(F.logsigmoid(z[:, 1:]) + F.logsigmoid(-z[:, :-1]) + _log_gap_mass(self.delta_gaps)[None, :])
+        parts.append(F.logsigmoid(-z[:, -1:]))
+        result = torch.cat(parts, dim=1)
+        result = result - torch.logsumexp(result, dim=1, keepdim=True)
+        return result
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Compute mixture weights pi_k for each gene.
-
-        Parameters
-        ----------
-        x : tensor (G, F)
-            Feature matrix.
-
-        Returns
-        -------
-        tensor (G, K)
-            Per-gene mixture weights.
-        """
-        s = x @ self.w  # (G,)
-        theta = self._get_cutpoints()  # (K-1,)
-
-        # Cumulative probabilities: P(category <= k) = sigma(theta_k - s)
-        cum_probs = torch.sigmoid(theta.unsqueeze(0) - s.unsqueeze(1))  # (G, K-1)
-
-        # Convert cumulative to category probabilities
-        ones = torch.ones(s.shape[0], 1, device=x.device)
-        zeros = torch.zeros(s.shape[0], 1, device=x.device)
-        cum_ext = torch.cat([zeros, cum_probs, ones], dim=1)  # (G, K+1)
-        pi = cum_ext[:, 1:] - cum_ext[:, :-1]  # (G, K)
-
-        # Numerical safety: clamp small negatives from floating-point
-        pi = torch.clamp(pi, min=1e-10)
-        pi = pi / pi.sum(dim=1, keepdim=True)
-
-        return pi
+        return self.log_probs(x).exp()
 
 
 # ============================================================
 # Shared helpers
 # ============================================================
+
+
+def _as_float64(value, device: torch.device) -> torch.Tensor:
+    """Move tensors before casting; MPS cannot create a float64 intermediate."""
+    if isinstance(value, torch.Tensor):
+        value = value.to(device=device)
+    return torch.as_tensor(value, dtype=torch.float64, device=device)
 
 
 def _prepare_inputs(
@@ -187,12 +217,12 @@ def _prepare_inputs(
     sebetahat: torch.Tensor,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Convert inputs to float32 tensors on the requested device."""
-    X = torch.as_tensor(X, dtype=torch.float32, device=device)
+    """Convert inputs to float64 tensors on the fitting device."""
+    X = _as_float64(X, device)
     if X.ndim == 1:
         X = X.reshape(-1, 1)
-    betahat = torch.as_tensor(betahat, dtype=torch.float32, device=device)
-    sebetahat = torch.as_tensor(sebetahat, dtype=torch.float32, device=device)
+    betahat = _as_float64(betahat, device)
+    sebetahat = _as_float64(sebetahat, device)
     return X, betahat, sebetahat
 
 
@@ -238,8 +268,8 @@ def _nanstandardise(
 
 def _validate_grid(scale: torch.Tensor) -> None:
     """Require an ordered spike-and-slab grid for conditional mixture fitting."""
-    if scale.ndim != 1 or scale.numel() < 2:
-        raise ValueError("LC-ASH and PO-LC-ASH require at least 2 mixture components.")
+    if scale.ndim != 1 or scale.numel() == 0:
+        raise ValueError("LC-ASH and PO-LC-ASH require at least one mixture component.")
     if not torch.isfinite(scale).all() or not torch.all(scale[1:] > scale[:-1]) or scale[0] != 0:
         raise ValueError("Mixture scales must be finite and strictly increasing, starting with the spike at zero.")
 
@@ -258,8 +288,7 @@ def _restore_model_param(
     if model_param["version"] != _MODEL_PARAM_VERSION or model_param["solver"] != label:
         raise ValueError(f"model_param must be {label} fitted state with version {_MODEL_PARAM_VERSION}.")
     scale, feature_mean, feature_sd = (
-        torch.as_tensor(model_param[key], dtype=X.dtype, device=X.device).detach().clone()
-        for key in ("scale", "feature_mean", "feature_sd")
+        _as_float64(model_param[key], X.device).detach().clone() for key in ("scale", "feature_mean", "feature_sd")
     )
     _validate_grid(scale)
     if feature_mean.shape != (X.shape[1],) or feature_sd.shape != feature_mean.shape:
@@ -277,9 +306,9 @@ def _select_grid(
     ash_threshold: float,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Select a component grid and optional ASH initialization for a fresh fit.
+    """Select a component grid and optional ``ash`` initialization for a fresh fit.
 
-    With ``ash_init=True``, retain components whose ASH weights exceed
+    With ``ash_init=True``, retain components whose ``ash`` weights exceed
     ``ash_threshold`` and compute centred log-weights for initialization.
     Otherwise retain the full automatically selected grid.
 
@@ -289,12 +318,12 @@ def _select_grid(
         Multiplicative step between grid SDs.  Smaller values give a
         finer grid with more components.
     ash_init : bool
-        If True, run ash internally with ``optimizer="lbfgs"`` to
+        If True, run ``ash`` internally with ``optimizer="lbfgs"`` to
         prune the grid to active components and initialise bias from
-        the ash weights.
+        the ``ash`` weights.
     ash_threshold : float
         Pruning threshold: components with ``pi <= ash_threshold``
-        are dropped.  Only used when ``ash_init=True``.
+        are dropped. Only used when ash_init=True.
 
     Returns
     -------
@@ -311,6 +340,7 @@ def _select_grid(
             betahat,
             sebetahat,
             prior=PriorType.NORM,
+            penalty=10.0,
             verbose=False,
             optimizer="lbfgs",
             mult=mult,
@@ -318,7 +348,7 @@ def _select_grid(
         )
         pi_full = ash_result.pi
         active = pi_full > ash_threshold
-        scale = ash_result.scale[active].to(device=device, dtype=torch.float32)
+        scale = ash_result.scale[active].to(device=device, dtype=betahat.dtype)
         try:
             _validate_grid(scale)
         except ValueError as error:
@@ -332,79 +362,95 @@ def _select_grid(
                 "Inspect the ASH fit and consider lowering ash_threshold."
             ) from error
         pi_active = pi_full[active]
-        log_pi_init = torch.log(pi_active.clamp(min=1e-30))
+        log_pi_init = torch.log(pi_active)
         log_pi_init = log_pi_init - log_pi_init.mean()
-        log_pi_init = log_pi_init.to(device=device, dtype=torch.float32)
+        log_pi_init = log_pi_init.to(device=device, dtype=betahat.dtype)
         return scale, log_pi_init
 
     scale = autoselect_scales_mix_norm(betahat=betahat, sebetahat=sebetahat, mult=mult)
     if not isinstance(scale, torch.Tensor):
-        scale = torch.as_tensor(scale, dtype=torch.float32, device=device)
+        scale = torch.as_tensor(scale, dtype=betahat.dtype, device=device)
     else:
-        scale = scale.to(device=device, dtype=torch.float32)
+        scale = scale.to(device=device, dtype=betahat.dtype)
     _validate_grid(scale)
     return scale, None
 
 
+def _conditional_loss(
+    model: nn.Module,
+    X_scaled: torch.Tensor,
+    data_loglik: torch.Tensor,
+    penalty: float,
+    coefficient_prior: torch.distributions.StudentT | None,
+) -> torch.Tensor:
+    """Mean negative log likelihood with nullweight and optional slope priors."""
+    n = X_scaled.shape[0]
+    loss = pen_loglik_loss_from_log_pi(model.log_probs(X_scaled), data_loglik, null_coefficient=(penalty - 1) / n)
+    if coefficient_prior is not None:
+        # Multinomial slopes are log-odds contrasts against the null component.
+        slopes = model.linear.weight[1:] - model.linear.weight[:1] if isinstance(model, LcashNet) else model.w
+        loss = loss - coefficient_prior.log_prob(slopes).sum()
+    return loss / n
+
+
 def _train_model(
     model: nn.Module,
-    optimizer: torch.optim.Optimizer,
     X_scaled: torch.Tensor,
-    betahat: torch.Tensor,
-    sebetahat: torch.Tensor,
-    scale: torch.Tensor,
-    n_epochs: int,
-    batch_size: int,
+    data_loglik: torch.Tensor,
+    max_iter: int,
     penalty: float,
     verbose: bool,
     label: str,
-    seed: int = 42,
-) -> float:
-    """Run the training loop. Returns the final-epoch total loss.
+    coefficient_prior_scale: float | None = 1.0,
+    coefficient_prior_df: float = 5.0,
+) -> None:
+    """Fit the mean objective with nullweight and optional Student-t slope priors.
 
-    Pre-computes the (G, K) log-likelihood matrix once rather than
-    recomputing per mini-batch (logL is constant during training).
-    Batch ordering is seeded for reproducibility.
+    A non-finite objective or gradient raises instead of returning a fit.
+    Each call uses fresh curvature history for its normal-means problem.
     """
     model.train()
-    device = X_scaled.device
-
-    # Pre-compute log-likelihood matrix (constant during training).
-    loc = torch.zeros_like(scale)
-    with torch.no_grad():
-        logL_all = get_data_loglik_normal_torch(
-            betahat=betahat,
-            sebetahat=sebetahat,
-            location=loc,
-            scale=scale,
+    params = list(model.parameters())
+    coefficient_prior = None
+    if coefficient_prior_scale is not None:
+        # The public entry point validates these scalars once. Avoid repeated
+        # distribution support checks inside the L-BFGS closure.
+        coefficient_prior = torch.distributions.StudentT(
+            X_scaled.new_tensor(coefficient_prior_df), scale=coefficient_prior_scale, validate_args=False
         )
+    optimizer = torch.optim.LBFGS(
+        params,
+        max_iter=max_iter,
+        tolerance_grad=1e-7,
+        tolerance_change=1e-15,
+        line_search_fn="strong_wolfe",
+    )
 
-    # Seeded manual batching (5x faster than DataLoader due to
-    # avoiding per-sample __getitem__ and collation overhead).
-    # Generator and permutation are created on the same device as the
-    # data to avoid CPU/GPU device mismatches.
-    g = torch.Generator(device=device)
-    g.manual_seed(seed)
-    n = X_scaled.shape[0]
-    n_batches = max(1, (n + batch_size - 1) // batch_size)
+    def closure():
+        optimizer.zero_grad(set_to_none=True)
+        loss = _conditional_loss(model, X_scaled, data_loglik, penalty, coefficient_prior)
+        _require_finite(loss, "Conditional optimization objective")
+        loss.backward()
+        _require_finite(torch.cat([p.grad.reshape(-1) for p in params]), "Conditional optimization gradient")
+        return loss
 
-    final_epoch_loss = 0.0
-    for epoch in range(n_epochs):
-        epoch_loss = 0.0
-        perm = torch.randperm(n, generator=g, device=device)
-        for start in range(0, n, batch_size):
-            idx = perm[start : start + batch_size]
-            pi_pred = model(X_scaled[idx])
-            loss = pen_loglik_loss(pi_pred, logL_all[idx], penalty=penalty)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-        final_epoch_loss = epoch_loss
-        if verbose and (epoch + 1) % 50 == 0:
-            print(f"[{label}] Epoch {epoch + 1}/{n_epochs} | Loss: {epoch_loss / n_batches:.4f}")
-
-    return final_epoch_loss
+    optimizer.step(closure)
+    # LBFGS.step returns its initial loss; evaluate the actual endpoint.
+    final_loss = closure().detach().item()
+    grad_max = max(p.grad.abs().max().item() for p in params if p.numel())
+    if grad_max > optimizer.param_groups[0]["tolerance_grad"]:
+        warnings.warn(
+            f"{label} L-BFGS returned a finite fit above the gradient tolerance. Convergence is not established.",
+            RuntimeWarning,
+            stacklevel=4,
+        )
+    if verbose:
+        state = optimizer.state[params[0]]
+        print(
+            f"[{label}] L-BFGS iterations: {state['n_iter']} | "
+            f"Evaluations: {state['func_evals']} | Mean loss: {final_loss:.8g} | "
+            f"Max gradient: {grad_max:.3g}"
+        )
 
 
 def _compute_posteriors(
@@ -413,7 +459,7 @@ def _compute_posteriors(
     betahat: torch.Tensor,
     sebetahat: torch.Tensor,
     scale: torch.Tensor,
-    device: torch.device,
+    data_loglik: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, float]:
     """Vectorised posterior computation with per-observation pi.
 
@@ -425,47 +471,25 @@ def _compute_posteriors(
     post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik
         ``marginal_loglik`` is the full-data marginal log-likelihood
         ``sum_g logsumexp_k (log pi_g,k + log p(beta_g | 0, sqrt(se_g^2 + scale_k^2)))``,
-        i.e. ``log p(y | fitted prior)`` without any spike Dirichlet penalty.
-        It is what the cebmf consumer at ``cebmf.py:299``
-        (``self.kl_l[k] = (-resL.loss) - nm_ll_L``) requires of the loss
-        field on this object.
+        i.e. ``log p(y | fitted prior)`` without fitting penalties.
+        The outer cEBMF KL calculation requires this unpenalized sum.
     """
     model.eval()
     loc = torch.zeros_like(scale)
     with torch.no_grad():
-        all_pi_values = model(X_scaled)  # (G, K)
+        for name, parameter in model.named_parameters():
+            _require_finite(parameter, f"Conditional parameter {name}")
+        log_pi_all = model.log_probs(X_scaled)
+        _require_finite(log_pi_all, "Conditional log probabilities")
+        all_pi_values = log_pi_all.exp()  # (G, K)
 
-        data_loglik = get_data_loglik_normal_torch(
-            betahat=betahat, sebetahat=sebetahat, location=loc, scale=scale
-        )  # (G, K)
+        loglik = torch.logsumexp(data_loglik + log_pi_all, dim=1).sum()
+        _require_finite(loglik, "Conditional marginal log likelihood")
+        posterior = posterior_mean_norm(betahat, sebetahat, log_pi_all, data_loglik, scale, location=loc)
+        for name in ("post_mean", "post_mean2", "post_sd"):
+            _require_finite(getattr(posterior, name), f"Conditional {name}")
 
-        # Use dtype-appropriate eps to avoid log(0) in float32.
-        eps = torch.finfo(all_pi_values.dtype).tiny
-        log_pi_all = torch.log(torch.clamp(all_pi_values, min=eps))  # (G, K)
-        combined = data_loglik + log_pi_all  # (G, K)
-        log_norm = torch.logsumexp(combined, dim=1, keepdim=True)  # (G, 1)
-        # log_norm[g] is the per-gene marginal log-likelihood of the fitted
-        # mixture; summing gives the full-data marginal log-lik (no penalty).
-        marginal_loglik = float(log_norm.sum().item())
-        resp = torch.exp(combined - log_norm)  # (G, K) responsibilities
-
-        s2 = sebetahat.pow(2).unsqueeze(1)  # (G, 1)
-        t2 = scale.pow(2).unsqueeze(0)  # (1, K)
-
-        denom = (1.0 / s2) + torch.where(t2 > 0, 1.0 / t2, torch.zeros_like(t2))
-        post_var_comp = torch.where(t2 > 0, 1.0 / denom, torch.zeros_like(denom))  # (G, K)
-
-        m_comp = torch.where(
-            t2 > 0,
-            post_var_comp * (betahat.unsqueeze(1) / s2),
-            torch.zeros(1, device=device),
-        )  # (G, K)
-
-        post_mean = torch.sum(resp * m_comp, dim=1)
-        post_mean2 = torch.sum(resp * (post_var_comp + m_comp.pow(2)), dim=1)
-        post_sd = torch.sqrt(torch.clamp(post_mean2 - post_mean.pow(2), min=0.0))
-
-    return post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik
+    return posterior.post_mean, posterior.post_mean2, posterior.post_sd, all_pi_values, float(loglik.item())
 
 
 def _fit_lcash(
@@ -474,18 +498,17 @@ def _fit_lcash(
     sebetahat: torch.Tensor,
     model_class: type,
     label: str,
-    n_epochs: int = 200,
-    batch_size: int = 512,
-    lr: float = 1e-3,
-    weight_decay: float = 1e-3,
-    penalty: float = 1.5,
+    *,
+    max_iter: int | None = None,
+    penalty: float = 10.0,
+    coefficient_prior_scale: float | None = 1.0,
+    coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
     ash_init: bool = True,
     ash_threshold: float = 1e-6,
     model_param: dict | None = None,
     device: torch.device | None = None,
-    verbose: bool = True,
-    seed: int = 42,
+    verbose: bool = False,
 ) -> cash_PosteriorMeanNorm:
     """Shared implementation for both softmax and proportional odds LC-ASH.
 
@@ -506,10 +529,31 @@ def _fit_lcash(
             if isinstance(betahat, torch.Tensor)
             else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         )
-    if n_epochs is None:
-        n_epochs = 200
+    output_device = torch.device(device)
+    device = torch.device("cpu") if output_device.type == "mps" else output_device
+    if max_iter is None:
+        max_iter = 500
 
     X, betahat, sebetahat = _prepare_inputs(X, betahat, sebetahat, device)
+    if X.ndim != 2 or betahat.ndim != 1 or sebetahat.shape != betahat.shape or X.shape[0] != betahat.shape[0]:
+        raise ValueError("X, betahat, and sebetahat must have matching observation counts.")
+    if betahat.numel() == 0:
+        raise ValueError("Conditional fitting requires a positive observation count.")
+    try:
+        max_iter = operator.index(max_iter)
+    except TypeError:
+        raise ValueError("max_iter must be a nonnegative integer or None.") from None
+    if max_iter < 0:
+        raise ValueError("max_iter must be a nonnegative integer or None.")
+    if max_iter > 0 and (not math.isfinite(penalty) or penalty < 1):
+        raise ValueError("penalty must be finite and at least one.")
+    if max_iter > 0 and coefficient_prior_scale is not None:
+        for name, value in (
+            ("coefficient_prior_scale", coefficient_prior_scale),
+            ("coefficient_prior_df", coefficient_prior_df),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive.")
     if model_param is None:
         feature_mean, feature_sd = _feature_statistics(X)
         scale, log_pi_init = _select_grid(betahat, sebetahat, mult, ash_init, ash_threshold, device)
@@ -518,46 +562,26 @@ def _fit_lcash(
         log_pi_init = None
     X_scaled = _nanstandardise(X, feature_mean, feature_sd)
 
-    # Local RNG for reproducible weight init and batch ordering.
-    # Does not mutate global torch RNG state.
-    rng = torch.Generator(device=device)
-    rng.manual_seed(seed)
-
     K = scale.shape[0]
-    model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init, generator=rng).to(device)
+    model = model_class(X_scaled.shape[1], K, log_pi_init=log_pi_init, device=device, dtype=X.dtype)
     if model_param is not None:
-        model.load_state_dict(model_param["state_dict"])
+        model.load_state_dict({name: value.to(device=device) for name, value in model_param["state_dict"].items()})
 
-    # Build optimizer: weight_decay on feature weights only.
-    if model_class is LcashNet:
-        param_groups = [
-            {"params": [model.linear.weight], "weight_decay": weight_decay},
-            {"params": [model.linear.bias], "weight_decay": 0.0},
-        ]
-    else:  # PropOddsLcashNet
-        cutpoint_params = [model.delta_1]
-        if model.delta_gaps is not None:
-            cutpoint_params.append(model.delta_gaps)
-        param_groups = [
-            {"params": [model.w], "weight_decay": weight_decay},
-            {"params": cutpoint_params, "weight_decay": 0.0},
-        ]
-    optimizer = torch.optim.Adam(param_groups, lr=lr)
-
-    _train_model(
-        model,
-        optimizer,
-        X_scaled,
-        betahat,
-        sebetahat,
-        scale,
-        n_epochs,
-        batch_size,
-        penalty,
-        verbose,
-        label,
-        seed=seed,
-    )
+    with torch.no_grad():
+        data_loglik = get_data_loglik_normal_torch(betahat, sebetahat, torch.zeros_like(scale), scale)
+        _require_finite(data_loglik, "Conditional component log likelihoods")
+    if K > 1 and max_iter > 0:
+        _train_model(
+            model,
+            X_scaled,
+            data_loglik,
+            max_iter,
+            penalty,
+            verbose,
+            label,
+            coefficient_prior_scale,
+            coefficient_prior_df,
+        )
 
     post_mean, post_mean2, post_sd, all_pi_values, marginal_loglik = _compute_posteriors(
         model,
@@ -565,7 +589,7 @@ def _fit_lcash(
         betahat,
         sebetahat,
         scale,
-        device,
+        data_loglik,
     )
 
     fitted_state = {
@@ -576,17 +600,23 @@ def _fit_lcash(
         "feature_sd": feature_sd.detach().clone(),
         "state_dict": {key: value.detach().clone() for key, value in model.state_dict().items()},
     }
-    # cEBMF's per-factor KL calculation uses the unpenalized marginal
-    # log-likelihood, returned here as its negative in `loss`.
-    return cash_PosteriorMeanNorm(
-        post_mean=post_mean,
-        post_mean2=post_mean2,
-        post_sd=post_sd,
-        pi_np=all_pi_values,
-        loss=-marginal_loglik,
-        scale=fitted_state["scale"],
-        model_param=fitted_state,
-    )
+    output = {
+        name: value.to(device=output_device, dtype=torch.float32)
+        for name, value in (
+            ("post_mean", post_mean),
+            ("post_mean2", post_mean2),
+            ("post_sd", post_sd),
+            ("pi_np", all_pi_values),
+            ("scale", scale),
+        )
+    }
+    # Separate float32 rounding must preserve E[theta^2] >= E[theta]^2.
+    output["post_mean2"] = torch.maximum(output["post_mean2"], output["post_mean"].square())
+    for name, value in output.items():
+        _require_finite(value, f"Returned conditional {name}")
+    _validate_grid(output["scale"])
+    # cEBMF's per-factor KL calculation uses the unpenalized sum.
+    return cash_PosteriorMeanNorm(**output, loss=-marginal_loglik, model_param=fitted_state)
 
 
 # ============================================================
@@ -598,18 +628,17 @@ def lcash_posterior_means(
     X: torch.Tensor,
     betahat: torch.Tensor,
     sebetahat: torch.Tensor,
-    n_epochs: int | None = 200,
-    batch_size: int = 512,
-    lr: float = 1e-3,
-    weight_decay: float = 1e-3,
-    penalty: float = 1.5,
+    *,
+    max_iter: int | None = None,
+    penalty: float = 10.0,
+    coefficient_prior_scale: float | None = 1.0,
+    coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
     ash_init: bool = True,
     ash_threshold: float = 1e-6,
     model_param: dict | None = None,
     device: torch.device | None = None,
-    verbose: bool = True,
-    seed: int = 42,
+    verbose: bool = False,
 ) -> cash_PosteriorMeanNorm:
     """LC-ASH: linear covariate-modulated mixture weights.
 
@@ -630,16 +659,28 @@ def lcash_posterior_means(
         Effect estimates.
     sebetahat : tensor (G,)
         Standard errors.
-    n_epochs : int or None
-        Training epochs. Inside cEBMF, overridden by internal_epoch.
-    batch_size : int
-        Mini-batch size for Adam.
-    lr : float
-        Learning rate.
-    weight_decay : float
-        L2 penalty on feature coefficients only (not bias).
+    max_iter : int or None
+        Maximum full-batch L-BFGS iterations. None uses 500 standalone or
+        twice internal_epoch inside cEBMF. An explicit integer, including
+        zero, overrides this budget. The mean objective includes the null
+        penalty and the coefficient prior. Each iteration can evaluate
+        the objective more than once. A budget limit does not imply convergence.
     penalty : float
-        Dirichlet spike penalty (lambda_pen). 1.0 = no penalty.
+        Nullweight penalty as in ``ash``, finite and at least one. The coefficient in
+        conditional training is (penalty - 1) / n for the full training count.
+        Default 10.0; 1.0 omits the null penalty. The ``ash`` initializer always
+        uses 10.0.
+    coefficient_prior_scale : float or None
+        Scale of a zero-centred Student-t prior on each component's
+        standardized covariate slopes relative to the null component.
+        Intercepts are not penalized. Default 1.0; None disables the prior.
+        A supplied scale must be finite and positive. Scale is not the
+        prior's standard deviation. The summed negative log density from
+        ``torch.distributions.StudentT`` is divided by the training count
+        in the mean objective.
+    coefficient_prior_df : float
+        Degrees of freedom of the coefficient prior. Default 5.0.
+        Must be finite and positive when the prior is enabled.
     mult : float
         Multiplicative step between mixture grid SDs for a fresh fit.
         Smaller values give a finer grid. Default sqrt(2).
@@ -649,45 +690,55 @@ def lcash_posterior_means(
         ``ash_threshold``, and initialise the bias from their retained
         weights. At zero feature coefficients, the initial mixture
         weights equal the retained ASH weights after renormalization
-        and numerical flooring.
+        within floating-point accuracy. The initial coefficients are zero.
         If False, use the full grid with uniform bias initialisation.
         Ignored when ``model_param`` is supplied.
     ash_threshold : float
-        For fresh ASH initialization, remove components with fitted
-        weight at or below this value. Default 1e-6. Initialization raises
-        if fewer than two components remain or the spike is removed.
+        For fresh ``ash`` initialization, remove components with fitted
+        weight at or below this value. Default 1e-6.
+        Explicit zero retains every positive weight returned by ``ash``, including
+        weights supplied by its numerical floor. Initialization
+        raises if no component remains or the spike is removed. A single
+        retained spike returns its exact posterior without optimization.
         Ignored when ``ash_init=False`` or ``model_param`` is supplied.
     model_param : dict or None
-        Fitted model state returned by this solver: ordered component
-        scales, fitted regression coefficients and intercepts, feature
-        means and SDs, and solver/version identifiers. Supplied state
-        restores the prior without repeating ASH or grid selection.
+        Pass the complete returned state unchanged to the same solver.
+        It preserves the fitted prior, component grid and covariate
+        standardization without repeating ``ash`` or grid selection.
         Effect estimates, standard errors and observation count may change; feature
         columns must retain their meaning, order and units.
-        Pass the complete returned dictionary; ``model_param["state_dict"]``
-        contains only the regression coefficients and intercepts.
-        Each call creates a new Adam optimizer. Use ``n_epochs=0`` to
-        calculate posterior summaries with the saved prior.
+        Each training call creates a new L-BFGS optimizer unless only the
+        spike remains. Use ``max_iter=0`` to calculate posterior summaries
+        with the saved prior, without evaluating either penalty.
+        Training settings are not stored; pass the same nullweight and
+        coefficient-prior settings to continue the same objective.
     device : torch.device or None
         Compute device. Inherited from ``betahat`` when it is a tensor;
-        otherwise defaults to CUDA if available, then CPU.
+        otherwise defaults to CUDA if available, then CPU. Fitting and saved
+        state use float64. For MPS, fitting runs on CPU, including ``ash``.
+        Posterior summaries, probabilities and scales return as float32 on
+        the requested device; saved state remains on the fitting device.
     verbose : bool
-        If True (default), print training progress every 50 epochs.
-    seed : int
-        Random seed for weight initialisation and batch ordering.
+        If True, print the final objective, gradient and iteration counts.
+        Default False. Convergence warnings do not depend on this option.
 
     Returns
     -------
     cash_PosteriorMeanNorm
         Container with post_mean, post_mean2, post_sd, pi_np (G, K),
         scale (K,), loss, and model_param (fitted state for warm-starting).
+        ``loss`` is the summed negative marginal log likelihood without
+        either penalty.
 
     Raises
     ------
     ValueError
-        If component selection leaves fewer than two components or
-        removes the spike, or supplied state has incompatible metadata,
+        If component selection leaves no components or removes the spike,
+        or supplied state has incompatible metadata,
         scales or feature statistics.
+    FloatingPointError
+        If model parameters, probabilities, likelihoods, or gradients are
+        non-finite. Invalid updates are not returned as fitted models.
     RuntimeError
         If supplied model parameter names or shapes are incompatible.
     """
@@ -697,18 +748,16 @@ def lcash_posterior_means(
         sebetahat,
         model_class=LcashNet,
         label="LC-ASH",
-        n_epochs=n_epochs,
-        batch_size=batch_size,
-        lr=lr,
-        weight_decay=weight_decay,
+        max_iter=max_iter,
         penalty=penalty,
+        coefficient_prior_scale=coefficient_prior_scale,
+        coefficient_prior_df=coefficient_prior_df,
         mult=mult,
         ash_init=ash_init,
         ash_threshold=ash_threshold,
         model_param=model_param,
         device=device,
         verbose=verbose,
-        seed=seed,
     )
 
 
@@ -716,18 +765,17 @@ def po_lcash_posterior_means(
     X: torch.Tensor,
     betahat: torch.Tensor,
     sebetahat: torch.Tensor,
-    n_epochs: int | None = 200,
-    batch_size: int = 512,
-    lr: float = 1e-3,
-    weight_decay: float = 1e-3,
-    penalty: float = 1.5,
+    *,
+    max_iter: int | None = None,
+    penalty: float = 10.0,
+    coefficient_prior_scale: float | None = 1.0,
+    coefficient_prior_df: float = 5.0,
     mult: float = 1.4142135623730951,
     ash_init: bool = True,
     ash_threshold: float = 1e-6,
     model_param: dict | None = None,
     device: torch.device | None = None,
-    verbose: bool = True,
-    seed: int = 42,
+    verbose: bool = False,
 ) -> cash_PosteriorMeanNorm:
     """Proportional odds LC-ASH: ordered logistic covariate-modulated weights.
 
@@ -738,10 +786,16 @@ def po_lcash_posterior_means(
     F + K - 1 parameters. Softmax LC-ASH stores K * F coefficients
     and K intercepts.
 
+    The coefficient prior is Student-t with zero location, scale
+    ``coefficient_prior_scale`` (default 1.0), and degrees of freedom
+    ``coefficient_prior_df`` (default 5.0). It applies to the shared
+    standardized slope vector w. Cut-points are not penalized.
+    Set ``coefficient_prior_scale=None`` to disable it.
+
     On a fresh fit with ``ash_init=True``, select components from ASH
-    and initialise cut-points from their renormalized weights. Numerical
-    floors and small random feature coefficients make this an
-    approximation to the retained ASH mixture.
+    at penalty 10 and initialise cut-points from retained, normalized
+    weights. Zero initial feature coefficients preserve this mixture
+    within floating-point accuracy.
     With ``ash_init=False``, retain the full grid and initialise
     cut-points evenly between -2 and 2.
 
@@ -749,8 +803,9 @@ def po_lcash_posterior_means(
     feature coefficients, cut-point parameters and covariate standardization.
     The cut-point parameters are the first cut-point and log increments
     between successive cut-points. ASH and component selection are skipped.
-    Each call creates a new Adam optimizer. Other parameters have the
-    same meaning as in :func:`lcash_posterior_means`.
+    Each training call creates a new L-BFGS optimizer unless only the spike
+    remains. Other parameters have the same meaning as in
+    :func:`lcash_posterior_means`.
 
     Parameters
     ----------
@@ -778,16 +833,14 @@ def po_lcash_posterior_means(
         sebetahat,
         model_class=PropOddsLcashNet,
         label="PO-LC-ASH",
-        n_epochs=n_epochs,
-        batch_size=batch_size,
-        lr=lr,
-        weight_decay=weight_decay,
+        max_iter=max_iter,
         penalty=penalty,
+        coefficient_prior_scale=coefficient_prior_scale,
+        coefficient_prior_df=coefficient_prior_df,
         mult=mult,
         ash_init=ash_init,
         ash_threshold=ash_threshold,
         model_param=model_param,
         device=device,
         verbose=verbose,
-        seed=seed,
     )

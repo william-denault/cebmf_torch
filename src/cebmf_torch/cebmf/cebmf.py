@@ -114,7 +114,10 @@ class cEBMF:
         prior_L, prior_F : str, optional
             Prior names to use for the row/column factors.
         internal_epoch : int, optional
-            Number of inner epochs for the prior fitting routine.
+            Inner training budget. ``lcash_posterior_means`` and
+            ``po_lcash_posterior_means`` use twice this value as their L-BFGS
+            iteration limit unless numeric max_iter is supplied in
+            the prior options. Other learned priors use this many epochs.
         prior_L_kwargs, prior_F_kwargs : dict or None, optional
             Independent keyword arguments for the L and F prior builders,
             including when both sides use the same prior name. Omitted

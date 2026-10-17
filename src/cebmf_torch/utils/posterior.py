@@ -276,7 +276,7 @@ def posterior_mean_norm(
         Container with posterior mean, second moment, and standard deviation
         (each of shape ``(J,)``).
     """
-    betahat = torch.as_tensor(betahat)
+    betahat = betahat if isinstance(betahat, torch.Tensor) else torch.as_tensor(betahat)
     dt, dev = betahat.dtype, betahat.device
     sebetahat = torch.as_tensor(sebetahat, dtype=dt, device=dev)
     log_pi = torch.as_tensor(log_pi, dtype=dt, device=dev)
