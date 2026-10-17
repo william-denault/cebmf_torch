@@ -67,23 +67,36 @@ class CashNet(nn.Module):
 
 
 # Custom loss function
-def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.1, epsilon=1e-10):
+def pen_loglik_loss(pred_pi, marginal_log_lik, penalty, epsilon=1e-10, *, n_obs: int):
+    """Sum mixture losses with null coefficient ``(penalty - 1) / n_obs``.
+
+    ``n_obs`` is the positive full training count, including for partial
+    batches.
+    Values of ``penalty`` at or below one omit the null term.
+    """
+    if n_obs <= 0:
+        raise ValueError("n_obs must be positive.")
+    log_pi = torch.log(torch.clamp(pred_pi, min=epsilon))
+    null_coefficient = (penalty - 1) / n_obs if penalty > 1 else 0.0
+    return pen_loglik_loss_from_log_pi(log_pi, marginal_log_lik, null_coefficient)
+
+
+def pen_loglik_loss_from_log_pi(log_pi, marginal_log_lik, null_coefficient=0.0):
+    """Sum negative mixture log likelihoods and the explicit null penalty.
+
+    The caller supplies the coefficient per observation. Skip a zero
+    coefficient so an absent null component does not produce ``0 * -inf``.
+    """
     # log sum_k pi_k * exp(mll_k), reduced in log-space. The previous code
     # exponentiated marginal_log_lik directly; exp() is unnecessary here and
     # overflows float32 to inf for mll > ~88. marginal_log_lik is only clamped
     # upstream to [-1e5, 1e5], so any such value would turn the loss into
     # inf/NaN. logsumexp avoids exp() entirely and matches the reduction the
     # EMDN / spiked-EMDN solvers already use.
-    log_pi = torch.log(torch.clamp(pred_pi, min=epsilon))  # (B, K)
-    first_sum = torch.logsumexp(log_pi + marginal_log_lik, dim=1).sum()  # scalar
-
-    if penalty > 1:
+    penalized_log_likelihood_value = torch.logsumexp(log_pi + marginal_log_lik, dim=1).sum()
+    if null_coefficient != 0:
         # penalize per-gene spike probability (Dirichlet-like prior on component 0)
-        log_pi0 = torch.log(torch.clamp(pred_pi[:, 0], min=epsilon))
-        penalized_log_likelihood_value = first_sum + (penalty - 1) * torch.sum(log_pi0)
-    else:
-        penalized_log_likelihood_value = first_sum
-
+        penalized_log_likelihood_value = penalized_log_likelihood_value + null_coefficient * log_pi[:, 0].sum()
     return -penalized_log_likelihood_value
 
 
@@ -132,7 +145,7 @@ def cash_posterior_means(
     batch_size=128,
     lr=0.001,
     model_param=None,
-    penalty=1.05,
+    penalty=10.0,
     device: torch.device | None = None,
 ):
     """
@@ -164,7 +177,9 @@ def cash_posterior_means(
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
     penalty : float, optional
-        Penalty for spike probability (default=1.1).
+        Null penalty strength (default=10). For values greater than one,
+        the coefficient per observation is ``(penalty - 1) / n``, where
+        ``n`` is the full training count. ``penalty=1`` omits the null penalty.
     device : torch.device, optional
         Target device for tensors and the model. If ``None``, inherits from
         ``betahat`` when it is already a tensor; otherwise falls back to CUDA
@@ -224,7 +239,9 @@ def cash_posterior_means(
             )
             optimizer_cash.zero_grad()
             outputs = model_cash(inputs)
-            cash_loss = pen_loglik_loss(pred_pi=outputs, marginal_log_lik=batch_loglik, penalty=penalty)
+            cash_loss = pen_loglik_loss(
+                pred_pi=outputs, marginal_log_lik=batch_loglik, penalty=penalty, n_obs=len(dataset)
+            )
             cash_loss.backward()
             optimizer_cash.step()
             epoch_loss += cash_loss.item()
@@ -261,10 +278,7 @@ def cash_posterior_means(
         post_mean2 = result.post_mean2
         post_sd = result.post_sd
 
-        # ---- Full marginal log-likelihood (no penalty). Same logsumexp formula
-        # as before; ``cebmf.py``'s ELBO accumulator expects ``loss`` to equal
-        # ``-log p(y | fitted prior)`` so that
-        # ``kl_l[k] = nm_ll_L + resL.loss`` evaluates to +KL(q || p).
+        # Full marginal log-likelihood, without fitting penalties, for cEBMF's KL term.
         log_marginal_per_obs = torch.logsumexp(data_loglik + log_pi_full, dim=1)  # (N,)
         full_marginal_ll = float(log_marginal_per_obs.sum().item())
 

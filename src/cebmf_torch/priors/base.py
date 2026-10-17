@@ -18,9 +18,9 @@ class Prior:
     post_mean2 : torch.Tensor
         Posterior second moments for each observation.
     loss : torch.Tensor
-        Final training loss or negative log-likelihood, as a 0-d tensor on the
-        prior's device. Kept on-device so that cEBMF can fold it into the
-        ELBO without forcing a host sync per factor update.
+        Negative summed marginal log-likelihood under the fitted prior,
+        excluding fitting penalties. A 0-d tensor on the prior's device.
+        Used by cEBMF to compute the KL term in its evidence lower bound (ELBO).
     model_param : Any or None, optional
         Trained model parameters (state_dict) or other metadata.
     pi0_null : torch.Tensor, float, or None, optional
@@ -67,7 +67,7 @@ class PriorBuilder(ABC):
         model_param : Any or None, optional
             Additional model parameters (for warm starts).
         internal_epoch : Any or None, optional
-            Number of inner training epochs (used by learned priors).
+            Inner training budget, interpreted by the prior builder.
         device : torch.device or None, optional
             Target device. If not provided, the implementation should infer
             it from the input tensors (the conventional GPU-friendly behaviour

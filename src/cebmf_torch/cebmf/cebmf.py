@@ -117,7 +117,10 @@ class cEBMF:
             with real, nonnegative and nonpositive support. Entries follow
             the existing row (L) or column (F) order at equal spacing.
         internal_epoch : int, optional
-            Number of inner epochs for the prior fitting routine.
+            Inner training budget. ``lcash_posterior_means`` and
+            ``po_lcash_posterior_means`` use twice this value as their L-BFGS
+            iteration limit unless numeric max_iter is supplied in
+            the prior options. Other learned priors use this many epochs.
         prior_L_kwargs, prior_F_kwargs : dict or None, optional
             Independent keyword arguments for the L and F prior builders,
             including when both sides use the same prior name. Omitted
@@ -391,11 +394,7 @@ class cEBMF:
         self.L[:, k] = resL.post_mean
         self.L2[:, k] = resL.post_mean2
         nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
-        # KL(q(L_k) || p(L_k)) — non-negative. By the EBNM identity, when q is the
-        # exact posterior under the fitted prior π̂,
-        #   log p(lhat | s, π̂) = E_q log N(lhat | θ, s²) − KL(q || p)
-        # so KL = nm_ll_L − log_lik = nm_ll_L − (−resL.loss) = nm_ll_L + resL.loss.
-        # This is the value the −ELBO accumulator in `_cal_obj` adds to −ll.
+        # KL(q || prior) = E_q[log likelihood] - log marginal likelihood.
         self.kl_l[k] = torch.as_tensor(nm_ll_L + resL.loss, device=self.device, dtype=self.L.dtype)
         self.pi0_L[k] = resL.pi0_null
 
@@ -441,7 +440,6 @@ class cEBMF:
         self.F[:, k] = resF.post_mean
         self.F2[:, k] = resF.post_mean2
         nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
-        # KL(q(F_k) || p(F_k)) — see the matching note in `_update_L_factor`.
         self.kl_f[k] = torch.as_tensor(nm_ll_F + resF.loss, device=self.device, dtype=self.F.dtype)
         self.pi0_F[k] = resF.pi0_null
 
@@ -670,37 +668,15 @@ class cEBMF:
         if not idxs:
             return
         keep = [i for i in range(self.model.K) if i not in idxs]
-        first_dropped = min(idxs)
-        # LC-ASH fitted state must retain its covariate meaning, even when
-        # removing a factor would replace a single input with an intercept.
-        for side, self_cov, prior, states in (
-            ("L", self.covariate.self_row_cov, self.prior_L_fn, self.model_state_L),
-            ("F", self.covariate.self_col_cov, self.prior_F_fn, self.model_state_F),
-        ):
-            if (
-                self_cov
-                and prior.name in {"lcash", "po_lcash"}
-                and any(i > first_dropped and states[i] is not None for i in keep)
-            ):
-                raise ValueError(
-                    f"Pruning would change covariate columns for fitted {prior.name} on {side}; "
-                    "saved state cannot be reused. Use allow_backfitting=False to keep the current factor design."
-                )
         self.L = self.L[:, keep]
         self.L2 = self.L2[:, keep]
         self.F = self.F[:, keep]
         self.F2 = self.F2[:, keep]
         self.kl_l = self.kl_l[keep]
         self.kl_f = self.kl_f[keep]
-        # A surviving factor loses self-covariates only when an earlier factor
-        # is removed. Its cached prior then belongs to a different input design
-        # and must be refitted, even if the new intercept has the same width.
-        self.model_state_L = [
-            None if self.covariate.self_row_cov and i > first_dropped else self.model_state_L[i] for i in keep
-        ]
-        self.model_state_F = [
-            None if self.covariate.self_col_cov and i > first_dropped else self.model_state_F[i] for i in keep
-        ]
+        # Self-covariate columns change when a factor is removed.
+        self.model_state_L = [None if self.covariate.self_row_cov else self.model_state_L[i] for i in keep]
+        self.model_state_F = [None if self.covariate.self_col_cov else self.model_state_F[i] for i in keep]
         self.pi0_L = [self.pi0_L[i] for i in keep]
         self.pi0_F = [self.pi0_F[i] for i in keep]
         self.model.K = len(keep)

@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
+from cebmf_torch.cebnm.cov_gb_prior import cgb_loss
 from cebmf_torch.utils.posterior import posterior_point_mass_normal
 from cebmf_torch.utils.standard_scaler import standard_scale
 
@@ -79,24 +80,6 @@ class CgbNet(nn.Module):
         pi_2 = self.sigmoid(self.output_layer(x)).squeeze(-1)  # (N,)
         pi_1 = 1.0 - pi_2
         return pi_1, pi_2, self.mu_2
-
-
-# -------------------------
-# Loss (mixture NLL, stable)
-# -------------------------
-def cgb_loss(pi_1, pi_2, mu_2, sigma2_sq, targets, se, penalty=1.5, eps=1e-8):
-    var1 = se**2
-    var2 = sigma2_sq + se**2
-
-    logp1 = -0.5 * ((targets - 0.0) ** 2 / var1 + torch.log(2 * torch.pi * var1))
-    logp2 = -0.5 * ((targets - mu_2) ** 2 / var2 + torch.log(2 * torch.pi * var2))
-
-    log_mix = torch.logaddexp(torch.log(pi_1.clamp_min(eps)) + logp1, torch.log(pi_2.clamp_min(eps)) + logp2)
-    if penalty > 1.0:
-        # penalize per-gene spike probability (Dirichlet-like prior on component 0)
-        log_pi0 = torch.log(pi_1.clamp_min(eps))
-        log_mix = log_mix + (penalty - 1.0) * log_pi0
-    return -(log_mix.mean())
 
 
 # -------------------------
@@ -196,7 +179,7 @@ def sharp_cgb_posterior_means(
     hidden_dim=32,
     batch_size=128,
     lr=1e-3,
-    penalty: float = 1.05,
+    penalty: float = 10.0,
     model_param=None,
     eps=1e-8,
     device: torch.device | None = None,
@@ -223,7 +206,9 @@ def sharp_cgb_posterior_means(
     lr : float, optional
         Learning rate for the optimizer (default=1e-3).
     penalty : float, optional
-        Penalty for spike probability (default=1.1).
+        Nullweight (default=10). The coefficient per observation is
+        ``(penalty - 1) / n``, where ``n`` is the full training count.
+        Values at or below one omit the null term.
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
 
@@ -273,7 +258,7 @@ def sharp_cgb_posterior_means(
             with torch.no_grad():
                 gamma2 = compute_responsibilities(pi1, pi2, mu2, sigma2_sq, xhat, se)
                 sigma2_sq = m_step_sigma2(gamma2, mu2, xhat, se) * omega
-            loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty)
+            loss = cgb_loss(pi1, pi2, mu2, sigma2_sq, xhat, se, penalty=penalty, n_obs=len(dataset))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()

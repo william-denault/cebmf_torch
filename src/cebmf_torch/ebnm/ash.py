@@ -139,9 +139,8 @@ class ASHResult:
         scale, log_pi0, L, pm_obj = ash_optimisers[prior](x, s, config)
         pi0 = torch.exp(log_pi0)
 
-        # Use unclipped L to match the posterior calculation for the EBNM identity.
-        # Python-literal floor avoids a host sync from `eps.item()`.
-        log_lik_rows = torch.logsumexp(L + torch.log(torch.clamp(pi0, min=1e-300)).unsqueeze(0), dim=1)
+        # Use the same component densities and weights as the posterior.
+        log_lik_rows = torch.logsumexp(L + log_pi0.unsqueeze(0), dim=1)
         log_lik = log_lik_rows.sum()  # 0-d tensor on-device
         return cls(
             post_mean=pm_obj.post_mean,
@@ -196,7 +195,7 @@ def ash(
     verbose : bool, optional
         Verbosity flag (default: True).
     threshold_loglikelihood : float, optional
-        Minimum log-likelihood threshold (default: -300.0).
+        Unused. The returned marginal log-likelihood uses unclipped densities.
     mode : float, optional
         Mode parameter (for normal prior only, default: 0.0).
     batch_size : int or None, optional
