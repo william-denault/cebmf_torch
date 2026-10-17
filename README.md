@@ -58,6 +58,9 @@ install the package by replacing `uv sync` with `pip install .`.
 
 ### Docker (GPU Support)
 
+Docker publishing is manual: run **Build and Push Docker Image** from GitHub
+Actions when needed. It does not run on pull requests or pushes to `main`.
+
 Use the public docker image
 
 ```bash
