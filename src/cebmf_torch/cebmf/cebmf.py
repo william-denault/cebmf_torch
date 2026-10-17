@@ -642,8 +642,9 @@ class cEBMF:
         self.F2 = self.F2[:, keep]
         self.kl_l = self.kl_l[keep]
         self.kl_f = self.kl_f[keep]
-        self.model_state_L = [self.model_state_L[i] for i in keep]
-        self.model_state_F = [self.model_state_F[i] for i in keep]
+        # Self-covariate columns change when a factor is removed.
+        self.model_state_L = [None if self.covariate.self_row_cov else self.model_state_L[i] for i in keep]
+        self.model_state_F = [None if self.covariate.self_col_cov else self.model_state_F[i] for i in keep]
         self.pi0_L = [self.pi0_L[i] for i in keep]
         self.pi0_F = [self.pi0_F[i] for i in keep]
         self.model.K = len(keep)
