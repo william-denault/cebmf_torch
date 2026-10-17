@@ -67,7 +67,15 @@ class CashNet(nn.Module):
 
 
 # Custom loss function
-def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
+def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10, *, n_obs: int = 1):
+    """Sum mixture losses with null coefficient ``(penalty - 1) / n_obs``.
+
+    ``n_obs`` is the positive full training count, including for partial
+    batches. Its default of one gives a per-observation penalty.
+    Values of ``penalty`` at or below one omit the null term.
+    """
+    if n_obs <= 0:
+        raise ValueError("n_obs must be positive.")
     # log sum_k pi_k * exp(mll_k), reduced in log-space. The previous code
     # exponentiated marginal_log_lik directly; exp() is unnecessary here and
     # overflows float32 to inf for mll > ~88. marginal_log_lik is only clamped
@@ -80,7 +88,7 @@ def pen_loglik_loss(pred_pi, marginal_log_lik, penalty=1.5, epsilon=1e-10):
     if penalty > 1:
         # penalize per-gene spike probability (Dirichlet-like prior on component 0)
         log_pi0 = torch.log(torch.clamp(pred_pi[:, 0], min=epsilon))
-        penalized_log_likelihood_value = first_sum + (penalty - 1) * torch.sum(log_pi0)
+        penalized_log_likelihood_value = first_sum + ((penalty - 1) / n_obs) * torch.sum(log_pi0)
     else:
         penalized_log_likelihood_value = first_sum
 
@@ -132,7 +140,7 @@ def cash_posterior_means(
     batch_size=128,
     lr=0.001,
     model_param=None,
-    penalty=1.5,
+    penalty=10.0,
     device: torch.device | None = None,
 ):
     """
@@ -164,7 +172,9 @@ def cash_posterior_means(
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
     penalty : float, optional
-        Penalty for spike probability (default=1.5).
+        Null penalty strength (default=10). For values greater than one,
+        the coefficient per observation is ``(penalty - 1) / n``, where
+        ``n`` is the full training count. ``penalty=1`` omits the null penalty.
     device : torch.device, optional
         Target device for tensors and the model. If ``None``, inherits from
         ``betahat`` when it is already a tensor; otherwise falls back to CUDA
@@ -224,7 +234,9 @@ def cash_posterior_means(
             )
             optimizer_cash.zero_grad()
             outputs = model_cash(inputs)
-            cash_loss = pen_loglik_loss(pred_pi=outputs, marginal_log_lik=batch_loglik, penalty=penalty)
+            cash_loss = pen_loglik_loss(
+                pred_pi=outputs, marginal_log_lik=batch_loglik, penalty=penalty, n_obs=len(dataset)
+            )
             cash_loss.backward()
             optimizer_cash.step()
             epoch_loss += cash_loss.item()
