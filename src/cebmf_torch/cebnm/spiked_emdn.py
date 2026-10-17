@@ -92,9 +92,10 @@ def mdn_spike_loss_with_varying_noise(
     betahat,
     sebetahat,
     *,
-    penalty: float = 1.5,
+    penalty: float,
     beta_prior: tuple | None = None,
     eps: float = 1e-8,
+    n_obs: int,
 ):
     """
     Compute the negative log-likelihood loss for a spike-and-slab mixture model with optional
@@ -112,18 +113,25 @@ def mdn_spike_loss_with_varying_noise(
         Observed effect estimates, shape (N,).
     sebetahat : torch.Tensor
         Standard errors of the effect estimates, shape (N,).
-    penalty : float, optional
-        >1 encourages spike; =1 neutral (default is 1.5).
+    penalty : float
+        Null penalty strength. The coefficient per observation
+        is ``(penalty - 1) / n_obs``. Values of ``penalty`` above one
+        encourage the spike; values below one discourage it.
     beta_prior : tuple, optional
-        (alpha0, beta0) for Beta prior on pi_spike.
+        (alpha0, beta0) for a separate per-observation Beta prior on pi_spike.
     eps : float, optional
         Small value to avoid log(0) (default is 1e-8).
+    n_obs : int
+        Positive full training count, including for partial batches.
 
     Returns
     -------
     torch.Tensor
         The computed loss (scalar).
     """
+    if n_obs <= 0:
+        raise ValueError("n_obs must be positive.")
+
     # Spike likelihood: mean=0, total var = se^2
     var_spike = sebetahat**2  # (N,)
     logp_spike = -0.5 * ((betahat**2) / var_spike + torch.log(2 * torch.pi * var_spike))  # (N,)
@@ -143,7 +151,7 @@ def mdn_spike_loss_with_varying_noise(
     # (A) simple steer: penalty>1 encourages spike
     reg_simple = 0.0
     if penalty != 1.0:
-        lam = float(penalty) - 1.0  # >0 encourages spike
+        lam = (float(penalty) - 1.0) / n_obs  # >0 encourages spike
         reg_simple = -(lam) * torch.log(pi[:, 0].clamp_min(eps)).mean()
 
     # (B) optional Beta(alpha0, beta0) prior on pi_spike
@@ -218,7 +226,7 @@ def spiked_emdn_posterior_means(
     lr=1e-3,
     model_param=None,
     *,
-    penalty: float = 1.5,  # >1 encourages spike; =1 neutral
+    penalty: float = 10.0,  # >1 encourages spike; =1 neutral
     beta_prior: tuple | None = None,  # e.g. (17., 5.) => target pi_spike ~ 0.77
     print_every=10,
     device: torch.device | None = None,
@@ -253,9 +261,11 @@ def spiked_emdn_posterior_means(
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
     penalty : float, optional
-        >1 encourages spike; =1 neutral (default=1.5).
+        Null penalty strength (default=10). The coefficient per observation
+        is ``(penalty - 1) / n``, where ``n`` is the full training count.
+        ``penalty=1`` omits this term; values below one discourage the spike.
     beta_prior : tuple, optional
-        (alpha0, beta0) for Beta prior on pi_spike.
+        (alpha0, beta0) for a separate per-observation Beta prior on pi_spike.
     print_every : int, optional
         Print training loss every this many epochs (default=10).
     device : torch.device, optional
@@ -316,6 +326,7 @@ def spiked_emdn_posterior_means(
                 noise_std,
                 penalty=penalty,
                 beta_prior=beta_prior,
+                n_obs=len(dataset),
             )
             loss.backward()
             optimizer.step()
