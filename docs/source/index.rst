@@ -14,6 +14,7 @@ Welcome to the cebmf_torch documentation!
    theoretical_background
    examples
    hmm_priors
+   point_exponential
    api
 
 .. include:: ../../README.md
