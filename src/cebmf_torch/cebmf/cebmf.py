@@ -215,8 +215,10 @@ class cEBMF:
         self._S_input = S
         self._validate_inputs()
         # Keep float64 if supplied; ELBO bookkeeping needs the precision.
+        # SVD on CPU does not support float16/bfloat16: retain the original
+        # float32 promotion for those inputs and for integer data.
         _d = self.data.to(self.device)
-        self.Y = _d if _d.dtype.is_floating_point else _d.float()
+        self.Y = _d if _d.dtype in (torch.float32, torch.float64) else _d.float()
         self.N, self.P = self.Y.shape
         self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
@@ -278,6 +280,9 @@ class cEBMF:
         else:
             _use_strategy(method)
 
+        # User-provided factors may have a different dtype from the data.
+        self.L = self.L.to(self.Y)
+        self.F = self.F.to(self.Y)
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
         self.R = self.Y0 - self.L @ self.F.T

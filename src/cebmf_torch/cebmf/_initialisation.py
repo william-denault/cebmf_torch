@@ -97,8 +97,8 @@ def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> t
 
     # Pad with zeros if K > rank
     if K_actual < K:
-        L = torch.cat([L, torch.zeros(N, K - K_actual, device=device)], dim=1)
-        F = torch.cat([F, torch.zeros(P, K - K_actual, device=device)], dim=1)
+        L = torch.cat([L, L.new_zeros(N, K - K_actual)], dim=1)
+        F = torch.cat([F, F.new_zeros(P, K - K_actual)], dim=1)
 
     return L, F
 
@@ -126,8 +126,8 @@ def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -
     tuple of Tensor
         Tuple of (L, F) tensors
     """
-    L = torch.randn(N, K, device=device) * RANDOM_INIT_SCALE
-    F = torch.randn(P, K, device=device) * RANDOM_INIT_SCALE
+    L = torch.randn(N, K, device=device, dtype=Y.dtype) * RANDOM_INIT_SCALE
+    F = torch.randn(P, K, device=device, dtype=Y.dtype) * RANDOM_INIT_SCALE
     return L, F
 
 
@@ -154,8 +154,8 @@ def zero_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> 
     tuple of Tensor
         Tuple of (L, F) tensors
     """
-    L = torch.zeros(N, K, device=device)
-    F = torch.zeros(P, K, device=device)
+    L = torch.zeros(N, K, device=device, dtype=Y.dtype)
+    F = torch.zeros(P, K, device=device, dtype=Y.dtype)
     return L, F
 
 

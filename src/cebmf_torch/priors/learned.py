@@ -209,4 +209,5 @@ class LearnedBuilder(PriorBuilder):
             loss=loss,
             model_param=obj.model_param,
             pi0_null=pi0_null,
+            regularization_loss=getattr(obj, "regularization_loss", 0.0),
         )

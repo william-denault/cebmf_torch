@@ -124,14 +124,20 @@ Baum--Welch updates learn the transition matrix and mixture weights using
 exact forward/backward smoothing. Supported persistent state centers can
 move after a short warm-up, within their initial Voronoi cells. Low-occupancy
 or nearly duplicated states are deleted only after evaluating the proposed
-model's full marginal likelihood.
+model's full marginal likelihood and checking that its penalized objective
+does not decrease. A decreasing EM proposal is also rejected, retaining the
+previous fitted parameters and posterior.
 
 ``post_mean2`` is the posterior second moment, not the square of the mean.
 ``pi0_null`` is the smoothed posterior probability that the effect is exactly
 zero, including any zero-scale component centered at zero. ``loss`` is the
 negative marginal log likelihood of the **whole sequence** under the final
 fitted HMM. It is used in cEBMF's KL/objective calculation. Dependence within
-a factor is retained by the HMM smoother.
+a factor is retained by the HMM smoother. ``regularization_loss`` reports the
+negative Dirichlet log penalty separately. cEBMF adds it once per fitted
+factor to ``model.obj``; ``model.negative_elbo`` excludes it. No extra fitting
+argument is needed to enable this accounting. With ``penalty=1`` the
+regularization contribution is exactly zero.
 
 ``lfsr`` is the local false sign rate at each position, computed from the
 full smoothed posterior mixture as
@@ -236,7 +242,7 @@ exact solver. The cEBMF adapters override ``estimate_init`` to ``True``:
      - Check state deletion starting at iteration 5 and every 5 iterations.
    * - ``prune_max_loglik_loss``
      - ``0.05``
-     - Maximum permitted full-sequence log-likelihood loss for a deletion proposal.
+     - Additional cap on a deletion's log-likelihood loss; the penalized objective must never decrease.
    * - ``maxiter``, ``tolerance``
      - ``20``, ``1e-5``
      - Standalone iteration limit and relative objective convergence tolerance.
@@ -250,12 +256,30 @@ specified initial parameters without EM. State-sized initial values
 and disabled prefiltering. For ``hmm_neg``, explicit non-null centers must
 be negative; ``prior_sd`` remains nonnegative.
 
-The adapter accepts ``model_param`` for compatibility but refits from the
-current observations on every call, as fSuSiE does. This allows states to
-return after earlier pruning and lets automatic grids follow factor rescaling.
+The adapter compares a fresh fit on the current observations with continuation
+of a compatible ``model_param`` fit. It retains the higher penalized marginal
+likelihood. The previous prior remains a feasible candidate, while the fresh
+fit allows states to return after pruning and grids to follow factor rescaling.
+This prevents a fresh grid or a small iteration budget from discarding a better
+existing prior. The comparison uses float64 objectives even for float32 inputs.
+No history values are clipped or replaced by running minima.
+
 ``model_param`` stores the final centers, scale grid, transition probabilities,
-initial probabilities and mixture weights for inspection. Explicit initial
-values can be used with the low-level solver for controlled continuation.
+initial probabilities and mixture weights, plus private adapter configuration
+metadata. Different support, explicit grid options, topology, null-state model,
+shared-mixture setting or initial-probability learning setting reset reuse.
+Changing ``init_transition``, ``init_prob`` or ``init_rho`` resets saved state;
+unchanged initial settings allow continuation on subsequent updates. A partial
+or older state without configuration metadata is ignored.
+The negative adapter reflects a copy of saved state, preserving the caller's
+previous fit. Explicit initial values remain available for controlled
+continuation with the low-level solver.
+
+For a fixed set of cEBMF factors, HMM updates preserve or improve the penalized
+coordinate objective up to floating-point accuracy. Overall descent also
+requires the other prior and noise updates to improve their corresponding
+objectives. Equal values at convergence are valid. The unpenalized likelihood
+need not improve when ``penalty > 1``.
 
 Numerical checks and scope
 --------------------------
@@ -275,7 +299,9 @@ the reference's asymptotic formulas. The nonnegative center update maximizes
 the same conditional criterion with a bounded golden-section search instead
 of R's Brent optimizer. The automatic scale grid also handles the near-null
 case where the reference's computed maximum scale falls below its minimum.
-The solver requires finite observations and finite positive SEs; a scalar SE
+Unlike the original reference, deletion proposals are checked against the
+penalized objective as well as the log-likelihood loss cap. The solver requires
+finite observations and finite positive SEs; a scalar SE
 is broadcast. cEBMF handles missing data before constructing these estimates.
 
 Forward/backward recursions are sequential in position; the HMM is not a

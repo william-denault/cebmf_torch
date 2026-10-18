@@ -24,16 +24,20 @@ def _normalize(x: Tensor, fallback: Tensor) -> Tensor:
     return torch.where(mass > 0, x / torch.where(mass > 0, mass, 1.0), fallback)
 
 
-def _objective(loglik, transition, init, rho, penalty, estimate_init, null_state):
+def _log_penalty(transition, init, rho, penalty, estimate_init, null_state):
     """Dirichlet log penalty on zero-state probabilities, as in fSuSiE."""
     if penalty == 1:
-        return loglik
+        return init.new_zeros(())
     log_null = transition[:, 0].log().sum()
     if estimate_init:
         log_null = log_null + init[0].log()
     if null_state == "adaptive":
         log_null = log_null + rho[0, 0].log()
-    return loglik + (penalty - 1) * log_null
+    return (penalty - 1) * log_null
+
+
+def _objective(loglik, transition, init, rho, penalty, estimate_init, null_state):
+    return loglik + _log_penalty(transition, init, rho, penalty, estimate_init, null_state)
 
 
 def _component_log_emission(y: Tensor, se: Tensor, mu: Tensor, sd: Tensor, positive: bool) -> Tensor:
@@ -316,6 +320,9 @@ def fit_ash_hmm(
     to its zero-scale component when ``null_state='adaptive'``. This favors
     zero effects, matching the other priors' penalty convention. Convergence
     uses the penalized objective; ``loss`` excludes the penalty.
+    EM and pruning proposals are accepted only if they do not decrease that
+    objective. ``prune_max_loglik_loss`` additionally limits the unpenalized
+    likelihood loss; it does not authorize a decrease in the fitted objective.
 
     Returns a namespace with ``post_mean``, ``post_mean2``, ``pi0_null``
     (posterior probability of an exact zero), ``lfsr`` (local false sign rate,
@@ -538,7 +545,12 @@ def fit_ash_hmm(
         objective_new = _objective(ll_new, transition_new, init_new, rho_new, penalty, estimate_init, null_state)
         delta_em = objective_new - objective
         if delta_em < -1e-7 * (1 + objective.abs()):
-            warn("The fixed-dimension HMM EM objective decreased beyond numerical tolerance.", stacklevel=2)
+            warn("Rejected a decreasing fixed-dimension HMM EM update.", stacklevel=2)
+        if not torch.isfinite(objective_new) or delta_em < 0:
+            # Keep the fitted parameters, posterior and history consistent;
+            # never mask a bad update by clipping its recorded objective.
+            converged = bool(delta_em.abs() <= tolerance * (1 + objective.abs()))
+            break
 
         pruning_due = (
             prune_states and iteration >= prune_start and (iteration - prune_start) % prune_every == 0 and m > 1
@@ -564,15 +576,16 @@ def fit_ash_hmm(
                     a_try = a_try / a_try.sum(1, keepdim=True)
                     init_try = init_new[keep] / init_new[keep].sum()
                     trial = _smooth(emission_new[:, keep], a_try, init_try)
-                    if ll_new - trial[0] <= prune_max_loglik_loss:
+                    objective_try = _objective(
+                        trial[0], a_try, init_try, rho_new[keep], penalty, estimate_init, null_state
+                    )
+                    if ll_new - trial[0] <= prune_max_loglik_loss and objective_try >= objective_new:
                         mu_new, rho_new = mu_new[keep], rho_new[keep]
                         transition_new, init_new = a_try, init_try
                         anchor, enabled = anchor[keep], enabled[keep]
                         component_new, emission_new = component_new[:, keep], emission_new[:, keep]
                         ll_new, gamma_new, counts_new = trial
-                        objective_new = _objective(
-                            ll_new, transition_new, init_new, rho_new, penalty, estimate_init, null_state
-                        )
+                        objective_new = objective_try
                         m = mu_new.numel()
                         pruned = True
                         break
@@ -612,6 +625,7 @@ def fit_ash_hmm(
         pi0_null=p0.to(dtype),
         lfsr=lfsr.to(dtype),
         loss=-loglik.to(dtype),
+        regularization_loss=-_log_penalty(transition, init, rho, penalty, estimate_init, null_state).to(dtype),
         log_likelihood=loglik.to(dtype),
         state_probability=gamma.to(dtype),
         model_param=params,
@@ -621,7 +635,52 @@ def fit_ash_hmm(
         state_counts=state_counts,
         iterations=len(history) - 1,
         converged=converged,
+        # Candidate selection must not round two different float64 objectives
+        # to a tie when returning float32 posterior summaries.
+        _objective=objective,
     )
+
+
+def _adapter_configuration(options):
+    """Model restrictions that must agree before reusing a fitted prior."""
+    defaults = {
+        "mu": None,
+        "prior_sd": None,
+        "nonnegative_state_means": False,
+        "topology": "full",
+        "null_state": "pointmass",
+        "shared_mixture": False,
+        "estimate_init": True,
+        "init_transition": None,
+        "init_prob": None,
+        "init_rho": None,
+    }
+    configuration = {key: options.get(key, default) for key, default in defaults.items()}
+    for key in ("mu", "prior_sd", "init_transition", "init_prob", "init_rho"):
+        if configuration[key] is not None:
+            configuration[key] = torch.as_tensor(configuration[key], dtype=torch.float64).detach().clone()
+    return configuration
+
+
+def _compatible_state(state, configuration):
+    if not isinstance(state, dict) or not isinstance(state.get("_adapter_configuration"), dict):
+        return False
+    if not {"mu", "prior_sd", "transition", "init_prob", "mixture_weight"} <= state.keys():
+        return False
+    support = "nonnegative" if configuration["nonnegative_state_means"] else "real"
+    if state.get("effect_support") != support:
+        return False
+    saved = state["_adapter_configuration"]
+    if saved.keys() != configuration.keys():
+        return False
+    for key, value in configuration.items():
+        old = saved[key]
+        if isinstance(value, Tensor):
+            if not isinstance(old, Tensor) or not torch.equal(value, old.to(value)):
+                return False
+        elif isinstance(old, Tensor) or old != value:
+            return False
+    return True
 
 
 def hmm_posterior_means(
@@ -637,9 +696,12 @@ def hmm_posterior_means(
 ):
     """cEBNM adapter for the signed HMM; ``X`` is deliberately ignored.
 
-    Refit grids from the current normal-means data on every call, like fSuSiE.
-    ``model_param`` is accepted for the builder contract but is not reused:
-    irreversible state pruning and factor rescaling make stale grids unsafe.
+    Compare a fresh grid fit with continuation of a compatible ``model_param``
+    fit, keeping the higher penalized marginal likelihood on the current data.
+    The fresh candidate allows states to return after pruning and grids to
+    follow factor rescaling. Changing initial probabilities, support, grid
+    options or model restrictions resets saved state. Repeated calls with
+    unchanged initial settings can continue the previous fit.
     ``maxiter`` overrides ``n_epochs`` (cEBMF's ``internal_epoch``); otherwise
     the standalone default is 20. Remaining options go to :func:`fit_ash_hmm`.
     Initial state probabilities are learned by default to avoid unsupported
@@ -647,13 +709,30 @@ def hmm_posterior_means(
     The result includes ``lfsr``, one local false sign rate per observation.
     """
     kwargs.setdefault("estimate_init", True)
-    return fit_ash_hmm(
+    budget = maxiter if maxiter is not None else (n_epochs if n_epochs is not None else 20)
+    fresh = fit_ash_hmm(
         betahat,
         sebetahat,
-        maxiter=maxiter if maxiter is not None else (n_epochs if n_epochs is not None else 20),
+        maxiter=budget,
         device=device,
         **kwargs,
     )
+    configuration = _adapter_configuration(kwargs)
+    if _compatible_state(model_param, configuration):
+        warm_options = dict(kwargs)
+        warm_options.update(
+            mu=model_param["mu"],
+            prior_sd=model_param["prior_sd"],
+            init_transition=model_param["transition"],
+            init_prob=model_param["init_prob"],
+            init_rho=model_param["mixture_weight"],
+            prefilter=False,
+        )
+        warm = fit_ash_hmm(betahat, sebetahat, maxiter=budget, device=device, **warm_options)
+        if warm._objective >= fresh._objective:
+            fresh = warm
+    fresh.model_param["_adapter_configuration"] = configuration
+    return fresh
 
 
 def hmm_pos_posterior_means(X: Tensor | None, betahat: Tensor, sebetahat: Tensor, **kwargs):
@@ -672,6 +751,15 @@ def hmm_neg_posterior_means(X: Tensor | None, betahat: Tensor, sebetahat: Tensor
     """
     if kwargs.get("mu") is not None:
         kwargs["mu"] = -torch.as_tensor(kwargs["mu"], dtype=torch.float64)
+    state = kwargs.get("model_param")
+    if isinstance(state, dict) and state.get("effect_support") == "nonpositive":
+        # Reflect a copy: callers may still inspect or reuse the previous fit.
+        kwargs["model_param"] = {
+            **state,
+            "mu": -state["mu"],
+            "effect_support": "nonnegative",
+            "nonnegative_state_means": True,
+        }
     result = hmm_pos_posterior_means(X, -betahat, sebetahat, **kwargs)
     result.post_mean = -result.post_mean
     result.model_param["mu"] = -result.model_param["mu"]
