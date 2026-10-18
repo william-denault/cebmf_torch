@@ -31,7 +31,7 @@ class CEBMFResult:
     tau : Tensor
         Noise precision(s).
     history_obj : list
-        History of objective values.
+        History of objective values, including reported prior fitting penalties.
     """
 
     L: Tensor
@@ -113,6 +113,12 @@ class cEBMF:
             Initial number of factors. Default 5.
         prior_L, prior_F : str, optional
             Prior names to use for the row/column factors.
+            Normal-mixture (``norm``) updates warm-start each factor's ASH
+            fit and compare it with a fresh grid. Their default ``penalty=10``
+            encourages sparsity. ``obj`` includes the ASH fitting penalty;
+            ``negative_elbo`` records the unpenalized negative ELBO separately.
+            Use ``prior_L_kwargs={"penalty": 1}`` and
+            ``prior_F_kwargs={"penalty": 1}`` to fit that unpenalized objective.
             ``hmm``, ``hmm_pos`` and ``hmm_neg`` use fSuSiE-style HMM priors
             with real, nonnegative and nonpositive support. Entries follow
             the existing row (L) or column (F) order at equal spacing.
@@ -396,6 +402,7 @@ class cEBMF:
         nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
         # KL(q || prior) = E_q[log likelihood] - log marginal likelihood.
         self.kl_l[k] = torch.as_tensor(nm_ll_L + resL.loss, device=self.device, dtype=self.L.dtype)
+        self.regularization_l[k] = resL.regularization_loss
         self.pi0_L[k] = resL.pi0_null
 
     @torch.no_grad()
@@ -441,6 +448,7 @@ class cEBMF:
         self.F2[:, k] = resF.post_mean2
         nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
         self.kl_f[k] = torch.as_tensor(nm_ll_F + resF.loss, device=self.device, dtype=self.F.dtype)
+        self.regularization_f[k] = resF.regularization_loss
         self.pi0_F[k] = resF.pi0_null
 
     @torch.no_grad()
@@ -456,8 +464,10 @@ class cEBMF:
         # `_update_L_factor` / `_update_F_factor`); the negative ELBO is
         # therefore -ll + sum_k KL(q(L_k)||p) + sum_k KL(q(F_k)||p).
         KL = self.kl_l.sum() + self.kl_f.sum()
-        loss = (-ll + KL).item()  # minimize this (negative ELBO)
-        self.obj.append(loss)
+        negative_elbo = -ll + KL
+        regularization = self.regularization_l.sum() + self.regularization_f.sum()
+        self.negative_elbo.append(negative_elbo.item())
+        self.obj.append((negative_elbo + regularization).item())
 
     @torch.no_grad()
     def _compute_constant_loglik(self, ER2: Tensor) -> Tensor:
@@ -545,11 +555,14 @@ class cEBMF:
 
         self.kl_l = torch.zeros(self.model.K, device=self.device, dtype=self.Y.dtype)
         self.kl_f = torch.zeros(self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.regularization_l = torch.zeros_like(self.kl_l)
+        self.regularization_f = torch.zeros_like(self.kl_f)
         self.pi0_L: list[Tensor | float | None] = [
             None
         ] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
         self.pi0_F: list[Tensor | float | None] = [None] * self.model.K
         self.obj = []
+        self.negative_elbo = []
 
     @torch.no_grad()
     def _setup_known_variance(self) -> None:
@@ -674,6 +687,8 @@ class cEBMF:
         self.F2 = self.F2[:, keep]
         self.kl_l = self.kl_l[keep]
         self.kl_f = self.kl_f[keep]
+        self.regularization_l = self.regularization_l[keep]
+        self.regularization_f = self.regularization_f[keep]
         # Self-covariate columns change when a factor is removed.
         self.model_state_L = [None if self.covariate.self_row_cov else self.model_state_L[i] for i in keep]
         self.model_state_F = [None if self.covariate.self_col_cov else self.model_state_F[i] for i in keep]
@@ -681,6 +696,7 @@ class cEBMF:
         self.pi0_F = [self.pi0_F[i] for i in keep]
         self.model.K = len(keep)
         self.obj = []
+        self.negative_elbo = []
 
     @torch.no_grad()
     def _build_covariate_matrix(

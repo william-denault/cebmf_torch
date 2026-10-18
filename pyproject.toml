@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cebmf_torch"
-version = "0.1.0"
+version = "0.1.01"
 description = "Pure-PyTorch Empirical Bayes Matrix Factorization with mini-batch EM"
 readme = "README.md"
 requires-python = ">=3.11"

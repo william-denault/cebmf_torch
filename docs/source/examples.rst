@@ -99,6 +99,19 @@ Omitting a side's options adds no per-side overrides; learned priors still
 receive cEBMF's epoch and device settings. Constructing another cEBMF model
 does not change the options of this model.
 
+For the default ``norm`` priors, ASH uses ``penalty=10`` to encourage a large
+null weight. ``model.obj`` includes this fitting penalty: the negative ELBO
+minus ``(penalty - 1) * log(pi0)`` for each factor on each side. The
+unpenalized values remain available in ``model.negative_elbo``; they need
+not decrease under penalized updates. To disable the penalty, set both
+``prior_L_kwargs={"penalty": 1}``
+and ``prior_F_kwargs={"penalty": 1}``. The normal-prior updates retain each
+factor's fitted grid and weights as a warm start and compare that fit with
+a newly selected grid, keeping the better fit for the requested penalty.
+Convergence can produce equal objective values; check that all entries are
+finite and that successive differences are at most a small numerical
+tolerance, rather than requiring strict decrease at every iteration.
+
 Empirical Bayes Normal Means (EBNM)
 ------------------------------------
 
