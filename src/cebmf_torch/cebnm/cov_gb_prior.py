@@ -201,7 +201,7 @@ def cgb_posterior_means(
     betahat,
     sebetahat,
     n_epochs=50,
-    n_layers=2,
+    n_layers=4,
     hidden_dim=32,
     batch_size=128,
     lr=1e-3,

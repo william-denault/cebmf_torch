@@ -1,20 +1,7 @@
-# build docker image and push to github registry
+# Docker publishing is opt-in and does not run on pull requests or merges.
 name: Build and Push Docker Image
 on:
-  push:
-    branches: [main]
-  # remove pull_request trigger entirely
-    paths:
-      - 'Dockerfile'
-      - '.github/workflows/docker.yml'
-      - 'src/**'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'Dockerfile'
-      - '.github/workflows/docker.yml'
-      - 'src/**'
+  workflow_dispatch:
 
 jobs:
   build:

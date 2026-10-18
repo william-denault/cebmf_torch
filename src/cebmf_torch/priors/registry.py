@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from .base import PriorBuilder
 from .learned import LearnedBuilder, LearnedPriorType
 from .mixture import ASHBuilder, MixturePriorType
@@ -33,7 +35,7 @@ class PriorRegistry:
     @classmethod
     def get_builder(cls, name: str) -> PriorBuilder:
         """
-        Retrieve a registered prior builder by name.
+        Retrieve an independent copy of a registered prior builder by name.
 
         Parameters
         ----------
@@ -43,7 +45,7 @@ class PriorRegistry:
         Returns
         -------
         PriorBuilder
-            The registered builder instance.
+            A builder instance whose settings can be changed independently.
 
         Raises
         ------
@@ -52,7 +54,8 @@ class PriorRegistry:
         """
         if name not in cls.registry:
             raise ValueError(f"Prior '{name}' is not registered.")
-        return cls.registry[name]
+        # Each side/model sets its own kwargs; never mutate a shared prototype.
+        return deepcopy(cls.registry[name])
 
     @classmethod
     def list_priors(cls) -> list[str]:

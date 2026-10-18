@@ -13,6 +13,8 @@ Welcome to the cebmf_torch documentation!
    Home <self>
    theoretical_background
    examples
+   hmm_priors
+   point_exponential
    api
 
 .. include:: ../../README.md

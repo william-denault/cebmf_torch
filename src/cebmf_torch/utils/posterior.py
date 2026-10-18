@@ -6,8 +6,7 @@ from .maths import (  # noqa: F401
     _logcdf_normal,
     _logpdf_normal,
     logg_exp_convolved_with_normal,
-    my_e2truncnorm,
-    my_etruncnorm,
+    posterior_moments_exp,
 )
 
 
@@ -150,17 +149,8 @@ def posterior_mean_exp(
     num = assignment.unsqueeze(0) * torch.exp(log_prob - bmax)  # (J, K)
     post_assign = num / torch.clamp(num.sum(dim=1, keepdim=True), min=1e-300)  # (J, K)
 
-    # First/second moments of theta | data on the Exp branch via tilted truncnorm.
-    # m_tilt = x - s^2 * a_k  with theta_c >= 0.
-    m_tilt = x_col - (s_col * s_col) * a_row  # (J, K-1)
-    zero = torch.zeros_like(m_tilt)
-    pinf = torch.full_like(m_tilt, float("inf"))
-
-    # The truncnorm helpers broadcast over arbitrary input shapes; passing
-    # s_col (shape (J, 1)) lets them broadcast the per-observation SD over K-1
-    # components without a Python loop.
-    e1 = my_etruncnorm(zero, pinf, m_tilt, s_col).to(dtype=dt)  # (J, K-1)
-    e2 = my_e2truncnorm(zero, pinf, m_tilt, s_col).to(dtype=dt)  # (J, K-1)
+    # Use the same stable exponential-branch moments as the point solver.
+    e1, e2 = posterior_moments_exp(x_col, s_col, a_row)  # (J, K-1)
 
     r_exp = post_assign[:, 1:]  # (J, K-1) — responsibilities of the Exp components
     post_mean = (r_exp * e1).sum(dim=1)  # (J,)

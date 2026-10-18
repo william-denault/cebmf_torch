@@ -99,6 +99,19 @@ Omitting a side's options adds no per-side overrides; learned priors still
 receive cEBMF's epoch and device settings. Constructing another cEBMF model
 does not change the options of this model.
 
+For the default ``norm`` priors, ASH uses ``penalty=10`` to encourage a large
+null weight. ``model.obj`` includes this fitting penalty: the negative ELBO
+minus ``(penalty - 1) * log(pi0)`` for each factor on each side. The
+unpenalized values remain available in ``model.negative_elbo``; they need
+not decrease under penalized updates. To disable the penalty, set both
+``prior_L_kwargs={"penalty": 1}``
+and ``prior_F_kwargs={"penalty": 1}``. The normal-prior updates retain each
+factor's fitted grid and weights as a warm start and compare that fit with
+a newly selected grid, keeping the better fit for the requested penalty.
+Convergence can produce equal objective values; check that all entries are
+finite and that successive differences are at most a small numerical
+tolerance, rather than requiring strict decrease at every iteration.
+
 Empirical Bayes Normal Means (EBNM)
 ------------------------------------
 
@@ -284,6 +297,46 @@ Within cEBMF, fitted state is passed between successive factor updates.
 After factor pruning, priors that use self-covariates are fitted against the
 current feature columns. States on sides with only external covariates remain
 valid and are reused.
+
+Migrating LC-ASH calls from Adam to L-BFGS
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+These changes apply to both ``lcash_posterior_means`` and
+``po_lcash_posterior_means``, including options supplied through
+``prior_L_kwargs`` and ``prior_F_kwargs`` in cEBMF:
+
+* Replace ``n_epochs`` with ``max_iter``. These are different optimization
+  budgets, so there is no one-to-one conversion from Adam epochs to L-BFGS
+  iterations.
+* Remove ``lr``, ``batch_size`` and ``seed``. The conditional optimizer now
+  uses full batches and deterministic initialization. Random data generation
+  and cEBMF initialization can still be controlled separately with PyTorch.
+* Remove ``weight_decay``. The Student-t coefficient prior is controlled by
+  ``coefficient_prior_scale`` and ``coefficient_prior_df``; its defaults are
+  1.0 and 5.0, respectively. There is no direct conversion from weight decay.
+  Set ``coefficient_prior_scale=None`` to disable this prior.
+* Supply optional arguments by keyword; only ``X``, ``betahat`` and
+  ``sebetahat`` may be positional.
+
+For example, use ``prior_L_kwargs={"max_iter": 100, "penalty": 10.0}``
+for an LC-ASH row prior and the analogous ``prior_F_kwargs`` for a column
+prior. If a call only selects ``prior_L="lcash"`` or ``prior_F="po_lcash"``
+and sets ``internal_epoch``, no call-site change is needed: cEBMF uses
+``max_iter=2 * internal_epoch`` unless overridden. Other learned priors
+still accept ``n_epochs``.
+
+The nullweight penalty now defaults to 10 and is scaled by the full training
+count. Old penalty values do not imply the same regularization strength.
+``penalty=1`` disables only the nullweight penalty; disable the coefficient
+prior separately if an unregularized conditional fit is intended. The ASH
+initializer still uses penalty 10.
+
+The ``X_l``, ``X_f``, ``self_row_cov`` and ``self_col_cov`` options are
+unchanged. In this branch, factor k uses the earlier factor columns
+``0, ..., k-1`` as self-covariates, optionally combined with external
+covariates. Pruning clears the fitted state on self-covariate sides so those
+priors can refit with the surviving columns; it no longer rejects pruning
+for LC-ASH or PO-LC-ASH.
 
 Custom Initialization
 ~~~~~~~~~~~~~~~~~~~~~
