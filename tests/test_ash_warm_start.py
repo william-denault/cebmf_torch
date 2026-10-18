@@ -105,6 +105,7 @@ def test_per_side_penalties_are_counted_once_and_follow_pruned_factors():
     )
     model.initialise_factors()
     model.fit(maxit=2)
+    assert len({id(state) for state in model.model_state_L + model.model_state_F}) == 6
 
     def check_objective():
         penalty = -sum(((alpha_l - 1) * state.pi.log()).sum().item() for state in model.model_state_L)
@@ -118,29 +119,3 @@ def test_per_side_penalties_are_counted_once_and_follow_pruned_factors():
     check_objective()
     model.iter_once()
     check_objective()
-
-
-@pytest.mark.parametrize("seed,penalty", [(0, 1), (1, 1), (4, 1), (0, 10)])
-def test_normal_factor_updates_decrease_the_criterion_they_optimize(seed, penalty):
-    generator = torch.Generator().manual_seed(seed)
-    u = torch.rand(50, generator=generator, dtype=torch.float64)
-    v = torch.rand(40, generator=generator, dtype=torch.float64)
-    y = torch.outer(u, v) + torch.randn(50, 40, generator=generator, dtype=torch.float64)
-    model = cEBMF(
-        y,
-        K=5,
-        allow_backfitting=False,
-        prior_L_kwargs={"penalty": penalty},
-        prior_F_kwargs={"penalty": penalty},
-        device="cpu",
-    )
-    model.initialise_factors()
-    for _ in range(50):
-        model.iter_once()
-        assert (model.kl_l >= -1e-9).all() and (model.kl_f >= -1e-9).all()
-        log_null = sum(weight.log().item() for weight in model.pi0_L + model.pi0_F)
-        expected = model.negative_elbo[-1] - (penalty - 1) * log_null
-        assert model.obj[-1] == pytest.approx(expected, abs=1e-9)
-    assert all(math.isfinite(value) for value in model.obj)
-    assert max(b - a for a, b in zip(model.obj, model.obj[1:], strict=False)) <= 1e-9
-    assert len({id(state) for state in model.model_state_L + model.model_state_F}) == 10

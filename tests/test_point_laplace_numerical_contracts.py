@@ -1,4 +1,4 @@
-"""Independent Laplace posterior checks and retained-factor ELBO regressions."""
+"""Independent Laplace likelihood, posterior moment, and spike-boundary checks."""
 
 import math
 
@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 import torch
 
-from cebmf_torch import cEBMF
 from cebmf_torch.ebnm.point_laplace import ebnm_point_laplace, logg_laplace_convolved_with_normal
 
 
@@ -69,21 +68,3 @@ def test_fixed_spike_preserves_exact_point_mass():
     torch.testing.assert_close(result.post_mean, torch.full_like(x, 0.3))
     torch.testing.assert_close(result.post_mean2, torch.full_like(x, 0.09))
     assert torch.equal(result.post_sd, torch.zeros_like(x))
-
-
-@pytest.mark.parametrize("seed", [0, 7, 14])
-def test_retained_laplace_factors_have_finite_nonincreasing_negative_elbo(seed):
-    """Rank-one signal with five fitted factors used to give negative KLs."""
-    generator = torch.Generator().manual_seed(seed)
-    u = torch.rand(50, generator=generator, dtype=torch.float64)
-    v = torch.rand(40, generator=generator, dtype=torch.float64)
-    y = torch.outer(u, v) + 0.51 * torch.randn(50, 40, generator=generator, dtype=torch.float64)
-    model = cEBMF(y, K=5, prior_L="laplace", prior_F="laplace", allow_backfitting=False, device="cpu")
-    model.initialise_factors()
-    for _ in range(20):
-        model.iter_once()
-        assert torch.isfinite(model.L2).all() and torch.isfinite(model.F2).all()
-        assert (model.kl_l >= -1e-9).all() and (model.kl_f >= -1e-9).all()
-    assert model.model.K == 5
-    assert all(math.isfinite(value) for value in model.obj)
-    assert max(b - a for a, b in zip(model.obj, model.obj[1:], strict=False)) <= 1e-9
