@@ -133,3 +133,34 @@ def test_cEBMF_initialise_with_unknown_strategy(Y: torch.Tensor, K: int) -> None
     cebmf = cEBMF(Y, K, device=torch.device("cpu"))
     with pytest.raises(ValueError, match="Unknown initialization method 'unknown_strategy'"):
         cebmf.initialise_factors(method="unknown_strategy")
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("method", ["svd", "random", "zero", "provided"])
+def test_initialisation_and_first_update_match_data_dtype(dtype, method):
+    # Use the *opposite* global dtype: matching defaults hid this regression.
+    previous = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float32 if dtype == torch.float64 else torch.float64)
+    try:
+        y = torch.arange(1, 25, dtype=dtype).reshape(6, 4) / 24
+        model = cEBMF(y, K=5, prior_F="hmm", prior_F_kwargs={"maxiter": 1}, allow_backfitting=False, device="cpu")
+        if method == "provided":
+            model.initialise_factors(L=torch.ones(6, 5), F=torch.ones(4, 5))
+        else:
+            model.initialise_factors(method=method)
+        assert model.L.dtype == model.F.dtype == model.L2.dtype == model.F2.dtype == dtype
+        model.fit(1)
+        assert torch.isfinite(model.L).all() and torch.isfinite(model.F).all()
+        assert torch.isfinite(torch.tensor(model.obj)).all()
+    finally:
+        torch.set_default_dtype(previous)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_low_precision_input_retains_supported_float32_promotion(dtype):
+    y = torch.arange(1, 25, dtype=dtype).reshape(6, 4)
+    model = cEBMF(y, K=1, device="cpu", allow_backfitting=False)
+    model.initialise_factors()
+    assert model.Y.dtype == model.L.dtype == model.F.dtype == torch.float32
+    model.fit(1)
+    assert torch.isfinite(torch.tensor(model.obj)).all()

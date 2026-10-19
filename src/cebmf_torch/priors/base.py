@@ -28,6 +28,10 @@ class Prior:
         a vector (covariate-conditional priors) or None.
     pi_slab : torch.Tensor, float, or None, optional
         Slab component probability (if applicable). Either a 0-d tensor or None.
+    regularization_loss : torch.Tensor or float, optional
+        Fitting penalty on the summed-loss scale, separate from the marginal
+        likelihood used for KL. Added once per factor to cEBMF's objective.
+        Defaults to zero for unpenalized priors.
     """
 
     post_mean: Tensor
@@ -36,6 +40,7 @@ class Prior:
     model_param: Any | None = None
     pi0_null: Tensor | float | None = None
     pi_slab: Tensor | float | None = None
+    regularization_loss: Tensor | float = 0.0
 
 
 class PriorBuilder(ABC):

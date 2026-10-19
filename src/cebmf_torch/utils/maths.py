@@ -102,6 +102,22 @@ def logsumexp(x: Tensor, dim: int = -1, keepdim: bool = False) -> Tensor:
     return torch.logsumexp(x, dim=dim, keepdim=keepdim)
 
 
+def _normal_tail_denominators(t: Tensor) -> tuple[Tensor, Tensor]:
+    """Continued-fraction denominators for a normal tail with ``t >= 4``.
+
+    The inverse Mills ratio is ``t + 1 / (t + 2 / (t + 3 / ...))``.
+    Returning the denominators beginning at 2 and 3 lets callers compute
+    the first two moments of the excess above t without subtracting t or t².
+    At t=4, these depths give relative second-moment errors below 2e-14
+    (float64) and 5e-9 (before float32 rounding).
+    """
+    denominator = t
+    depth = 32 if t.dtype == torch.float64 else 16
+    for k in range(depth, 2, -1):
+        denominator = t + k / denominator
+    return t + 2 / denominator, denominator
+
+
 def logg_exp_convolved_with_normal(x: Tensor, s: Tensor, rate: Tensor) -> Tensor:
     r"""log density of Exp(rate) convolved with Normal(0, s^2) at ``x``, for theta >= 0.
 
@@ -112,7 +128,61 @@ def logg_exp_convolved_with_normal(x: Tensor, s: Tensor, rate: Tensor) -> Tensor
     source of truth for the Exp-prior marginal log-density; callers must ensure
     ``s > 0`` and ``rate > 0`` (the spike component is handled separately).
     """
-    return torch.log(rate) + 0.5 * (s * rate).pow(2) - rate * x + _logcdf_normal(x / s - s * rate)
+    z = x / s
+    sr = s * rate
+    t = sr - z
+    tail = t >= 4
+    # Mask inactive branches before evaluation: torch.where alone does not
+    # prevent an overflow/NaN in an unused expression from poisoning gradients.
+    tail_t = torch.where(tail, t, torch.full_like(t, 4))
+    d2, _ = _normal_tail_denominators(tail_t)
+    excess = d2.reciprocal()
+    tail_log_density = rate.log() - _LOG_SQRT_2PI - 0.5 * z.square() - tail_t.log()
+    tail_log_density = tail_log_density - torch.log1p(excess / tail_t)
+
+    # When noise dominates, g is nearly the noise density. Evaluate their
+    # ratio with log1p so both the correction and its small gradients survive.
+    near_noise = tail & (z.abs() <= 0.5 * sr)
+    ratio_z = torch.where(near_noise, z, torch.zeros_like(z))
+    ratio_sr = torch.where(near_noise, sr, torch.ones_like(sr))
+    noise_log_density = -s.log() - _LOG_SQRT_2PI - 0.5 * z.square()
+    near_log_density = noise_log_density - torch.log1p((excess - ratio_z) / ratio_sr)
+    tail_log_density = torch.where(near_noise, near_log_density, tail_log_density)
+
+    regular_z = torch.where(tail, torch.zeros_like(z), z)
+    regular_sr = torch.where(tail, torch.ones_like(sr), sr)
+    regular = rate.log() + regular_sr * (0.5 * regular_sr - regular_z)
+    regular = regular + _logcdf_normal(regular_z - regular_sr)
+    return torch.where(tail, tail_log_density, regular)
+
+
+def posterior_moments_exp(x: Tensor, s: Tensor, rate: Tensor) -> tuple[Tensor, Tensor]:
+    """Moments of theta >= 0 with Exp(rate) prior and Normal(theta, s²) data.
+
+    This is a N(x - s²*rate, s²) truncated below zero. In its far tail,
+    reconstructing moments from that very negative mean loses precision.
+    The continued fraction instead gives positive moments directly in the
+    units of theta. Inputs must have finite positive s and rate and broadcast.
+    """
+    t = s * rate - x / s
+    tail = t >= 4
+    tail_t = torch.where(tail, t, torch.full_like(t, 4))
+    d2, d3 = _normal_tail_denominators(tail_t)
+    tail_mean = s / d2
+    tail_mean2 = 2 * tail_mean * (s / d3)
+
+    regular_t = torch.where(tail, torch.zeros_like(t), t)
+    # erfcx avoids subtracting log densities for nonnegative t. On the
+    # negative side the ordinary log-CDF expression has no cancellation.
+    nonnegative_t = regular_t.clamp_min(0)
+    positive_ratio = math.sqrt(2 / math.pi) / torch.special.erfcx(nonnegative_t / math.sqrt(2))
+    negative_t = regular_t.clamp_max(0)
+    negative_ratio = torch.exp(-0.5 * negative_t.square() - _LOG_SQRT_2PI - _logcdf_normal(-negative_t))
+    ratio = torch.where(regular_t >= 0, positive_ratio, negative_ratio)
+    unit_mean = ratio - regular_t
+    regular_mean = s * unit_mean
+    regular_mean2 = s * (s * (1 - regular_t * unit_mean))
+    return torch.where(tail, tail_mean, regular_mean), torch.where(tail, tail_mean2, regular_mean2)
 
 
 def safe_log(x: Tensor, eps: float = _EPS) -> Tensor:

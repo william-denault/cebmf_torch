@@ -44,7 +44,7 @@ class InitialisationStrategy(Protocol):
 @torch.no_grad()
 def _impute_nan(Y: Tensor) -> Tensor:
     """
-    Column-mean imputation for NaNs in a tensor (for SVD init only).
+    Column-mean imputation for NaNs, using zero for empty columns (SVD init only).
 
     Parameters
     ----------
@@ -54,12 +54,13 @@ def _impute_nan(Y: Tensor) -> Tensor:
     Returns
     -------
     Tensor
-        Imputed tensor with NaNs replaced by column means.
+        Imputed tensor with NaNs replaced by column means, or zero if a column is entirely missing.
     """
     mask = ~torch.isnan(Y)
-    if not mask.any():
+    if mask.all():
         return Y
     col_means = torch.nanmean(Y, dim=0)
+    col_means = torch.where(mask.any(dim=0), col_means, 0.0)
     Y_imp = Y.clone()
     idx = torch.where(~mask)
     Y_imp[idx] = col_means[idx[1]]
@@ -97,8 +98,8 @@ def svd_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> t
 
     # Pad with zeros if K > rank
     if K_actual < K:
-        L = torch.cat([L, torch.zeros(N, K - K_actual, device=device)], dim=1)
-        F = torch.cat([F, torch.zeros(P, K - K_actual, device=device)], dim=1)
+        L = torch.cat([L, L.new_zeros(N, K - K_actual)], dim=1)
+        F = torch.cat([F, F.new_zeros(P, K - K_actual)], dim=1)
 
     return L, F
 
@@ -126,8 +127,8 @@ def random_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -
     tuple of Tensor
         Tuple of (L, F) tensors
     """
-    L = torch.randn(N, K, device=device) * RANDOM_INIT_SCALE
-    F = torch.randn(P, K, device=device) * RANDOM_INIT_SCALE
+    L = torch.randn(N, K, device=device, dtype=Y.dtype) * RANDOM_INIT_SCALE
+    F = torch.randn(P, K, device=device, dtype=Y.dtype) * RANDOM_INIT_SCALE
     return L, F
 
 
@@ -154,8 +155,8 @@ def zero_initialise(Y: Tensor, N: int, P: int, K: int, device: torch.device) -> 
     tuple of Tensor
         Tuple of (L, F) tensors
     """
-    L = torch.zeros(N, K, device=device)
-    F = torch.zeros(P, K, device=device)
+    L = torch.zeros(N, K, device=device, dtype=Y.dtype)
+    F = torch.zeros(P, K, device=device, dtype=Y.dtype)
     return L, F
 
 

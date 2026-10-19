@@ -23,6 +23,7 @@ def test_simple_init():
     assert hasattr(model, "F")
 
 
+@pytest.mark.filterwarnings("ignore:HMM specified:UserWarning")
 def test_all_parameters():
     """Test initialization with all parameters."""
     Y = torch.randn(15, 8)
@@ -106,10 +107,16 @@ def test_all_parameters():
         assert model.noise.type == NoiseType.ROW_WISE
 
         # Check covariate params
-        assert torch.equal(model.covariate.X_l, X_l)
-        assert torch.equal(model.covariate.X_f, X_f)
-        assert model.covariate.self_row_cov is True
-        assert model.covariate.self_col_cov is True
+        for prior, supplied, stored, self_cov in (
+            (prior_L, X_l, model.covariate.X_l, model.covariate.self_row_cov),
+            (prior_F, X_f, model.covariate.X_f, model.covariate.self_col_cov),
+        ):
+            if prior in {"hmm", "hmm_pos", "hmm_neg"}:
+                assert stored is None
+                assert self_cov is False
+            else:
+                assert torch.equal(stored, supplied)
+                assert self_cov is True
 
         # Check prior kwargs
         for key, value in L_kwargs.items():
