@@ -44,7 +44,7 @@ class InitialisationStrategy(Protocol):
 @torch.no_grad()
 def _impute_nan(Y: Tensor) -> Tensor:
     """
-    Column-mean imputation for NaNs in a tensor (for SVD init only).
+    Column-mean imputation for NaNs, using zero for empty columns (SVD init only).
 
     Parameters
     ----------
@@ -54,12 +54,13 @@ def _impute_nan(Y: Tensor) -> Tensor:
     Returns
     -------
     Tensor
-        Imputed tensor with NaNs replaced by column means.
+        Imputed tensor with NaNs replaced by column means, or zero if a column is entirely missing.
     """
     mask = ~torch.isnan(Y)
-    if not mask.any():
+    if mask.all():
         return Y
     col_means = torch.nanmean(Y, dim=0)
+    col_means = torch.where(mask.any(dim=0), col_means, 0.0)
     Y_imp = Y.clone()
     idx = torch.where(~mask)
     Y_imp[idx] = col_means[idx[1]]

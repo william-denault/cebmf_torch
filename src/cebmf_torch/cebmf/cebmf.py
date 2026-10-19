@@ -252,6 +252,9 @@ class cEBMF:
         """
         Initialize factor matrices using the specified method, or user-provided initial factors.
 
+        SVD uses column means over the effective observation mask to impute
+        missing entries, with zero for entirely unobserved columns.
+
         Parameters
         ----------
         method : str
@@ -264,7 +267,10 @@ class cEBMF:
 
         def _use_strategy(method: str):
             initialise_fn = INIT_STRATEGIES[method]
-            self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
+            Y_for_init = self.Y
+            if method == "svd":
+                Y_for_init = self.Y.masked_fill(self.mask == 0, float("nan"))
+            self.L, self.F = initialise_fn(Y_for_init, self.N, self.P, self.model.K, self.device)
 
         if L is None and F is not None:
             warn("Provided F without L; ignoring F and using svd for initialization.", stacklevel=2)

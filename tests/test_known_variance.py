@@ -206,6 +206,169 @@ def test_bad_S_at_already_missing_Y_does_not_warn():
     assert model.mask[0, 0].item() == 0.0
 
 
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("bad_s", [0.0, -1.0, float("nan"), float("inf"), -float("inf")])
+def test_svd_ignores_values_excluded_by_S(dtype, bad_s):
+    """An S-masked value must initialize exactly like an explicitly missing value."""
+    base = torch.tensor([[0.0, 2.0, 3.0], [4.0, 5.0, float("nan")], [7.0, 8.0, 9.0]], dtype=dtype)
+    missing = base.clone()
+    missing[0, 0] = float("nan")
+    reference = cEBMF(missing, K=1, S=1.0, device=torch.device("cpu"))
+    reference.initialise_factors()
+    expected = reference.L @ reference.F.T
+
+    S = torch.ones_like(base)
+    S[0, 0] = bad_s
+    original_S = S.clone()
+    for value in (1000.0, -1000.0, float("inf"), -float("inf"), torch.finfo(dtype).max, -torch.finfo(dtype).max):
+        Y = base.clone()
+        Y[0, 0] = value
+        original_Y = Y.clone()
+        with pytest.warns(UserWarning, match="non-finite or non-positive"):
+            model = cEBMF(Y, K=1, S=S, device=torch.device("cpu"))
+        model.initialise_factors()
+
+        assert torch.equal(model.mask, reference.mask)
+        assert torch.equal(model.Y0, reference.Y0)
+        torch.testing.assert_close(model.L @ model.F.T, expected)
+        torch.testing.assert_close(Y, original_Y, rtol=0, atol=0, equal_nan=True)
+        torch.testing.assert_close(model.Y, original_Y, rtol=0, atol=0, equal_nan=True)
+        torch.testing.assert_close(S, original_S, rtol=0, atol=0, equal_nan=True)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("missing_source", ["Y", "S_matrix", "S_broadcast"])
+def test_svd_zero_fills_entirely_masked_columns(dtype, missing_source):
+    """Empty columns use zero; other missing entries retain observed-column means."""
+    Y = torch.tensor(
+        [[float("nan"), 1000.0, 3.0], [4.0, -1000.0, 6.0], [7.0, 2000.0, 9.0], [10.0, -2000.0, 12.0]],
+        dtype=dtype,
+    )
+    if missing_source == "Y":
+        Y[:, 1] = float("nan")
+        model = cEBMF(Y, K=3, S=1.0, device=torch.device("cpu"))
+    else:
+        S = torch.tensor([1.0, 0.0, 1.0], dtype=dtype)
+        if missing_source == "S_matrix":
+            S = S.expand_as(Y).clone()
+        with pytest.warns(UserWarning, match="non-finite or non-positive"):
+            model = cEBMF(Y, K=3, S=S, device=torch.device("cpu"))
+    original_Y = Y.clone()
+    model.initialise_factors()
+
+    expected = torch.tensor([[7.0, 0.0, 3.0], [4.0, 0.0, 6.0], [7.0, 0.0, 9.0], [10.0, 0.0, 12.0]], dtype=dtype)
+    assert not model.mask[:, 1].any()
+    assert torch.isfinite(model.L).all() and torch.isfinite(model.F).all()
+    # Full-rank reconstruction checks imputation without assuming SVD signs.
+    torch.testing.assert_close(model.L @ model.F.T, expected)
+    torch.testing.assert_close(Y, original_Y, rtol=0, atol=0, equal_nan=True)
+
+    model.iter_once()
+    assert torch.isfinite(model.L).all() and torch.isfinite(model.F).all()
+    assert math.isfinite(model.obj[-1])
+
+
+def test_svd_initialisation_when_S_masks_every_column():
+    Y = torch.arange(1, 13, dtype=torch.float64).reshape(4, 3)
+    with pytest.warns(UserWarning, match="non-finite or non-positive"):
+        model = cEBMF(Y, K=1, S=torch.zeros_like(Y), device=torch.device("cpu"))
+    model.initialise_factors()
+
+    assert not model.mask.any()
+    assert torch.isfinite(model.L).all() and torch.isfinite(model.F).all()
+    torch.testing.assert_close(model.L @ model.F.T, torch.zeros_like(Y))
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("shape", [(1, 4), (4, 1)])
+def test_svd_masking_single_row_or_column_with_extra_factors(dtype, shape):
+    Y = torch.tensor([1.0, 1000.0, -1000.0, 4.0], dtype=dtype).reshape(shape)
+    S = torch.tensor([1.0, 0.0, 0.0, 1.0], dtype=dtype).reshape(shape)
+    with pytest.warns(UserWarning, match="non-finite or non-positive"):
+        model = cEBMF(Y, K=3, S=S, device=torch.device("cpu"))
+    model.initialise_factors()
+
+    # For a single row, masked entries are empty columns. For a single
+    # column, they take the mean of its two observed entries.
+    fill = 0.0 if shape[0] == 1 else 2.5
+    expected = torch.tensor([1.0, fill, fill, 4.0], dtype=dtype).reshape(shape)
+    torch.testing.assert_close(model.L @ model.F.T, expected)
+    assert model.L.shape == (shape[0], 3) and model.F.shape == (shape[1], 3)
+    assert torch.count_nonzero(model.L[:, 1:]) == 0
+    assert torch.count_nonzero(model.F[:, 1:]) == 0
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_svd_row_broadcast_mask_on_noncontiguous_data(dtype):
+    Y = torch.arange(1, 16, dtype=dtype).reshape(3, 5).T
+    Y[1, :] = float("inf")
+    Y[3, :] = -1000.0
+    Y[2, 1] = float("nan")
+    original_Y = Y.clone()
+    S = torch.tensor([[1.0], [0.0], [2.0], [-1.0], [1.0]], dtype=dtype)
+    assert not Y.is_contiguous()
+    with pytest.warns(UserWarning, match="non-finite or non-positive"):
+        model = cEBMF(Y, K=6, S=S, device=torch.device("cpu"))
+    model.initialise_factors()
+
+    expected = torch.tensor(
+        [[1.0, 6.0, 11.0], [3.0, 8.0, 13.0], [3.0, 8.0, 13.0], [3.0, 8.0, 13.0], [5.0, 10.0, 15.0]],
+        dtype=dtype,
+    )
+    torch.testing.assert_close(model.L @ model.F.T, expected)
+    assert not model.mask[[1, 3], :].any()
+    torch.testing.assert_close(Y, original_Y, rtol=0, atol=0, equal_nan=True)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("prior", ["norm", "laplace"])
+def test_masked_row_and_column_fit_matches_explicit_missing_data(dtype, prior):
+    base = torch.outer(torch.linspace(1.0, 2.0, 8, dtype=dtype), torch.linspace(1.0, 3.0, 6, dtype=dtype))
+    S = torch.full_like(base, 0.1)
+    S[0, :] = 0.0
+    S[:, 2] = float("inf")
+    S[5, 4] = -1.0
+    excluded = ~torch.isfinite(S) | (S <= 0)
+    missing = base.masked_fill(excluded, float("nan"))
+    Y = base.masked_fill(excluded, float("inf"))
+    Y[0, :] = -float("inf")
+    Y[3, 1] = missing[3, 1] = float("nan")
+    reference = cEBMF(missing, K=1, S=0.1, prior_L=prior, prior_F=prior, device=torch.device("cpu"))
+    with pytest.warns(UserWarning, match="non-finite or non-positive"):
+        model = cEBMF(Y, K=1, S=S, prior_L=prior, prior_F=prior, device=torch.device("cpu"))
+
+    for fit in (reference, model):
+        fit.initialise_factors()
+        fit.fit(5)
+        assert torch.isfinite(fit.L).all() and torch.isfinite(fit.F).all()
+        assert all(math.isfinite(value) for value in fit.obj)
+        assert (fit.L @ fit.F.T)[fit.mask.bool()].abs().max() > 0.5
+
+    assert torch.equal(model.mask, reference.mask)
+    torch.testing.assert_close(model.Y0, reference.Y0)
+    torch.testing.assert_close(model.L @ model.F.T, reference.L @ reference.F.T)
+    torch.testing.assert_close(model.L2 @ model.F2.T, reference.L2 @ reference.F2.T)
+    torch.testing.assert_close(torch.tensor(model.obj, dtype=dtype), torch.tensor(reference.obj, dtype=dtype))
+
+
+@pytest.mark.parametrize("provided_side", ["L", "F"])
+def test_partial_user_initialisation_falls_back_to_masked_svd(provided_side):
+    Y = torch.tensor([[1000.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], dtype=torch.float64)
+    S = torch.ones_like(Y)
+    S[0, 0] = 0.0
+    missing = Y.clone()
+    missing[0, 0] = float("nan")
+    reference = cEBMF(missing, K=1, S=1.0, device=torch.device("cpu"))
+    reference.initialise_factors()
+    with pytest.warns(UserWarning, match="non-finite or non-positive"):
+        model = cEBMF(Y, K=1, S=S, device=torch.device("cpu"))
+    # Providing only one side selects the SVD fallback, even if a different
+    # method was requested. That path must honor the effective mask too.
+    with pytest.warns(UserWarning, match=f"Provided {provided_side} without"):
+        model.initialise_factors(method="random", **{provided_side: torch.ones(3, 1, dtype=Y.dtype)})
+    torch.testing.assert_close(model.L @ model.F.T, reference.L @ reference.F.T)
+
+
 # ----------------------------------------------------------------------
 # behavioural: variance is not learned
 # ----------------------------------------------------------------------
