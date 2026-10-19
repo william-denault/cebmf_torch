@@ -194,4 +194,5 @@ class PointBuilder(PriorBuilder):
             model_param=next_model_param,
             pi0_null=1.0 - pi_slab_t,
             pi_slab=pi_slab_t,
+            regularization_loss=getattr(obj, "regularization_loss", 0.0),
         )

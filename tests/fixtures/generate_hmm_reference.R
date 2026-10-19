@@ -47,7 +47,8 @@ cases$penalized_adaptive_hub <- c(cases$adaptive_hub, list(penalty = 1.5))
 output <- lapply(cases, function(input) {
   r_input <- input
   if (!is.null(input$penalty)) {
-    # Map Python's scalar zero-favoring penalty to fSuSiE's Dirichlet priors.
+    # This fixture stores fSuSiE's per-distribution penalty. The Python
+    # reference test converts it to the corresponding total penalty budget.
     # Penalized reference cases supply explicit state/scale grids.
     r_input$penalty <- NULL
     state_prior <- c(input$penalty, rep(1, length(input$mu) - 1L))

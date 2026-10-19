@@ -80,6 +80,14 @@ marginal likelihood objective. To retain the previous optional ridge on the
 bounded rate parameter, pass ``loga_l2=1e-3`` explicitly. This is the one
 intentional default change; existing call signatures remain valid.
 
+``penalty`` defaults to 1 (no spike penalty). Larger values add
+``-(penalty - 1) * log(pi_null)`` to the negative summed marginal likelihood,
+matching the ASH nullweight convention. Inside cEBMF, pass it through
+``prior_L_kwargs`` or ``prior_F_kwargs`` for ``prior="exp"``. The returned
+``log_lik`` remains unpenalized; ``regularization_loss`` reports the spike
+and optional rate penalties separately. The all-spike boundary comparison
+uses the penalized objective.
+
 As in R, infinite standard errors contribute no information to fitting and
 their posterior summaries equal the fitted prior moments. The all-spike
 boundary is considered only when the mixture weight is estimated and the

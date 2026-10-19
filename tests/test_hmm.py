@@ -44,6 +44,12 @@ def test_matches_fsusie_reference(case):
     ref = REFERENCE[case]
     inputs = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in ref["input"].items()}
     inputs["y"], inputs["se"] = tensor(inputs["y"]), tensor(inputs["se"])
+    if "penalty" in inputs:
+        # Fixtures encode fSuSiE's per-distribution pseudo-count; Python now
+        # accepts one total budget. These reference cases have fixed grids.
+        count = len(inputs["mu"]) + int(inputs.get("estimate_init", False))
+        count += int(inputs.get("null_state") == "adaptive")
+        inputs["penalty"] = 1 + count * (inputs["penalty"] - 1)
     result = fit_ash_hmm(**inputs)
     # The bounded scalar optimizer differs from R's Brent optimizer; allow
     # its numerical tolerance to propagate through one-sided mean updates.
@@ -380,7 +386,8 @@ def test_penalty_objective_and_unpenalized_loss(penalty):
     log_null += params["mixture_weight"][0, 0].log()
     torch.testing.assert_close(result.loss, -ll)
     torch.testing.assert_close(result.history[-1], ll)
-    torch.testing.assert_close(result.objective, ll + (penalty - 1) * log_null)
+    count = (len(params["mu"]) + 1 if len(params["mu"]) > 1 else 0) + 1
+    torch.testing.assert_close(result.objective, ll + (penalty - 1) * log_null / count)
     torch.testing.assert_close(result.objective_history[-1], result.objective)
     assert (result.objective_history.diff() >= -1e-9).all()
     assert normal_means_loglik(y, se, result.post_mean, result.post_mean2) + result.loss >= -1e-9

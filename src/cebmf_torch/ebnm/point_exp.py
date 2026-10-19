@@ -74,6 +74,7 @@ class EBNMPointExp:
         pi_slab: Tensor,
         log_lik: Tensor,
         mode: Tensor,
+        regularization_loss: Tensor | float = 0.0,
     ):
         """
         Container for the results of the point-exponential EBNM posterior estimation.
@@ -108,6 +109,7 @@ class EBNMPointExp:
         self.pi_slab = pi_slab
         self.log_lik = log_lik
         self.mode = mode
+        self.regularization_loss = regularization_loss
 
 
 def ebnm_point_exp(
@@ -125,6 +127,8 @@ def ebnm_point_exp(
     loga_l2: float = 0.0,  # optional ridge on a's unconstrained param; default is maximum likelihood
     tresh_pi0: float = 1e-3,  # retained for API compatibility; the boundary uses likelihoods
     eps: float = 1e-12,  # retained for API compatibility; log weights no longer need clamping
+    *,
+    penalty: float = 1.0,
 ) -> EBNMPointExp:
     """
     Direct maximization (no EM) of the observed marginal log-likelihood for a point-Exponential EBNM.
@@ -136,8 +140,12 @@ def ebnm_point_exp(
     fitting and return prior moments. Fixed parameters are respected when
     checking the all-spike boundary. ``scale`` in the result is the rate a;
     R's exponential scale is 1/a. Set ``loga_l2`` explicitly to request a ridge
-    penalty; the default fit is unpenalized.
+    penalty; the default fit is unpenalized. ``penalty`` adds the ASH-style
+    null term ``-(penalty - 1) * log(pi_null)``; one is neutral.
+    ``regularization_loss`` reports both penalties separately from ``log_lik``.
     """
+    if not math.isfinite(penalty) or penalty < 1:
+        raise ValueError("penalty must be finite and at least one.")
     device, dtype = x.device, x.dtype
     x = torch.as_tensor(x, device=device, dtype=dtype)
     # Use ``clamp`` (out-of-place) — ``torch.as_tensor`` returns the same tensor
@@ -192,11 +200,11 @@ def ebnm_point_exp(
         llik_sum = torch.where(uninformative, torch.zeros_like(llik_i), llik_i).sum()
 
         # OPTIONAL tiny penalty on the unconstrained 'a_logit' to tame extremes (off by default)
-        penalty = _const_like(x, 0.0)
+        regularization = -(penalty - 1) * log_spike if penalty != 1 else _const_like(x, 0.0)
         if loga_l2 != 0.0:
-            penalty = penalty + _const_like(x, loga_l2) * (a_logit**2)
+            regularization = regularization + _const_like(x, loga_l2) * (a_logit**2)
 
-        loss = -(llik_sum - penalty)  # maximize llik_sum -> minimize negative
+        loss = -llik_sum + regularization
 
         if not torch.isfinite(loss):
             raise FloatingPointError("Non-finite point-exponential objective.")
@@ -261,7 +269,8 @@ def ebnm_point_exp(
         # retain the requested prior even when another prior fits better.
         if not torch.isfinite(llik) or not torch.isfinite(post_mean).all() or not torch.isfinite(post_mean2).all():
             raise FloatingPointError("Non-finite point-exponential posterior or likelihood.")
-        prefer_spike = (llik_so > llik) & (not fix_par[0] and fix_par[2])
+        null_regularization = -(penalty - 1) * log_spike if penalty != 1 else _const_like(x, 0.0)
+        prefer_spike = (llik_so > llik - null_regularization) & (not fix_par[0] and fix_par[2])
         post_mean = torch.where(prefer_spike, post_mean_so, post_mean)
         post_mean2 = torch.where(prefer_spike, post_mean2_so, post_mean2)
         llik = torch.where(prefer_spike, llik_so, llik)
@@ -269,6 +278,9 @@ def ebnm_point_exp(
         # cEBMF factor pruning / pi0_null reporting sees the right thing.
         pi_slab = torch.where(prefer_spike, torch.zeros_like(pi_slab), pi_slab)
         post_sd = torch.where(prefer_spike, torch.zeros_like(variance), variance).sqrt()
+        regularization = torch.where(prefer_spike, torch.zeros_like(null_regularization), null_regularization)
+        if loga_l2 != 0:
+            regularization = regularization + loga_l2 * a_logit.square()
 
     # Keep scalar fields on-device as 0-d tensors — `cebmf.py` consumes them
     # via `priors/point.py` which now stays in tensor space.
@@ -280,4 +292,5 @@ def ebnm_point_exp(
         pi_slab=pi_slab.detach(),
         log_lik=llik.detach(),
         mode=mu.detach(),
+        regularization_loss=regularization.detach(),
     )

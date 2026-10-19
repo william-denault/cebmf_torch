@@ -56,6 +56,7 @@ class EBNMLaplaceResult:
     a: Tensor  # Laplace rate (1/scale)
     mu: Tensor
     log_lik: Tensor  # pure marginal log-likelihood (no penalties)
+    regularization_loss: Tensor | float = 0.0
 
 
 def ebnm_point_laplace(
@@ -263,6 +264,9 @@ def ebnm_point_laplace(
         post_sd = (post_mean2 - post_mean**2).clamp_min(zero).sqrt()
         llik = torch.where(spike_only, llik_so, llik)
         w = torch.where(spike_only, torch.zeros_like(w), w)
+        regularization = loga_l2 * a_logit.square() if loga_l2 != 0 else zero
+        if pen_pi0 != 0:
+            regularization = regularization - pen_pi0 * (log_slab + log_spike)
 
     return EBNMLaplaceResult(
         post_mean=post_mean,
@@ -272,4 +276,5 @@ def ebnm_point_laplace(
         a=a.detach(),
         mu=mu.detach(),
         log_lik=llik.detach(),
+        regularization_loss=regularization.detach(),
     )

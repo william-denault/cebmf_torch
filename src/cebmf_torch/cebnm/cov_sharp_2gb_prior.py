@@ -118,11 +118,17 @@ def cgb2_loss(
     se,
     penalty=1.1,
     eps=1e-8,
+    *,
+    n_obs=None,
 ):
     """
     Negative log marginal likelihood of the 3-component mixture, plus an
-    optional point-mass-enforcing penalty on pi_0(x).
+    optional null penalty with coefficient ``(penalty - 1) / n_obs``.
+    Pass the full training count for minibatches; omission means a full batch.
     """
+    n_obs = targets.numel() if n_obs is None else n_obs
+    if n_obs <= 0:
+        raise ValueError("n_obs must be positive.")
     var0 = se**2
     var1 = sigma1_sq + se**2
     var2 = sigma2_sq + se**2
@@ -146,7 +152,7 @@ def cgb2_loss(
         # Penalize per-observation spike probability (Dirichlet-like prior on
         # component 0). Same shape/behavior as the single-slab CGB-Sharp.
         log_pi0 = torch.log(pi_0.clamp_min(eps))
-        log_mix = log_mix + (penalty - 1.0) * log_pi0
+        log_mix = log_mix + ((penalty - 1.0) / n_obs) * log_pi0
     return -(log_mix.mean())
 
 
@@ -215,6 +221,7 @@ class Cgb2PosteriorResult:
         sigma_2,
         loss,
         model_param,
+        regularization_loss=0.0,
     ):
         """
         Container for the results of the two-sided CGB-Sharp posterior estimation.
@@ -258,6 +265,7 @@ class Cgb2PosteriorResult:
         self.sigma_2 = sigma_2
         self.loss = loss
         self.model_param = model_param
+        self.regularization_loss = regularization_loss
 
 
 @torch.no_grad()
@@ -346,8 +354,8 @@ def sharp_2cgb_posterior_means(
     lr : float, optional
         Learning rate for the optimizer (default=1e-3).
     penalty : float, optional
-        Penalty for spike probability pi_0 (default=1.1). Values > 1 enforce
-        a point-mass-favoring Dirichlet-like prior on component 0.
+        Null penalty strength (default=1.05). The coefficient per observation
+        is ``(penalty - 1) / n``, using the full training count. One is neutral.
     model_param : dict, optional
         Pre-trained model parameters to initialize the network.
     device : torch.device, optional
@@ -404,7 +412,19 @@ def sharp_2cgb_posterior_means(
                 )
                 sigma1_sq = m_step_sigma(gamma1, mu_pos, xhat, se) * omega
                 sigma2_sq = m_step_sigma(gamma2, mu_neg, xhat, se) * omega
-            loss = cgb2_loss(pi0, pi1, pi2, mu_pos, mu_neg, sigma1_sq, sigma2_sq, xhat, se, penalty=penalty)
+            loss = cgb2_loss(
+                pi0,
+                pi1,
+                pi2,
+                mu_pos,
+                mu_neg,
+                sigma1_sq,
+                sigma2_sq,
+                xhat,
+                se,
+                penalty=penalty,
+                n_obs=len(dataset),
+            )
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -489,4 +509,5 @@ def sharp_2cgb_posterior_means(
         sigma_2=sigma2_sq.sqrt().item(),
         loss=-float(log_marginal.item()),
         model_param=model.state_dict(),
+        regularization_loss=-(penalty - 1) * pi0.clamp_min(1e-8).log().mean() if penalty > 1 else 0.0,
     )

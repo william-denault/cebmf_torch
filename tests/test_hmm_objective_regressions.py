@@ -150,7 +150,8 @@ def test_builder_reports_penalty_separately_from_marginal_loss(prior, penalty):
     p = fit.model_param
     log_null = p["transition"][:, 0].log().sum() + p["init_prob"][0].log()
     log_null += p["mixture_weight"][0, 0].log()
-    expected_penalty = -(penalty - 1) * log_null
+    count = (len(p["mu"]) + 1 if len(p["mu"]) > 1 else 0) + 1
+    expected_penalty = -(penalty - 1) * log_null / count
     torch.testing.assert_close(torch.as_tensor(fit.regularization_loss).to(y), expected_penalty)
     # Independent re-evaluation of the fitted prior must still give pure
     # marginal likelihood, even when the fitting penalty is nonzero.
@@ -207,8 +208,9 @@ def test_outer_hmm_objective_is_nonincreasing_and_matches_fitted_state(prior, si
         if penalty > 1:
             for s in ("L", "F") if side == "both" else (side,):
                 for state in getattr(model, f"model_state_{s}"):
-                    regularization -= (penalty - 1) * (
-                        state["transition"][:, 0].log().sum() + state["init_prob"][0].log()
+                    count = len(state["mu"]) + 1 if len(state["mu"]) > 1 else 1
+                    regularization -= (
+                        (penalty - 1) / count * (state["transition"][:, 0].log().sum() + state["init_prob"][0].log())
                     )
         expected = nll + model.kl_l.sum() + model.kl_f.sum() + regularization
         assert model.obj[-1] == pytest.approx(expected.item(), abs=1e-9, rel=0)

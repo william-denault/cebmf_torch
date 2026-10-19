@@ -24,8 +24,16 @@ def _normalize(x: Tensor, fallback: Tensor) -> Tensor:
     return torch.where(mass > 0, x / torch.where(mass > 0, mass, 1.0), fallback)
 
 
+def _penalty_coefficient(transition, rho, penalty, estimate_init, null_state):
+    """Share one total pseudo-count budget across nontrivial distributions."""
+    states = transition.shape[0]
+    count = (states + int(estimate_init)) if states > 1 else 0
+    count += int(null_state == "adaptive" and rho.shape[1] > 1)
+    return (penalty - 1) / max(count, 1)
+
+
 def _log_penalty(transition, init, rho, penalty, estimate_init, null_state):
-    """Dirichlet log penalty on zero-state probabilities, as in fSuSiE."""
+    """Average log null probability, scaled like a single ASH null weight."""
     if penalty == 1:
         return init.new_zeros(())
     log_null = transition[:, 0].log().sum()
@@ -33,7 +41,7 @@ def _log_penalty(transition, init, rho, penalty, estimate_init, null_state):
         log_null = log_null + init[0].log()
     if null_state == "adaptive":
         log_null = log_null + rho[0, 0].log()
-    return (penalty - 1) * log_null
+    return _penalty_coefficient(transition, rho, penalty, estimate_init, null_state) * log_null
 
 
 def _objective(loglik, transition, init, rho, penalty, estimate_init, null_state):
@@ -315,10 +323,11 @@ def fit_ash_hmm(
     ``maxiter=0`` evaluates a specified model without fitting it.
 
     ``penalty`` must be finite and >= 1. The default 1 is unpenalized;
-    larger values add ``penalty - 1`` pseudo-counts to transitions into the
-    zero state, to its initial probability when ``estimate_init=True``, and
-    to its zero-scale component when ``null_state='adaptive'``. This favors
-    zero effects, matching the other priors' penalty convention. Convergence
+    larger values share ``penalty - 1`` total pseudo-counts across transition
+    rows, the initial distribution when ``estimate_init=True``, and the
+    zero state's mixture when ``null_state='adaptive'``. Distributions with
+    only one possible outcome do not consume the budget. This averages log
+    null probabilities, matching ASH at equal probabilities. Convergence
     uses the penalized objective; ``loss`` excludes the penalty.
     EM and pruning proposals are accepted only if they do not decrease that
     objective. ``prune_max_loglik_loss`` additionally limits the unpenalized
@@ -493,10 +502,11 @@ def fit_ash_hmm(
     converged = False
 
     for iteration in range(1, maxiter + 1):
+        pseudo_count = _penalty_coefficient(transition, rho, penalty, estimate_init, null_state)
         joint = (component_log + rho.log() - emission[:, :, None]).exp() * gamma[:, :, None]
         counts = joint.sum(0)
         if penalty > 1 and null_state == "adaptive":
-            counts[0, 0] += penalty - 1
+            counts[0, 0] += pseudo_count
         rho_new = _normalize(counts, rho)
         if shared_mixture:
             first = int(null_state == "pointmass")
@@ -506,7 +516,7 @@ def fit_ash_hmm(
             rho_new[0] = rho[0]
         if penalty > 1:
             transition_counts = transition_counts.clone()
-            transition_counts[:, 0] += penalty - 1
+            transition_counts[:, 0] += pseudo_count
         transition_new = _normalize(transition_counts, transition)
         gate = (rho_new[:, 0] >= mean_min_pointmass_weight) & (transition_new.diag() >= mean_min_self_transition)
         if iteration == mean_update_start:
@@ -533,7 +543,7 @@ def fit_ash_hmm(
             )
         init_new = gamma[0].clone() if estimate_init else init
         if penalty > 1 and estimate_init:
-            init_new[0] += penalty - 1
+            init_new[0] += pseudo_count
             init_new = _normalize(init_new, init)
         # Reuse emissions when centers are unchanged, as in the reference cache.
         changed = mu_new != mu

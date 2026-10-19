@@ -243,7 +243,10 @@ slope minus the null component's slope. For ``po_lcash_posterior_means``, it
 applies to the shared slope vector. Intercepts and cut-points are not
 penalized. The summed negative log prior is divided by ``n`` in the mean
 training objective. Returned ``loss`` excludes both prior terms and is the
-summed negative marginal log likelihood required by cEBMF.
+summed negative marginal log likelihood required by cEBMF. The separate
+``regularization_loss`` reports their summed contribution, which cEBMF adds
+to its negative ELBO in ``model.obj``. ``penalty=1`` disables the null term;
+``coefficient_prior_scale=None`` independently disables the coefficient prior.
 
 The standalone iteration limit is ``max_iter=500``. Within cEBMF, omitted
 or ``None`` inner ``max_iter`` uses ``2 * internal_epoch``; an explicit
@@ -258,7 +261,8 @@ and ``mult`` are then ignored. Effect estimates, standard errors and observation
 count may change; covariate columns must retain their meaning, order and units.
 Missing values and columns with zero training standard deviation contribute zero.
 
-Use ``max_iter=0`` for posterior prediction without optimization or penalties.
+Use ``max_iter=0`` for posterior prediction without optimization. The reported
+regularization still evaluates the supplied penalty settings.
 To resume the same objective, also pass the same ``penalty``,
 ``coefficient_prior_scale`` and ``coefficient_prior_df``; these are not stored
 in ``model_param``. Each training call starts fresh L-BFGS curvature history.

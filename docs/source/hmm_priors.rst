@@ -173,14 +173,21 @@ Pass options through ``prior_F_kwargs`` or ``prior_L_kwargs``:
 
 ``penalty`` works for ``hmm``, ``hmm_pos`` and ``hmm_neg`` on either side.
 It must be finite and at least 1. The default ``penalty=1`` preserves the
-unpenalized fSuSiE fit; larger values favor zero effects. In the HMM this
-means a Dirichlet pseudo-count of ``penalty - 1`` for the zero destination
-in every transition row. The same pseudo-count is applied to the initial
-zero-state probability when ``estimate_init=True`` and to the zero-scale
-weight of the zero state when ``null_state="adaptive"``. With
-``shared_mixture=True``, that mixture pseudo-count enters the pooled update.
-The magnitude of its effect depends on the state grid and sequence length;
-it need not match the strength of the same number in a covariate model.
+unpenalized fSuSiE fit; larger values favor zero effects. The HMM shares
+``penalty - 1`` total pseudo-counts equally across transition rows, the
+initial distribution when ``estimate_init=True``, and the zero state's
+mixture when ``null_state="adaptive"``. Distributions with only one possible
+outcome contribute zero and are excluded from the count. For example, three
+states with a point-mass null and learned initial probabilities use a
+pseudo-count of ``(penalty - 1) / 4`` for each penalized null probability.
+With ``shared_mixture=True``, the mixture pseudo-count enters the pooled update.
+
+The penalty is therefore minus ``penalty - 1`` times the average log null
+probability, matching ASH's coefficient at equal probabilities. EM updates,
+candidate comparisons and reported objectives all use this normalization;
+the count is recomputed after state pruning. Equal coefficients do not imply
+identical fitted shrinkage across different prior families. For ``penalty>1``,
+this total-budget convention replaces the former per-distribution convention.
 
 Fitting and convergence use the penalized objective. The returned ``loss``
 is still the negative **unpenalized** marginal log likelihood under the fitted
@@ -291,7 +298,9 @@ single-sequence EBNM path. It does not expose the R implementation's optional
 variational approximation, BIC model-selection gate, multiple-sequence IDs,
 arbitrary transition masks, arbitrary Dirichlet-prior arrays or post-fit step
 decoders. The scalar ``penalty`` maps to a zero-favoring subset of fSuSiE's
-Dirichlet-prior controls.
+Dirichlet-prior controls, with each concentration set to
+``1 + (penalty - 1) / count``. Saved R-reference tests translate the scalar
+budget to preserve comparison with those per-distribution concentrations.
 
 Calculations use float64 for numerical stability and return posterior
 summaries on the input device and floating dtype. Negative-tail moments use

@@ -139,7 +139,7 @@ def m_step_sigma2(gamma2, mu2, targets, se):
 # Result container
 # -------------------------
 class CgbPosteriorResult:
-    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param):
+    def __init__(self, post_mean, post_mean2, post_sd, pi, mu_2, sigma_2, loss, model_param, regularization_loss=0.0):
         """
         Container for the results of the CGB posterior mean estimation.
 
@@ -170,6 +170,7 @@ class CgbPosteriorResult:
         self.sigma_2 = sigma_2
         self.loss = loss
         self.model_param = model_param
+        self.regularization_loss = regularization_loss
 
 
 @torch.no_grad()
@@ -339,4 +340,5 @@ def cgb_posterior_means(
         sigma_2=sigma2_sq.sqrt().item(),
         loss=-float(log_marginal.item()),
         model_param=model.state_dict(),
+        regularization_loss=-(penalty - 1) * pi1.clamp_min(1e-8).log().mean() if penalty > 1 else 0.0,
     )
