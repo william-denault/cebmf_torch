@@ -545,9 +545,9 @@ def _fit_lcash(
         raise ValueError("max_iter must be a nonnegative integer or None.") from None
     if max_iter < 0:
         raise ValueError("max_iter must be a nonnegative integer or None.")
-    if max_iter > 0 and (not math.isfinite(penalty) or penalty < 1):
+    if not math.isfinite(penalty) or penalty < 1:
         raise ValueError("penalty must be finite and at least one.")
-    if max_iter > 0 and coefficient_prior_scale is not None:
+    if coefficient_prior_scale is not None:
         for name, value in (
             ("coefficient_prior_scale", coefficient_prior_scale),
             ("coefficient_prior_df", coefficient_prior_df),
@@ -616,7 +616,21 @@ def _fit_lcash(
         _require_finite(value, f"Returned conditional {name}")
     _validate_grid(output["scale"])
     # cEBMF's per-factor KL calculation uses the unpenalized sum.
-    return cash_PosteriorMeanNorm(**output, loss=-marginal_loglik, model_param=fitted_state)
+    with torch.no_grad():
+        log_pi = model.log_probs(X_scaled)
+        regularization = -(penalty - 1) * log_pi[:, 0].mean() if penalty != 1 else log_pi.new_zeros(())
+        if coefficient_prior_scale is not None:
+            coefficient_prior = torch.distributions.StudentT(
+                X_scaled.new_tensor(coefficient_prior_df), scale=coefficient_prior_scale, validate_args=False
+            )
+            slopes = model.linear.weight[1:] - model.linear.weight[:1] if isinstance(model, LcashNet) else model.w
+            regularization -= coefficient_prior.log_prob(slopes).sum()
+    return cash_PosteriorMeanNorm(
+        **output,
+        loss=-marginal_loglik,
+        model_param=fitted_state,
+        regularization_loss=regularization.to(output_device),
+    )
 
 
 # ============================================================
@@ -709,7 +723,8 @@ def lcash_posterior_means(
         columns must retain their meaning, order and units.
         Each training call creates a new L-BFGS optimizer unless only the
         spike remains. Use ``max_iter=0`` to calculate posterior summaries
-        with the saved prior, without evaluating either penalty.
+        with the saved prior. The separate ``regularization_loss`` still
+        evaluates the requested penalty settings without changing the fit.
         Training settings are not stored; pass the same nullweight and
         coefficient-prior settings to continue the same objective.
     device : torch.device or None
@@ -728,7 +743,8 @@ def lcash_posterior_means(
         Container with post_mean, post_mean2, post_sd, pi_np (G, K),
         scale (K,), loss, and model_param (fitted state for warm-starting).
         ``loss`` is the summed negative marginal log likelihood without
-        either penalty.
+        either penalty. ``regularization_loss`` reports both fitting penalties
+        on the summed-loss scale for cEBMF's penalized objective.
 
     Raises
     ------

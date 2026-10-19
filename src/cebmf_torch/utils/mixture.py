@@ -3,6 +3,28 @@ import math
 import torch
 
 
+def mixture_log_penalty(pi: torch.Tensor, penalty: float | torch.Tensor) -> torch.Tensor:
+    """Dirichlet log penalty, with zero contribution when alpha=1 and pi=0."""
+    if isinstance(penalty, torch.Tensor):
+        return torch.special.xlogy(penalty.to(pi) - 1, pi).sum()
+    return torch.special.xlogy(pi.new_tensor(penalty - 1), pi[0])
+
+
+def _validate_pi_init(pi_init: torch.Tensor, logL: torch.Tensor) -> torch.Tensor:
+    """Copy and normalize supplied weights without modifying a previous fit."""
+    pi = torch.as_tensor(pi_init, device=logL.device, dtype=logL.dtype)
+    total = pi.sum()
+    if (
+        pi.shape != (logL.shape[1],)
+        or not torch.isfinite(pi).all()
+        or (pi < 0).any()
+        or not torch.isfinite(total)
+        or total <= 0
+    ):
+        raise ValueError("pi_init must contain finite nonnegative weights, one per component, with positive sum.")
+    return pi / total
+
+
 @torch.no_grad()
 def optimize_pi_logL(
     logL: torch.Tensor,
@@ -14,6 +36,8 @@ def optimize_pi_logL(
     shuffle: bool = False,
     seed: int | None = None,
     check_every: int = 10,
+    *,
+    pi_init: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
     EM algorithm for optimizing mixture weights on the simplex given a log-likelihood matrix.
@@ -42,6 +66,9 @@ def optimize_pi_logL(
         Number of EM steps between convergence checks. Each check
         synchronizes with the host. Larger intervals reduce synchronization
         overhead. Default is 10.
+    pi_init : torch.Tensor or None, optional
+        Initial mixture weights on the current component grid. Warm-starting
+        makes each EM update improve the same objective from the previous fit.
 
     Returns
     -------
@@ -54,9 +81,12 @@ def optimize_pi_logL(
     dtype = logL.dtype
 
     # Initialize pi proportional to exp(-k).
-    k = torch.arange(K, device=device, dtype=dtype)
-    pi = torch.exp(-k)
-    pi = pi / pi.sum()
+    if pi_init is None:
+        k = torch.arange(K, device=device, dtype=dtype)
+        pi = torch.exp(-k)
+        pi = pi / pi.sum()
+    else:
+        pi = _validate_pi_init(pi_init, logL)
 
     # Penalty vector (Dirichlet alpha): default [penalty, 1, 1, ..., 1].
     if isinstance(penalty, torch.Tensor):
@@ -265,6 +295,8 @@ def optimize_pi_logL_lbfgs(
     logL: torch.Tensor,
     penalty: float | torch.Tensor,
     zero_threshold: float = 1e-6,
+    *,
+    pi_init: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Optimize mixture weights via L-BFGS with softmax reparameterisation.
 
@@ -289,6 +321,8 @@ def optimize_pi_logL_lbfgs(
         Components with fitted weight below this value are set to zero
         and the remaining weights are renormalized. Default 1e-6;
         0.0 disables thresholding.
+    pi_init : torch.Tensor or None
+        Initial mixture weights on the current component grid.
 
     Returns
     -------
@@ -335,7 +369,10 @@ def optimize_pi_logL_lbfgs(
     w_aug = w_aug / w_aug.sum()
 
     # Solve via L-BFGS in float64.
-    z = torch.zeros(K, device=device, dtype=torch.float64, requires_grad=True)
+    if pi_init is None:
+        z = torch.zeros(K, device=device, dtype=torch.float64, requires_grad=True)
+    else:
+        z = _validate_pi_init(pi_init, logL).to(torch.float64).clamp_min(1e-32).log().detach().requires_grad_(True)
 
     optimizer = torch.optim.LBFGS(
         [z],

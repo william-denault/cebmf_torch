@@ -40,6 +40,8 @@ class AshConfig:
     seed: int | None = None
     optimizer: str = "em"
     zero_threshold: float | None = None
+    scale: torch.Tensor | None = None
+    pi_init: torch.Tensor | None = None
 
 
 _VALID_OPTIMIZERS = {"em", "lbfgs"}
@@ -49,9 +51,10 @@ def _optimize_mixture_weights(L: torch.Tensor, config: AshConfig) -> torch.Tenso
     """Optimize mixture weights and return log probabilities."""
     if config.optimizer not in _VALID_OPTIMIZERS:
         raise ValueError(f"Unknown optimizer {config.optimizer!r}. Choose from {_VALID_OPTIMIZERS}.")
+    initial = {} if config.pi_init is None else {"pi_init": config.pi_init}
     if config.optimizer == "lbfgs":
         options = {} if config.zero_threshold is None else {"zero_threshold": config.zero_threshold}
-        pi0 = optimize_pi_logL_lbfgs(L, penalty=config.penalty, **options)
+        pi0 = optimize_pi_logL_lbfgs(L, penalty=config.penalty, **initial, **options)
     elif config.optimizer == "em":
         pi0 = optimize_pi_logL(
             L,
@@ -60,6 +63,7 @@ def _optimize_mixture_weights(L: torch.Tensor, config: AshConfig) -> torch.Tenso
             batch_size=config.batch_size,
             shuffle=config.shuffle,
             seed=config.seed,
+            **initial,
         )
     # Use a Python literal floor: torch.clamp accepts a scalar without forcing
     # a host sync (the previous `eps = torch.tensor(...); ...; min=eps.item()`
@@ -72,7 +76,7 @@ def _ash_normal(
     s: torch.Tensor,
     config: AshConfig,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, PosteriorMean]:
-    scale = autoselect_scales_mix_norm(x, s, mult=config.mult)  # (K,)
+    scale = config.scale if config.scale is not None else autoselect_scales_mix_norm(x, s, mult=config.mult)
     loc = torch.full((scale.shape[0],), config.mode, dtype=x.dtype, device=x.device)
 
     L = get_data_loglik_normal_torch(x, s, location=loc, scale=scale)  # (J,K)
@@ -86,7 +90,7 @@ def _ash_exp(
     s: torch.Tensor,
     config: AshConfig,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, PosteriorMean]:
-    scale = autoselect_scales_mix_exp(x, s, mult=config.mult)  # (K,) with scale[0]=0 (spike)
+    scale = config.scale if config.scale is not None else autoselect_scales_mix_exp(x, s, mult=config.mult)
     L = get_data_loglik_exp_torch(x, s, scale=scale)  # (J,K)
     log_pi0 = _optimize_mixture_weights(L, config)
     pm_obj = posterior_mean_exp(x, s, log_pi=log_pi0, scale=scale)
@@ -172,6 +176,8 @@ def ash(
     seed: int | None = None,
     optimizer: str = "em",
     zero_threshold: float | None = None,
+    scale: torch.Tensor | None = None,
+    pi_init: torch.Tensor | None = None,
 ):
     """
     Adaptive shrinkage with mixture priors ("norm" or "exp") in pure PyTorch.
@@ -211,6 +217,12 @@ def ash(
         renormalize. ``None`` uses the optimizer's default of 1e-6;
         ``0.0`` disables this cutoff. Ignored by EM. ASH subsequently
         applies a 1e-32 floor for log-probability calculations.
+    scale : torch.Tensor or None, optional
+        Fixed component grid, beginning with the zero-scale spike followed
+        by positive scales. If omitted, select a grid from the current data.
+    pi_init : torch.Tensor or None, optional
+        Initial weights for an explicitly supplied ``scale`` grid. Pass a
+        previous result's ``scale`` and ``pi`` to continue fitting that prior.
 
     Returns
     -------
@@ -225,6 +237,18 @@ def ash(
     # ``torch.as_tensor`` returns the same object and the in-place form mutates
     # the caller's tensor, which is observable across repeated calls.
     s = torch.as_tensor(s, dtype=x.dtype, device=x.device).clamp(min=1e-12)
+    if pi_init is not None and scale is None:
+        raise ValueError("pi_init requires an explicit scale grid so weights retain their component meanings.")
+    if scale is not None:
+        scale = torch.as_tensor(scale, dtype=x.dtype, device=x.device)
+        if (
+            scale.ndim != 1
+            or scale.numel() == 0
+            or not torch.isfinite(scale).all()
+            or scale[0] != 0
+            or (scale[1:] <= 0).any()
+        ):
+            raise ValueError("scale must be a finite vector beginning with zero and followed by positive scales.")
 
     config = AshConfig(
         mult=mult,
@@ -237,5 +261,7 @@ def ash(
         seed=seed,
         optimizer=optimizer,
         zero_threshold=zero_threshold,
+        scale=scale,
+        pi_init=pi_init,
     )
     return ASHResult.from_data(torch.as_tensor(x, dtype=x.dtype, device=x.device), s, prior, config)

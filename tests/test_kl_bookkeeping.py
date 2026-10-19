@@ -15,7 +15,8 @@ from cebmf_torch.priors.learned import LearnedBuilder, LearnedPriorType
 
 
 @pytest.mark.parametrize("side", ["L", "F"])
-def test_factor_kl_and_elbo_match_exact_gaussian_evidence(side):
+@pytest.mark.parametrize("regularization", [0.0, 2.3])
+def test_factor_kl_and_elbo_match_exact_gaussian_evidence(side, regularization):
     """A known opposite factor leaves a conjugate Gaussian linear model."""
     y = torch.tensor([[0.4, -0.8, 1.1], [1.2, -0.3, 0.5]])
     known_factor = torch.tensor([0.6, -1.0, 1.4])
@@ -32,7 +33,7 @@ def test_factor_kl_and_elbo_match_exact_gaussian_evidence(side):
         posterior = Normal(mean, variance.sqrt())
         exact_kl.append(kl_divergence(posterior, Normal(0, prior_sd)).sum())
         loss = -Normal(0, (prior_sd**2 + sebetahat.square()).sqrt()).log_prob(betahat).sum()
-        return Prior(mean, variance + mean.square(), loss)
+        return Prior(mean, variance + mean.square(), loss, regularization_loss=regularization)
 
     getattr(model, f"prior_{side}_fn").fit = fit
     getattr(model, f"_update_{side}_factor")(0, model.Y0, model.tau_map, 1e-12)
@@ -43,7 +44,8 @@ def test_factor_kl_and_elbo_match_exact_gaussian_evidence(side):
     model._cal_obj()
     covariance = noise_sd**2 * torch.eye(3) + prior_sd**2 * torch.outer(known_factor, known_factor)
     exact_evidence = MultivariateNormal(torch.zeros(3), covariance).log_prob(y).sum()
-    assert model.obj[-1] == pytest.approx(-exact_evidence.item(), abs=3e-6)
+    assert model.negative_elbo[-1] == pytest.approx(-exact_evidence.item(), abs=3e-6)
+    assert model.obj[-1] == pytest.approx(-exact_evidence.item() + regularization, abs=3e-6)
 
 
 @pytest.mark.parametrize("prior", ["norm", "exp"])

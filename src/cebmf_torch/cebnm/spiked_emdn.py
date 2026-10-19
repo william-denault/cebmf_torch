@@ -178,6 +178,7 @@ class EmdnPosteriorMeanNorm:
         scale,
         loss=0,
         model_param=None,
+        regularization_loss=0.0,
     ):
         """
         Container for the results of the spiked EMDN posterior mean estimation.
@@ -209,6 +210,7 @@ class EmdnPosteriorMeanNorm:
         self.scale = scale
         self.loss = loss
         self.model_param = model_param
+        self.regularization_loss = regularization_loss
 
 
 # -------------------------
@@ -382,6 +384,11 @@ def spiked_emdn_posterior_means(
         log_comp = -0.5 * z.pow(2) - torch.log(total_sigma) - log_sqrt_2pi  # (N, K)
         log_mix = torch.logsumexp(log_pi_full + log_comp, dim=1)  # (N,)
         full_marginal_ll = float(log_mix.sum().item())
+        q0 = pi_pred[:, 0]
+        regularization = -(penalty - 1) * q0.clamp_min(1e-8).log().mean() if penalty != 1 else q0.new_zeros(())
+        if beta_prior is not None:
+            a0, b0 = map(float, beta_prior)
+            regularization -= ((a0 - 1) * q0.clamp_min(1e-8).log() + (b0 - 1) * (1 - q0).clamp_min(1e-8).log()).sum()
 
     return EmdnPosteriorMeanNorm(
         post_mean=post_mean,
@@ -392,4 +399,5 @@ def spiked_emdn_posterior_means(
         scale=sigma_full,
         loss=-full_marginal_ll,
         model_param=model.state_dict(),
+        regularization_loss=regularization,
     )

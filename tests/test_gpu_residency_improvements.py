@@ -82,7 +82,7 @@ def test_point_exp_pure_spike_data_runs_clean():
     assert torch.isfinite(res.post_sd).all()
     assert res.post_mean.abs().mean().item() < 0.5
     # log_lik scalar must be finite
-    assert np.isfinite(res.log_lik)
+    assert torch.isfinite(res.log_lik)
 
 
 def test_point_laplace_pure_spike_data_runs_clean():
@@ -94,7 +94,7 @@ def test_point_laplace_pure_spike_data_runs_clean():
     assert torch.isfinite(res.post_mean).all()
     assert torch.isfinite(res.post_mean2).all()
     assert torch.isfinite(res.post_sd).all()
-    assert np.isfinite(res.log_lik)
+    assert torch.isfinite(res.log_lik)
 
 
 def test_point_exp_signal_data_not_all_spike():

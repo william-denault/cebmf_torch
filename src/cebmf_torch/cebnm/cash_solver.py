@@ -101,7 +101,9 @@ def pen_loglik_loss_from_log_pi(log_pi, marginal_log_lik, null_coefficient=0.0):
 
 
 class cash_PosteriorMeanNorm:
-    def __init__(self, post_mean, post_mean2, post_sd, pi_np, scale, loss=0, model_param=None):
+    def __init__(
+        self, post_mean, post_mean2, post_sd, pi_np, scale, loss=0, model_param=None, regularization_loss=0.0
+    ):
         """
         Container for the results of the CASH posterior mean estimation.
 
@@ -129,6 +131,7 @@ class cash_PosteriorMeanNorm:
         self.loss = loss
         self.scale = scale
         self.model_param = model_param
+        self.regularization_loss = regularization_loss
 
 
 # Class to store the results
@@ -290,4 +293,7 @@ def cash_posterior_means(
         loss=-full_marginal_ll,
         scale=scale,  # (K,) on device
         model_param=model_cash.state_dict(),
+        regularization_loss=(
+            -(penalty - 1) * all_pi_values[:, 0].clamp_min(1e-10).log().mean() if penalty > 1 else 0.0
+        ),
     )

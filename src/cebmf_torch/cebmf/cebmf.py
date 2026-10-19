@@ -31,7 +31,7 @@ class CEBMFResult:
     tau : Tensor
         Noise precision(s).
     history_obj : list
-        History of objective values.
+        History of objective values, including reported prior fitting penalties.
     """
 
     L: Tensor
@@ -113,6 +113,15 @@ class cEBMF:
             Initial number of factors. Default 5.
         prior_L, prior_F : str, optional
             Prior names to use for the row/column factors.
+            Normal-mixture (``norm``) updates warm-start each factor's ASH
+            fit and compare it with a fresh grid. Their default ``penalty=10``
+            encourages sparsity. ``obj`` includes the ASH fitting penalty;
+            ``negative_elbo`` records the unpenalized negative ELBO separately.
+            Use ``prior_L_kwargs={"penalty": 1}`` and
+            ``prior_F_kwargs={"penalty": 1}`` to fit that unpenalized objective.
+            ``hmm``, ``hmm_pos`` and ``hmm_neg`` use fSuSiE-style HMM priors
+            with real, nonnegative and nonpositive support. Entries follow
+            the existing row (L) or column (F) order at equal spacing.
         internal_epoch : int, optional
             Inner training budget. ``lcash_posterior_means`` and
             ``po_lcash_posterior_means`` use twice this value as their L-BFGS
@@ -145,8 +154,11 @@ class cEBMF:
             observed values in ``data``.
         X_l, X_f : torch.Tensor or None, optional
             External covariates for the row/column factors.
+            Ignored on an HMM side, with one warning at construction time.
         self_row_cov, self_col_cov : bool, optional
-            Whether to use other factors as self-covariates.
+            Whether to use earlier factors as self-covariates: factor k uses
+            columns 0 through k-1, in their current order. The first factor
+            uses external covariates only, or an intercept if none are supplied.
         device : torch.device or None, optional
             Target device. Defaults to the result of :func:`get_device`.
         """
@@ -169,6 +181,23 @@ class cEBMF:
             K=K, prior_L=prior_L, prior_F=prior_F, allow_backfitting=allow_backfitting, prune_thresh=prune_thresh
         )
         self.noise = NoiseParams(type=noise_type)
+        # Handle HMM covariates once, before moving or combining them. In
+        # particular, a 1-D position vector must never reach hstack below.
+        hmm_priors = {"hmm", "hmm_pos", "hmm_neg"}
+        for side, prior, external, self_cov in (("L", prior_L, X_l, self_row_cov), ("F", prior_F, X_f, self_col_cov)):
+            if prior in hmm_priors and (external is not None or self_cov):
+                warn(
+                    f"HMM specified for {side} (prior_{side}={prior!r}); additional side information "
+                    f"provided for {side} will be ignored. The HMM uses the existing "
+                    f"{'row' if side == 'L' else 'column'} order with equal spacing. To use location "
+                    "information and additional side information, add location to the side-information "
+                    "matrix and use 'emdn' or 'spiked_emdn'.",
+                    stacklevel=2,
+                )
+        if prior_L in hmm_priors:
+            X_l, self_row_cov = None, False
+        if prior_F in hmm_priors:
+            X_f, self_col_cov = None, False
         # Move covariates to device (if provided) to avoid later CPU↔GPU hops
         self.covariate = CovariateParams(
             X_l=(X_l.to(self.device) if X_l is not None else None),
@@ -185,7 +214,11 @@ class cEBMF:
         # Stash raw S input; normalised to an (N, P) tensor inside _initialise_tensors
         self._S_input = S
         self._validate_inputs()
-        self.Y = self.data.to(self.device).float()
+        # Keep float64 if supplied; ELBO bookkeeping needs the precision.
+        # SVD on CPU does not support float16/bfloat16: retain the original
+        # float32 promotion for those inputs and for integer data.
+        _d = self.data.to(self.device)
+        self.Y = _d if _d.dtype in (torch.float32, torch.float64) else _d.float()
         self.N, self.P = self.Y.shape
         self._initialise_priors(prior_L_kwargs=prior_L_kwargs, prior_F_kwargs=prior_F_kwargs)
         self._initialise_tensors()
@@ -219,6 +252,9 @@ class cEBMF:
         """
         Initialize factor matrices using the specified method, or user-provided initial factors.
 
+        SVD uses column means over the effective observation mask to impute
+        missing entries, with zero for entirely unobserved columns.
+
         Parameters
         ----------
         method : str
@@ -231,7 +267,10 @@ class cEBMF:
 
         def _use_strategy(method: str):
             initialise_fn = INIT_STRATEGIES[method]
-            self.L, self.F = initialise_fn(self.Y, self.N, self.P, self.model.K, self.device)
+            Y_for_init = self.Y
+            if method == "svd":
+                Y_for_init = self.Y.masked_fill(self.mask == 0, float("nan"))
+            self.L, self.F = initialise_fn(Y_for_init, self.N, self.P, self.model.K, self.device)
 
         if L is None and F is not None:
             warn("Provided F without L; ignoring F and using svd for initialization.", stacklevel=2)
@@ -247,6 +286,9 @@ class cEBMF:
         else:
             _use_strategy(method)
 
+        # User-provided factors may have a different dtype from the data.
+        self.L = self.L.to(self.Y)
+        self.F = self.F.to(self.Y)
         self.L2 = self.L * self.L
         self.F2 = self.F * self.F
         self.R = self.Y0 - self.L @ self.F.T
@@ -371,6 +413,7 @@ class cEBMF:
         nm_ll_L = normal_means_loglik(x=lhat, s=se_l, Et=resL.post_mean, Et2=resL.post_mean2)
         # KL(q || prior) = E_q[log likelihood] - log marginal likelihood.
         self.kl_l[k] = torch.as_tensor(nm_ll_L + resL.loss, device=self.device, dtype=self.L.dtype)
+        self.regularization_l[k] = resL.regularization_loss
         self.pi0_L[k] = resL.pi0_null
 
     @torch.no_grad()
@@ -416,6 +459,7 @@ class cEBMF:
         self.F2[:, k] = resF.post_mean2
         nm_ll_F = normal_means_loglik(x=fhat, s=se_f, Et=resF.post_mean, Et2=resF.post_mean2)
         self.kl_f[k] = torch.as_tensor(nm_ll_F + resF.loss, device=self.device, dtype=self.F.dtype)
+        self.regularization_f[k] = resF.regularization_loss
         self.pi0_F[k] = resF.pi0_null
 
     @torch.no_grad()
@@ -427,9 +471,14 @@ class cEBMF:
         else:
             ll = self._compute_elementwise_loglik(ER2)
 
+        # KL terms are non-negative under the EBNM identity (see
+        # `_update_L_factor` / `_update_F_factor`); the negative ELBO is
+        # therefore -ll + sum_k KL(q(L_k)||p) + sum_k KL(q(F_k)||p).
         KL = self.kl_l.sum() + self.kl_f.sum()
-        loss = (-ll + KL).item()  # minimize this (negative ELBO)
-        self.obj.append(loss)
+        negative_elbo = -ll + KL
+        regularization = self.regularization_l.sum() + self.regularization_f.sum()
+        self.negative_elbo.append(negative_elbo.item())
+        self.obj.append((negative_elbo + regularization).item())
 
     @torch.no_grad()
     def _compute_constant_loglik(self, ER2: Tensor) -> Tensor:
@@ -500,12 +549,12 @@ class cEBMF:
 
     @torch.no_grad()
     def _initialise_tensors(self):
-        self.mask = (~torch.isnan(self.Y)).float()  # 1 where observed, 0 where NaN
+        self.mask = (~torch.isnan(self.Y)).to(self.Y.dtype)  # 1 where observed, 0 where NaN; match Y dtype
         self.Y0 = torch.nan_to_num(self.Y, nan=0.0)  # zeros where missing
-        self.L = torch.zeros(self.N, self.model.K, device=self.device)
-        self.L2 = torch.zeros(self.N, self.model.K, device=self.device)
-        self.F = torch.zeros(self.P, self.model.K, device=self.device)
-        self.F2 = torch.zeros(self.P, self.model.K, device=self.device)
+        self.L = torch.zeros(self.N, self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.L2 = torch.zeros(self.N, self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.F = torch.zeros(self.P, self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.F2 = torch.zeros(self.P, self.model.K, device=self.device, dtype=self.Y.dtype)
 
         if self.noise.type == NoiseType.KNOWN:
             # Build tau_map from user-supplied S; may further reduce self.mask / self.Y0.
@@ -513,15 +562,18 @@ class cEBMF:
         else:
             # Initial precision guess for learned-noise modes; refined by update_tau().
             self.S = None
-            self.tau = torch.tensor(1.0, device=self.device)
+            self.tau = torch.tensor(1.0, device=self.device, dtype=self.Y.dtype)
 
-        self.kl_l = torch.zeros(self.model.K, device=self.device)
-        self.kl_f = torch.zeros(self.model.K, device=self.device)
+        self.kl_l = torch.zeros(self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.kl_f = torch.zeros(self.model.K, device=self.device, dtype=self.Y.dtype)
+        self.regularization_l = torch.zeros_like(self.kl_l)
+        self.regularization_f = torch.zeros_like(self.kl_f)
         self.pi0_L: list[Tensor | float | None] = [
             None
         ] * self.model.K  # store latest pi0 for L[:,k]; scalar or Tensor or None
         self.pi0_F: list[Tensor | float | None] = [None] * self.model.K
         self.obj = []
+        self.negative_elbo = []
 
     @torch.no_grad()
     def _setup_known_variance(self) -> None:
@@ -646,6 +698,8 @@ class cEBMF:
         self.F2 = self.F2[:, keep]
         self.kl_l = self.kl_l[keep]
         self.kl_f = self.kl_f[keep]
+        self.regularization_l = self.regularization_l[keep]
+        self.regularization_f = self.regularization_f[keep]
         # Self-covariate columns change when a factor is removed.
         self.model_state_L = [None if self.covariate.self_row_cov else self.model_state_L[i] for i in keep]
         self.model_state_F = [None if self.covariate.self_col_cov else self.model_state_F[i] for i in keep]
@@ -653,26 +707,26 @@ class cEBMF:
         self.pi0_F = [self.pi0_F[i] for i in keep]
         self.model.K = len(keep)
         self.obj = []
+        self.negative_elbo = []
 
     @torch.no_grad()
     def _build_covariate_matrix(
         self, external_cov: Tensor | None, self_cov_enabled: bool, factors: Tensor, k: int, dim_size: int
     ) -> Tensor | None:
-        """Build covariate matrix combining external and self-covariates."""
+        """Combine external covariates with factors strictly earlier than k."""
         if external_cov is not None and external_cov.device != self.device:
             external_cov = external_cov.to(self.device)
 
         if not self_cov_enabled:
             return external_cov
 
-        # Get other factors (excluding k)
-        if self.model.K > 1:
-            others = factors[:, torch.arange(self.model.K, device=self.device) != k]
+        if k > 0:
+            others = factors[:, :k]
             if external_cov is None:
                 return others
             return torch.hstack((external_cov, others))
 
-        # K=1 case: return external covariates or intercept
+        # The first factor has no predecessors, including when K=1.
         return external_cov if external_cov is not None else factors.new_ones(dim_size, 1)
 
     @torch.no_grad()
