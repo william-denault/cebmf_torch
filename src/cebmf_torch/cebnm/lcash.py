@@ -625,6 +625,8 @@ def _fit_lcash(
             )
             slopes = model.linear.weight[1:] - model.linear.weight[:1] if isinstance(model, LcashNet) else model.w
             regularization -= coefficient_prior.log_prob(slopes).sum()
+    if output_device.type == "mps":
+        regularization = regularization.float()
     return cash_PosteriorMeanNorm(
         **output,
         loss=-marginal_loglik,

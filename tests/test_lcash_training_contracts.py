@@ -127,6 +127,17 @@ def test_training_state_keeps_float64_and_outputs_keep_requested_device(solver, 
         assert value.device.type == device
 
 
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="MPS is not available")
+@pytest.mark.parametrize("solver", SOLVERS)
+def test_mps_regularization_matches_cpu(solver, fixed_grid):
+    x = torch.linspace(-2, 2, 16)
+    expected = solver(x[:, None], x, torch.ones_like(x), max_iter=0, device="cpu")
+    x = x.to("mps")
+    actual = solver(x[:, None], x, torch.ones_like(x), max_iter=0, device="mps")
+    assert actual.regularization_loss.device.type == "mps"
+    torch.testing.assert_close(actual.regularization_loss.cpu(), expected.regularization_loss.float())
+
+
 @pytest.mark.parametrize("solver", SOLVERS)
 @pytest.mark.parametrize("ash_init", [False, True])
 def test_mps_default_device_is_preserved_after_cpu_fit(solver, ash_init):
